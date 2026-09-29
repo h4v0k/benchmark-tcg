@@ -200,7 +200,7 @@ function toEntry(card, setInfo, extra = {}) {
     stage: card.stage || '', types: card.types || [], hp: card.hp || null,
     rarity: card.rarity || '', img: card.image || '',
     setId: card.set?.id || setIdOf(card.id), setName: card.set?.name || setInfo?.name || '',
-    setCode: setInfo?.tcgOnline || '', num: String(card.localId ?? ''),
+    setCode: setInfo?.tcgOnline || '', setRelease: setInfo?.releaseDate || '', num: String(card.localId ?? ''),
     official: card.set?.cardCount?.official || setInfo?.official || null,
     reg: card.regulationMark || '',
     legal: { standard: !!card.legal?.standard, expanded: !!card.legal?.expanded },
@@ -218,7 +218,9 @@ async function entryFromId(id, extra = {}) {
   return e;
 }
 const entryPrice = e => { const p = e.prices || {}; let v = p[e.variant]; if (v == null) v = Object.values(p).find(x => x != null) ?? null; return v; };
-const isBasicEnergy = e => e.cat === 'Energy' && /basic/i.test(e.sub);
+// TCGdex labels basic and many special Energy cards alike ("Normal"), so go by name.
+const BASIC_ENERGY_RE = /^(basic )?(grass|fire|water|lightning|psychic|fighting|darkness|metal|fairy) energy$|^basic \{[a-z]\} energy$/i;
+const isBasicEnergy = e => (e.cat === 'Energy' || !e.cat) && BASIC_ENERGY_RE.test(String(e.name || '').trim());
 const isAce = e => /ace spec/i.test(e.rarity) || /ace spec/i.test(e.sub);
 const isRadiant = e => /^radiant /i.test(e.name);
 const isPrism = e => /◇|prism star/i.test(e.name);
@@ -298,13 +300,18 @@ const FORMATS = { standard: 'Standard', expanded: 'Expanded', unlimited: 'Unlimi
 // regulation mark H or later; Basic Energy always; Classic Collection reprints never.
 const STANDARD_FIRST_MARK = 'H';
 const STANDARD_NOTE = 'Regulation marks H, I, J and later (2026–27 format)';
-const isClassicCollection = e => /^CC\d/i.test(String(e.num || ''));
+const isClassicCollection = e => /^CC\d/i.test(String(e.num || '')) || /classic collection/i.test(`${e.setName || ''} ${e.rarity || ''}`);
+// Sets released since the April 2026 rotation only contain Standard-legal cards, so a missing mark there is legal.
+const POST_ROTATION_RELEASE = '2026-01-01';
+// Backup for sets whose release date is missing from the card data (2026–27 format sets).
+const POST_ROTATION_SETS = ['mega evolution', 'phantasmal flames', 'ascended heroes', 'perfect order', 'chaos rising', 'pitch black', '30th celebration'];
+const newSetLegal = e => !e.reg && ((!!e.setRelease && e.setRelease >= POST_ROTATION_RELEASE) || POST_ROTATION_SETS.includes(String(e.setName || '').toLowerCase().trim()));
 const markLegal = mark => /^[A-Z]$/i.test(mark || '') && mark.toUpperCase() >= STANDARD_FIRST_MARK;
 function legalIn(e, format) {
   if (format === 'unlimited') return true;
   if (isClassicCollection(e)) return false;
   if (isBasicEnergy(e)) return true;
-  const std = markLegal(e.reg) || !!e.reprintLegal;
+  const std = markLegal(e.reg) || newSetLegal(e) || !!e.reprintLegal;
   if (format === 'standard') return std;
   return std || !!e.legal?.expanded;
 }
@@ -1066,20 +1073,24 @@ function bindAdder() {
 }
 
 // A card is also Standard legal if the same card (same name and attacks) was reprinted with a legal mark.
+const LEGAL_CHECK_VERSION = 2;
 async function checkReprints(entries) {
-  const todo = entries.filter(e => e.cat !== 'Energy' && !markLegal(e.reg) && !isClassicCollection(e) && e.reprintLegal === undefined);
+  const todo = entries.filter(e => !isBasicEnergy(e) && !markLegal(e.reg) && !isClassicCollection(e) && e.legalChk !== LEGAL_CHECK_VERSION);
   if (!todo.length) return false;
-  let changed = false;
-  const byName = new Map(); todo.forEach(e => { if (!byName.has(e.name)) byName.set(e.name, []); byName.get(e.name).push(e); });
+  // Cards with no regulation mark: look up when their set was released.
+  await pool(todo.filter(e => !e.reg && !e.setRelease), 3, async e => {
+    const s = await getSetInfo(e.setId).catch(() => null);
+    if (s?.releaseDate) e.setRelease = s.releaseDate;
+  });
+  const need = todo.filter(e => !newSetLegal(e));
+  const byName = new Map(); need.forEach(e => { if (!byName.has(e.name)) byName.set(e.name, []); byName.get(e.name).push(e); });
   await pool([...byName], 3, async ([name, list]) => {
     const prints = (await getPrintings(name)).filter(p => !/^CC\d/i.test(p.localId)).slice(0, 10);
     const cards = (await pool(prints, 4, p => getCard(p.id))).filter(Boolean).filter(c => markLegal(c.regulationMark));
-    for (const e of list) {
-      const same = cards.some(c => e.cat !== 'Pokemon' || (c.attacks || []).map(a => a.name).join('|') === (e.attacks || []).join('|'));
-      e.reprintLegal = same; changed = true;
-    }
+    for (const e of list) e.reprintLegal = cards.some(c => e.cat !== 'Pokemon' || (c.attacks || []).map(a => a.name).join('|') === (e.attacks || []).join('|'));
   });
-  return changed;
+  todo.forEach(e => { e.legalChk = LEGAL_CHECK_VERSION; });
+  return true;
 }
 async function refreshStalePrices(token) {
   const stale = DP.deck.cards.filter(c => Date.now() - (c.updated || 0) > 2 * 864e5);
