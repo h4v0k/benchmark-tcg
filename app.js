@@ -439,7 +439,7 @@ class LocalBackend {
   }
 }
 
-const LIST_COLS = 'id,owner,name,format,description,is_public,cover,price,card_count,like_count,created_at,updated_at,profiles(username)';
+const LIST_COLS = 'id,owner,name,format,description,is_public,cover,price,card_count,like_count,created_at,updated_at,owner_profile:profiles!decks_owner_fkey(username)';
 class SupaBackend {
   constructor(url, key) {
     this.kind = 'supabase';
@@ -485,7 +485,7 @@ class SupaBackend {
     this.profile = data; return data;
   }
   _map(r) {
-    return { id: r.id, owner: r.owner, ownerName: r.profiles?.username || '', name: r.name, format: r.format, description: r.description || '', isPublic: r.is_public, cards: r.cards || [], cover: r.cover || '', price: Number(r.price) || 0, cardCount: r.card_count || 0, likeCount: r.like_count || 0, createdAt: r.created_at, updatedAt: r.updated_at };
+    return { id: r.id, owner: r.owner, ownerName: r.owner_profile?.username || '', name: r.name, format: r.format, description: r.description || '', isPublic: r.is_public, cards: r.cards || [], cover: r.cover || '', price: Number(r.price) || 0, cardCount: r.card_count || 0, likeCount: r.like_count || 0, createdAt: r.created_at, updatedAt: r.updated_at };
   }
   async listMine() {
     const { data, error } = await this.sb.from('decks').select(LIST_COLS).eq('owner', this.user.id).order('updated_at', { ascending: false });
@@ -509,7 +509,7 @@ class SupaBackend {
   }
   async getDeck(id) {
     if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
-    const { data, error } = await this.sb.from('decks').select('*,profiles(username)').eq('id', id).maybeSingle();
+    const { data, error } = await this.sb.from('decks').select('*,owner_profile:profiles!decks_owner_fkey(username)').eq('id', id).maybeSingle();
     this._err(error); return data ? this._map(data) : null;
   }
   _row(p) {
@@ -521,7 +521,7 @@ class SupaBackend {
   }
   async createDeck(d) {
     const row = { owner: this.user.id, name: 'Untitled deck', format: 'standard', ...this._row(d) };
-    const { data, error } = await this.sb.from('decks').insert(row).select('*,profiles(username)').single();
+    const { data, error } = await this.sb.from('decks').insert(row).select('*,owner_profile:profiles!decks_owner_fkey(username)').single();
     this._err(error); return this._map(data);
   }
   async updateDeck(id, patch) {
