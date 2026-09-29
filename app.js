@@ -120,13 +120,53 @@ async function getSetInfo(id) {
 const getCard = id => getJSON('/cards/' + encodeURIComponent(id), { ttl: 3 * 864e5 });
 const namesEq = name => `/cards?name=eq:${encodeURIComponent(name)}`;
 
-async function searchCards(q, cat) {
+/* Format legality for search results and printings, worked out from card-list data:
+   Standard = regulation mark H or later (asked of TCGdex directly), Basic Energy, or a
+   post-rotation set whose cards are missing marks. Expanded = Black & White onward.
+   Classic Collection reprints are never legal. */
+const STD_MARK_FILTER = 'H|I|J|K|L|M|N|O';
+async function setOrders() {
+  const sets = await getSets().catch(() => ({ list: [], byId: {} }));
+  const idx = id => sets.byId[id]?.order ?? -1;
+  const postNames = ['mega evolution', 'phantasmal flames', 'ascended heroes', 'perfect order', 'chaos rising', 'pitch black', '30th celebration'];
+  const post = sets.list.filter(s => postNames.includes(String(s.name || '').toLowerCase())).map(s => sets.byId[s.id].order);
+  return { sets, idx, sv1: idx('sv01'), tef: idx('sv05'), bw1: idx('bw1'), post: post.length ? Math.min(...post) : Infinity };
+}
+async function stdMarkedIds(nameQuery, cat) {
+  try {
+    const list = (await getJSON(`/cards?name=${nameQuery}&regulationMark=eq:${STD_MARK_FILTER}&pagination:itemsPerPage=250${cat ? `&category=eq:${cat}` : ''}`)) || [];
+    const o = await setOrders();
+    // If the filter was ignored, pre-Scarlet & Violet cards would show up here.
+    if (o.sv1 >= 0 && list.some(b => { const k = o.idx(setIdOf(b.id)); return k >= 0 && k < o.sv1; })) return null;
+    return new Set(list.map(b => b.id));
+  } catch { return null; }
+}
+async function briefLegality(briefs, format, stdIds) {
+  if (format === 'unlimited') return briefs.map(() => true);
+  const o = await setOrders();
+  return briefs.map(b => {
+    const setId = setIdOf(b.id), k = o.idx(setId), setName = o.sets.byId[setId]?.name || '';
+    if (/^CC\d/i.test(b.localId || '') || /classic collection/i.test(setName) || setId === 'cel25c') return false;
+    if (isBasicEnergy({ cat: 'Energy', name: b.name })) return true;
+    const std = stdIds ? (stdIds.has(b.id) || (k >= o.post)) : (k >= 0 && o.tef >= 0 && k >= o.tef);
+    if (format === 'standard') return std;
+    return std || (o.bw1 >= 0 ? k >= o.bw1 : true);
+  });
+}
+
+async function searchCards(q, cat, format = 'unlimited') {
   q = q.trim();
   if (q.length < 2) return [];
   let briefs;
-  const base = `/cards?name=like:${encodeURIComponent(q)}&pagination:itemsPerPage=250`;
+  const nameQ = `like:${encodeURIComponent(q)}`;
+  const base = `/cards?name=${nameQ}&pagination:itemsPerPage=250`;
   try { briefs = (await getJSON(base + (cat ? `&category=eq:${cat}` : ''))) || []; }
   catch (e) { if (!cat) throw e; briefs = (await getJSON(base)) || []; }
+  if (format !== 'unlimited') {
+    const stdIds = await stdMarkedIds(nameQ, cat);
+    const ok = await briefLegality(briefs, format, stdIds);
+    briefs = briefs.filter((_, i) => ok[i]);
+  }
   const sets = await getSets().catch(() => ({ byId: {} }));
   const order = b => sets.byId[setIdOf(b.id)]?.order ?? -1;
   const byName = new Map();
@@ -138,6 +178,14 @@ async function searchCards(q, cat) {
   const ql = q.toLowerCase();
   const rank = n => { const l = n.toLowerCase(); return l === ql ? 0 : l.startsWith(ql) ? 1 : l.split(/\s+/).some(w => w.startsWith(ql)) ? 2 : 3; };
   return [...byName.values()].sort((a, b) => rank(a.name) - rank(b.name) || a.name.length - b.name.length || a.name.localeCompare(b.name)).slice(0, 40);
+}
+// Printings of a name, each marked with whether it is legal in the given format.
+async function getPrintingsFor(name, format) {
+  const list = await getPrintings(name);
+  if (format === 'unlimited') return list.map(p => ({ ...p, legalHere: true }));
+  const stdIds = await stdMarkedIds(`eq:${encodeURIComponent(name)}`);
+  const ok = await briefLegality(list, format, stdIds);
+  return list.map((p, i) => ({ ...p, legalHere: ok[i] }));
 }
 
 // Printings of a card name, newest set first.
@@ -1033,8 +1081,8 @@ function bindAdder() {
   const draw = () => {
     res.innerHTML = items.length ? items.map((r, k) => `<button type="button" role="option" class="result ${k === active ? 'active' : ''}" data-k="${k}" aria-selected="${k === active}">
       ${r.best.image ? `<img loading="lazy" src="${esc(img(r.best.image))}" alt="">` : '<span class="noimg"></span>'}
-      <span style="min-width:0"><span class="rn">${esc(r.name)}</span><br><span class="rs">${r.count} printing${r.count === 1 ? '' : 's'}</span></span><span class="add">Add</span></button>`).join('')
-      : `<div class="note">No cards match “${esc(q.value.trim())}”.</div>`;
+      <span style="min-width:0"><span class="rn">${esc(r.name)}</span><br><span class="rs">${r.count} ${DP.deck.format === 'unlimited' ? '' : FORMATS[DP.deck.format] + '-legal '}printing${r.count === 1 ? '' : 's'}</span></span><span class="add">Add</span></button>`).join('')
+      : `<div class="note">No ${DP.deck.format === 'unlimited' ? '' : FORMATS[DP.deck.format] + '-legal '}cards match “${esc(q.value.trim())}”.</div>`;
     res.hidden = false; q.setAttribute('aria-expanded', 'true');
     res.querySelectorAll('.result').forEach(b => b.addEventListener('mousedown', ev => { ev.preventDefault(); pick(+b.dataset.k); }));
   };
@@ -1042,7 +1090,7 @@ function bindAdder() {
     const s = ++seq; const text = q.value.trim();
     if (text.length < 2) { close(); return; }
     res.innerHTML = '<div class="note">Searching…</div>'; res.hidden = false;
-    try { const r = await searchCards(text, cat.value); if (s !== seq) return; items = r; active = 0; draw(); }
+    try { const r = await searchCards(text, cat.value, DP.deck.format); if (s !== seq) return; items = r; active = 0; draw(); }
     catch (e) { if (s === seq) { res.innerHTML = `<div class="note">${esc(e.message)}</div>`; } }
   }, 250);
   const pick = async k => {
@@ -1050,7 +1098,7 @@ function bindAdder() {
     close(); q.value = '';
     setSaving('Adding ' + r.name + '…');
     try {
-      const prints = await getPrintings(r.name);
+      const prints = (await getPrintingsFor(r.name, DP.deck.format)).filter(p => p.legalHere);
       const def = pickDefault(prints) || r.best;
       const e = await entryFromId(def.id, { board: DP.board });
       addEntry(DP.deck, e);
@@ -1173,31 +1221,55 @@ async function swapPrinting(cid) {
 async function loadPrintings() {
   const cm = CM;
   try {
-    const list = await getPrintings(cm.view.name);
+    const list = await getPrintingsFor(cm.view.name, DP.deck.format);
     if (CM !== cm) return;
     cm.printings = list.map(p => ({ ...p, price: undefined, diff: false }));
+    cm.showAll = false;
     drawPrintings();
+    // Older printings of the same card are legal when it was reprinted legally (same text).
+    const isCC = p => /^CC\d/i.test(p.localId || '') || /classic collection/i.test(p.setName || '');
+    const reprintOk = () => {
+      if (DP.deck.format === 'unlimited') return;
+      const legal = cm.printings.filter(p => p.legalHere && !p.viaReprint);
+      if (!legal.length) return;
+      const sigs = new Set(legal.filter(p => p.sig !== undefined).map(p => p.sig));
+      for (const p of cm.printings) {
+        if (p.legalHere || isCC(p)) continue;
+        if (base.cat !== 'Pokemon' || (p.sig !== undefined && sigs.has(p.sig))) { p.legalHere = true; p.viaReprint = true; }
+      }
+    };
     const base = DP.deck.cards[cm.i];
-    await pool(cm.printings.slice(0, 36), 6, async p => {
+    reprintOk(); drawPrintings();
+    await pool(cm.printings.filter(p => p.legalHere).slice(0, 36).concat(cm.printings.filter(p => !p.legalHere).slice(0, 24)), 6, async p => {
       const card = await getCard(p.id); if (!card || CM !== cm) return;
+      p.sig = (card.attacks || []).map(a => a.name).join('|');
       const pr = pricesOf(card); const k = defaultVariant(pr); p.price = pr[k];
       if (base.cat === 'Pokemon' && base.attacks?.length) {
         const a = (card.attacks || []).map(x => x.name).join('|'); p.diff = a !== base.attacks.join('|');
       }
       drawPrintings();
     });
+    if (CM === cm) { reprintOk(); drawPrintings(); }
   } catch (err) { if (CM === cm) $('#prgrid').innerHTML = `<div class="muted">${esc(err.message)}</div>`; }
 }
 const drawPrintings = debounce(() => {
   if (!CM?.printings) return;
   const e = DP.deck.cards[CM.i]; const g = $('#prgrid'); if (!g) return;
-  const list = CM.printings;
-  $('#prcount').textContent = `${list.length} printing${list.length === 1 ? '' : 's'}`;
-  g.innerHTML = list.map(p => `<button class="pr ${p.diff ? 'diff' : ''}" data-pid="${esc(p.id)}" aria-current="${p.id === e.cid}" title="${esc(p.setName + ' #' + p.localId)}">
+  const fmt = DP.deck.format;
+  const hiddenN = CM.printings.filter(p => !p.legalHere && p.id !== e.cid).length;
+  const list = CM.showAll ? CM.printings : CM.printings.filter(p => p.legalHere || p.id === e.cid);
+  const legalN = CM.printings.filter(p => p.legalHere).length;
+  $('#prcount').innerHTML = fmt === 'unlimited' ? `${list.length} printing${list.length === 1 ? '' : 's'}`
+    : `${legalN} ${FORMATS[fmt]}-legal${hiddenN ? ` · <button class="btn ghost sm" id="prall" type="button">${CM.showAll ? 'Hide' : 'Show'} ${hiddenN} not legal</button>` : ''}`;
+  const pa = $('#prall'); if (pa) pa.onclick = () => { CM.showAll = !CM.showAll; drawPrintings(); };
+  g.innerHTML = list.length ? list.map(p => `<button class="pr ${p.diff || !p.legalHere ? 'diff' : ''}" data-pid="${esc(p.id)}" aria-current="${p.id === e.cid}" title="${esc(p.setName + ' #' + p.localId)}">
     ${p.image ? `<img loading="lazy" src="${esc(img(p.image))}" alt="">` : `<span class="noimg">No image</span>`}
-    <span class="ps">${esc(p.setName)}</span><span class="pp">#${esc(p.localId)} · ${p.price === undefined ? '…' : money(p.price)}</span>${p.diff ? '<span class="dtag">Different card</span>' : ''}</button>`).join('');
+    <span class="ps">${esc(p.setName)}</span><span class="pp">#${esc(p.localId)} · ${p.price === undefined ? '…' : money(p.price)}</span>${!p.legalHere ? `<span class="dtag">Not ${esc(FORMATS[fmt])} legal</span>` : p.diff ? '<span class="dtag">Different card</span>' : ''}</button>`).join('')
+    : `<div class="muted">No ${FORMATS[fmt]}-legal printings of this card.</div>`;
   g.querySelectorAll('.pr').forEach(b => b.addEventListener('click', async () => {
     const pid = b.dataset.pid;
+    const pr = CM.printings.find(x => x.id === pid);
+    if (DP.editing && DP.mine && pr && !pr.legalHere && pid !== e.cid) { toast(`That printing isn't ${FORMATS[DP.deck.format]} legal`, 'bad'); return; }
     if (DP.editing && DP.mine) { if (pid !== e.cid) await swapPrinting(pid); return; }
     try {
       CM.view = pid === e.cid ? e : await entryFromId(pid); drawCardModal();
