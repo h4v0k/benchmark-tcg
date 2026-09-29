@@ -294,6 +294,20 @@ async function resolveTcgp(entries) {
 
 /* ---------------- rules & stats ---------------- */
 const FORMATS = { standard: 'Standard', expanded: 'Expanded', unlimited: 'Unlimited' };
+// Current Standard rules (2026–27 format, in effect since April 10, 2026):
+// regulation mark H or later; Basic Energy always; Classic Collection reprints never.
+const STANDARD_FIRST_MARK = 'H';
+const STANDARD_NOTE = 'Regulation marks H, I, J and later (2026–27 format)';
+const isClassicCollection = e => /^CC\d/i.test(String(e.num || ''));
+const markLegal = mark => /^[A-Z]$/i.test(mark || '') && mark.toUpperCase() >= STANDARD_FIRST_MARK;
+function legalIn(e, format) {
+  if (format === 'unlimited') return true;
+  if (isClassicCollection(e)) return false;
+  if (isBasicEnergy(e)) return true;
+  const std = markLegal(e.reg) || !!e.reprintLegal;
+  if (format === 'standard') return std;
+  return std || !!e.legal?.expanded;
+}
 function validate(deck) {
   const main = deck.cards.filter(c => c.board === 'main');
   const out = [];
@@ -312,10 +326,10 @@ function validate(deck) {
   const basics = sum(main.filter(isBasicPokemon), c => c.qty);
   out.push(basics > 0 ? { level: 'ok', msg: `${basics} Basic Pokémon` } : { level: 'bad', msg: 'No Basic Pokémon. A deck needs at least one.' });
   if (deck.format !== 'unlimited') {
-    const bad = [...new Set(main.filter(c => !c.legal?.[deck.format]).map(c => c.name))];
+    const bad = [...new Set(main.filter(c => !legalIn(c, deck.format)).map(c => c.name))];
     out.push(bad.length
-      ? { level: 'bad', msg: `Not ${FORMATS[deck.format]} legal: ${bad.join(', ')}`, hint: 'Some older printings are legal through a reprint. Open the card and pick a newer printing.' }
-      : { level: 'ok', msg: `All cards ${FORMATS[deck.format]} legal` });
+      ? { level: 'bad', msg: `Not ${FORMATS[deck.format]} legal: ${bad.join(', ')}`, hint: deck.format === 'standard' ? STANDARD_NOTE + '. Classic Collection reprints are never legal.' : '' }
+      : { level: 'ok', msg: `All cards ${FORMATS[deck.format]} legal`, hint: deck.format === 'standard' ? STANDARD_NOTE : '' });
   }
   const noPrice = main.filter(c => entryPrice(c) == null).length;
   if (noPrice) out.push({ level: 'warn', msg: `${noPrice} card${noPrice > 1 ? 's have' : ' has'} no price data` });
@@ -773,7 +787,7 @@ function importModal(deckCtx) {
         const d = DP.deck;
         if ($('#imr').checked) d.cards = d.cards.filter(c => c.board !== board);
         found.forEach(e => addEntry(d, e));
-        closeModal(); afterCardsChange(); renderDeck(); matchTcgp(found);
+        closeModal(); afterCardsChange(); renderDeck(); matchTcgp(found); runReprintCheck(found);
       } else {
         prog.textContent = 'Matching cards to TCGplayer…';
         await resolveTcgp(found);
@@ -815,6 +829,7 @@ async function viewDeck(token, id) {
   renderDeck();
   if (mine) refreshStalePrices(token);
   matchTcgp(deck.cards, token);
+  runReprintCheck(deck.cards);
 }
 function coverOf(d) { return d.cover || autoCover(d.cards); }
 function renderDeck() {
@@ -873,7 +888,7 @@ function grouped() {
     const arr = g.get(k); const sorted = sortEntries(arr.map(x => x.c)); return [k, sorted.map(c => arr.find(x => x.c === c))];
   });
 }
-const tagsHTML = c => `${isAce(c) ? '<span class="tag ace">Ace</span>' : ''}${c.variant && c.variant !== 'normal' && Object.keys(c.prices || {}).length > 1 ? `<span class="tag fin">${esc(VARIANT_LABEL[c.variant] || c.variant)}</span>` : ''}${DP.deck.format !== 'unlimited' && c.board === 'main' && !c.legal?.[DP.deck.format] ? '<span class="tag bad">Not legal</span>' : ''}`;
+const tagsHTML = c => `${isAce(c) ? '<span class="tag ace">Ace</span>' : ''}${c.variant && c.variant !== 'normal' && Object.keys(c.prices || {}).length > 1 ? `<span class="tag fin">${esc(VARIANT_LABEL[c.variant] || c.variant)}</span>` : ''}${DP.deck.format !== 'unlimited' && c.board === 'main' && !legalIn(c, DP.deck.format) ? '<span class="tag bad">Not legal</span>' : ''}`;
 function renderCards() {
   const groups = grouped();
   if (!groups.length) {
@@ -982,6 +997,13 @@ const flushSaves = debounce(async () => {
     } catch (e) { if (DP?.deck === d) setSaving('Not saved'); toast('Couldn\'t save: ' + e.message, 'bad'); }
   }
 }, 700);
+async function runReprintCheck(entries) {
+  const dp = DP; if (!dp) return;
+  const changed = await checkReprints(entries).catch(() => false);
+  if (!changed || DP !== dp) return;
+  if (dp.mine) { pendingSave.set(dp.deck.id, dp.deck); flushSaves(); }
+  refreshList(); if (CM) drawCardModal();
+}
 async function matchTcgp(entries, token) {
   if (!DP || B.kind !== 'supabase' || !entries.some(needsTcgp)) return;
   const dp = DP; dp.tcgpPending = true;
@@ -1027,7 +1049,7 @@ function bindAdder() {
       addEntry(DP.deck, e);
       if (!DP.deck.cover) DP.deck.cover = autoCover(DP.deck.cards);
       afterCardsChange(); refreshList(); toast(`Added ${e.name}`);
-      matchTcgp([e]);
+      matchTcgp([e]); runReprintCheck([e]);
     } catch (err) { setSaving(''); toast(err.message, 'bad'); }
     q.focus();
   };
@@ -1043,6 +1065,22 @@ function bindAdder() {
   q.addEventListener('blur', () => setTimeout(close, 150));
 }
 
+// A card is also Standard legal if the same card (same name and attacks) was reprinted with a legal mark.
+async function checkReprints(entries) {
+  const todo = entries.filter(e => e.cat !== 'Energy' && !markLegal(e.reg) && !isClassicCollection(e) && e.reprintLegal === undefined);
+  if (!todo.length) return false;
+  let changed = false;
+  const byName = new Map(); todo.forEach(e => { if (!byName.has(e.name)) byName.set(e.name, []); byName.get(e.name).push(e); });
+  await pool([...byName], 3, async ([name, list]) => {
+    const prints = (await getPrintings(name)).filter(p => !/^CC\d/i.test(p.localId)).slice(0, 10);
+    const cards = (await pool(prints, 4, p => getCard(p.id))).filter(Boolean).filter(c => markLegal(c.regulationMark));
+    for (const e of list) {
+      const same = cards.some(c => e.cat !== 'Pokemon' || (c.attacks || []).map(a => a.name).join('|') === (e.attacks || []).join('|'));
+      e.reprintLegal = same; changed = true;
+    }
+  });
+  return changed;
+}
 async function refreshStalePrices(token) {
   const stale = DP.deck.cards.filter(c => Date.now() - (c.updated || 0) > 2 * 864e5);
   if (!stale.length) return;
@@ -1067,7 +1105,7 @@ function drawCardModal() {
   if (!CM) return;
   const e = DP.deck.cards[CM.i]; const v = CM.view; const isCur = v.cid === e.cid;
   const editable = DP.editing && DP.mine;
-  const fmtLegal = f => `<span class="pill ${v.legal?.[f] ? 'ok' : 'bad'}">${FORMATS[f]} ${v.legal?.[f] ? '✓' : '✕'}</span>`;
+  const fmtLegal = f => `<span class="pill ${legalIn(v, f) ? 'ok' : 'bad'}">${FORMATS[f]} ${legalIn(v, f) ? '✓' : '✕'}</span>`;
   const finishes = Object.entries(v.prices);
   $('#cmb').innerHTML = `<div class="cm">
     <div class="cm-img">${v.img ? `<img src="${esc(img(v.img, 'high'))}" alt="${esc(v.name)}">` : `<span class="noimg">${esc(v.name)}</span>`}</div>
@@ -1118,7 +1156,7 @@ async function swapPrinting(cid) {
     const wasCover = d.cover && d.cover === e.img;
     d.cards[CM.i] = n; if (wasCover) d.cover = n.img;
     CM.view = n; afterCardsChange(); drawCardModal(); refreshList(); renderDeckKeepModal(); toast('Printing updated');
-    matchTcgp([n]);
+    matchTcgp([n]); runReprintCheck([n]);
   } catch (err) { toast(err.message, 'bad'); }
 }
 async function loadPrintings() {
