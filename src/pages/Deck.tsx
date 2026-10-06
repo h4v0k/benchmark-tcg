@@ -86,10 +86,15 @@ export function DeckPage({ id }: { id: string }) {
       if (!Object.keys(p).length) return;
       setStatus('Saving…');
       try { await api.saveDeck(id, p); if (!Object.keys(pending.current).length) setStatus('Saved'); }
-      catch (e: any) { pending.current = { ...p, ...pending.current }; setStatus('Not saved'); toast(`Couldn’t save: ${e.message}`, 'bad'); }
+      catch (e: any) {
+        pending.current = { ...p, ...pending.current }; setStatus('Not saved'); toast(`Couldn’t save: ${e.message}`, 'bad');
+        // try again on its own in a few seconds
+        clearTimeout(timer.current); timer.current = window.setTimeout(() => flushRef.current(), 5000);
+      }
     });
     return inflight.current;
   }, [id]);
+  const flushRef = useRef(flush); flushRef.current = flush;
   const queue = useCallback((patch: api.DeckWrite) => {
     pending.current = { ...pending.current, ...patch };
     setStatus('Saving…');

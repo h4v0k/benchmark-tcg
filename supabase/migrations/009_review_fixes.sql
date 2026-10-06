@@ -24,7 +24,7 @@ begin
       into new.card_count, new.price
       from jsonb_array_elements(new.cards) x
       left join public.cards c on c.id = x->>'cid'
-      where coalesce(x->>'board', 'main') = 'main' and (x->>'qty') ~ '^\d+$';
+      where coalesce(x->>'board', 'main') = 'main' and (x->>'qty') ~ '^\d{1,3}$';
   end;
   new.tags := coalesce((select array_agg(distinct lower(btrim(t))) from unnest(new.tags) t where btrim(t) <> '' and char_length(btrim(t)) <= 24), '{}');
   if new.folder_id is not null and not exists (select 1 from public.folders f where f.id = new.folder_id and f.owner = new.owner) then
