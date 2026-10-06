@@ -552,3 +552,11 @@ td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: mid
 
 /* Back to top (phones) */
 .to-top { display: none; position: fixed; right: 14px; bottom: 18px; z-index: 45; width: 44px; height: 44px; border-radius: 50%; align-items: center; justify-content: center; background: var(--panel2); color: var(--text); border: 1px solid var(--line2); box-shadow: var(--shadow); }
+
+/* Phones: iOS Safari zooms the whole page when a text box under 16px gets focus, and stays zoomed.
+   16px text in form fields on touch screens prevents that. */
+@media (pointer: coarse) {
+  input, select, textarea { font-size: 16px !important; }
+  .gsearch input, .add-input input { font-size: 16px !important; }
+}
+input[type=checkbox], input[type=radio] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); flex: none; }
