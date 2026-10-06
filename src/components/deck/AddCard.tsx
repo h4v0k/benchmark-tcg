@@ -55,9 +55,11 @@ export function AddCard({ format, board, onAdd }: { format: Format; board: Board
             else if (e.key === 'Escape') setOpen(false);
           }} />
         {format !== 'unlimited' && (
-          <label className="legal-toggle" title="Only show cards legal in this deck's format">
-            <input type="checkbox" checked={onlyLegal} onChange={e => setOnlyLegal(e.target.checked)} /> Legal only
-          </label>
+          <button type="button" className={`legal-toggle ${onlyLegal ? 'on' : ''}`} aria-pressed={onlyLegal}
+            title={onlyLegal ? "Showing only cards legal in this deck's format. Tap to show all cards." : "Showing all cards. Tap to show only legal ones."}
+            onMouseDown={e => e.preventDefault()} onClick={() => setOnlyLegal(v => !v)}>
+            {onlyLegal ? 'Legal only' : 'All cards'}
+          </button>
         )}
       </div>
       {open && hits.length > 0 && (

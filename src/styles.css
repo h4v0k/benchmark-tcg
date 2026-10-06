@@ -262,8 +262,9 @@ body.modal-open { overflow: hidden; }
 .add-card { position: relative; flex: 1; min-width: 260px; }
 .add-input { position: relative; display: flex; align-items: center; }
 .add-input > .icon { position: absolute; left: 10px; color: var(--accent); }
-.add-input input { padding-left: 32px; padding-right: 100px; height: 36px; background: var(--panel); }
-.legal-toggle { position: absolute; right: 8px; display: flex; gap: 5px; align-items: center; font-size: 11px; color: var(--muted); cursor: pointer; }
+.add-input input { padding-left: 32px; padding-right: 92px; height: 40px; background: var(--panel); text-overflow: ellipsis; }
+.legal-toggle { position: absolute; right: 6px; height: 26px; padding: 0 9px; border-radius: 99px; border: 1px solid var(--line2); background: var(--panel2); font: 600 11px/1 inherit; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.legal-toggle.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .add-qty { margin-left: auto; color: var(--accent); font-weight: 700; font-size: 12px; }
 
 /* text view: groups flow in columns like Moxfield */
@@ -528,6 +529,7 @@ td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: mid
   .stacks-view { flex-wrap: wrap; overflow-x: visible; }
   .stack-col { width: calc(50% - 7px); }
   .to-top { display: flex; }
+  .add-card { min-width: 100%; }
   .import-link { grid-template-columns: 1fr; }
 }
 
