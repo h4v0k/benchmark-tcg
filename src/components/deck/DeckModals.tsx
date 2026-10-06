@@ -11,6 +11,8 @@ export function ExportModal({ lines, name, onClose }: { lines: Line[]; name: str
   const [kind, setKind] = useState<'ptcgl' | 'plain' | 'grouped' | 'tcgplayer'>('ptcgl');
   const hasMaybe = lines.some(l => l.board === 'maybe');
   const [board, setBoard] = useState<'main' | 'maybe'>('main');
+  const [copied, setCopied] = useState(false);
+  useEffect(() => setCopied(false), [kind, board]);
   const text = kind === 'ptcgl' ? exportPTCGL(lines, board)
     : kind === 'plain' ? exportPlain(lines, board)
     : kind === 'grouped' ? exportGrouped(lines, board)
@@ -35,12 +37,14 @@ export function ExportModal({ lines, name, onClose }: { lines: Line[]; name: str
         ]} />
         {hasMaybe && <Segmented label="Board" value={board} onChange={setBoard} options={[{ value: 'main', label: 'Deck' }, { value: 'maybe', label: 'Considering' }]} />}
       </div>
-      <textarea className="export-text" readOnly value={text} rows={16} onFocus={e => e.currentTarget.select()} aria-label="Exported list" />
-      <div className="row-end">
-        {kind === 'tcgplayer' && <a className="btn" href={me.url} target="_blank" rel="noopener noreferrer"><Icon name="cart" />Open in TCGplayer Mass Entry</a>}
+      <div className="export-actions">
+        <button className="btn primary" onClick={async () => { const ok = await copyText(text); setCopied(ok); if (!ok) toast('Couldn’t copy. Select the text below instead.', 'bad'); }}>
+          <Icon name={copied ? 'check' : 'copy'} />{copied ? 'Copied all cards' : 'Copy all'}
+        </button>
         <button className="btn" onClick={download}><Icon name="download" />Download .txt</button>
-        <button className="btn primary" onClick={async () => toast((await copyText(text)) ? 'Copied' : 'Couldn’t copy', 'ok')}><Icon name="copy" />Copy</button>
+        {kind === 'tcgplayer' && <a className="btn" href={me.url} target="_blank" rel="noopener noreferrer"><Icon name="cart" />Open in TCGplayer Mass Entry</a>}
       </div>
+      <textarea className="export-text" readOnly value={text} rows={12} onFocus={e => e.currentTarget.select()} aria-label="Exported list" />
     </Modal>
   );
 }

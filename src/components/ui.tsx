@@ -181,7 +181,10 @@ export function ErrorBox({ error, onRetry }: { error: Error; onRetry?: () => voi
 export async function copyText(text: string) {
   try { await navigator.clipboard.writeText(text); return true; }
   catch {
-    const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select();
+    // Fallback (older iOS): an off-screen, read-only box selected in full, so nothing scrolls or zooms.
+    const t = document.createElement('textarea'); t.value = text; t.readOnly = true;
+    t.style.cssText = 'position:fixed;top:0;left:-9999px;opacity:0;font-size:16px';
+    document.body.appendChild(t); t.select(); t.setSelectionRange(0, text.length);
     let ok = false; try { ok = document.execCommand('copy'); } catch {} t.remove(); return ok;
   }
 }
