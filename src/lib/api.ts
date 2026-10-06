@@ -3,8 +3,8 @@ import * as sb from './supabase';
 import type { Card, Comment, DeckEntry, DeckRow, Folder, Format, Profile, RuleChange, Rules, SearchHit } from './types';
 import type { ParsedLine } from './decklist';
 
-const CARD_COLS = 'id,set_id,local_id,name,category,stage,trainer_type,energy_type,suffix,evolves_from,types,hp,retreat,rarity,reg_mark,illustrator,effect,abilities,attacks,weaknesses,resistances,variants,image,is_ace,is_radiant,is_prism,is_basic_energy,tcgp_product_id,tcgp,prices,prices_at,legal_standard,legal_expanded,standard_from,rotating,rotating_on,banned_in,detail_at,set:sets(id,name,code,series,release_date,legal_date,symbol,logo,is_promo,is_classic)';
-const DECK_LIST_COLS = 'id,owner,name,format,is_public,cover,price,card_count,like_count,view_count,comment_count,featured,tags,folder_id,archetype,created_at,updated_at,owner_profile:profiles!decks_owner_fkey(username,avatar_card)';
+const CARD_COLS = 'id,set_id,local_id,name,category,stage,trainer_type,energy_type,suffix,evolves_from,types,hp,retreat,rarity,reg_mark,illustrator,effect,abilities,attacks,weaknesses,resistances,variants,image,is_ace,is_radiant,is_prism,is_basic_energy,tcgp_product_id,tcgp,prices,prices_at,legal_standard,legal_expanded,standard_from,rotating,rotating_on,banned_in,detail_at,set:sets!inner(id,name,code,series,release_date,legal_date,symbol,logo,is_promo,is_classic,hidden)';
+const DECK_LIST_COLS = 'id,owner,name,format,is_public,cover,price,card_count,like_count,view_count,comment_count,featured,tags,archetype,created_at,updated_at,owner_profile:profiles!decks_owner_fkey(username,avatar_card)';
 const DECK_COLS = '*,owner_profile:profiles!decks_owner_fkey(username,avatar_card)';
 
 /* ---------------- cards ---------------- */
@@ -23,10 +23,10 @@ export async function cardsById(ids: string[]): Promise<Map<string, Card>> {
   return out;
 }
 export async function printingsOf(name: string): Promise<Card[]> {
-  const { rows } = await sb.select<Card>('cards', { select: CARD_COLS, name: `eq.${name}`, limit: 300 });
+  // Pokémon TCG Pocket (digital-only) sets are hidden from printings.
+  const { rows } = await sb.select<Card>('cards', { select: CARD_COLS, name: `eq.${name}`, 'set.hidden': 'is.false', limit: 300 });
   rows.forEach(c => cardCache.set(c.id, c));
   return rows
-    .filter(c => !(c.set as any)?.hidden)
     .sort((a, b) => (b.set?.release_date || '').localeCompare(a.set?.release_date || '') || localNum(a.local_id) - localNum(b.local_id));
 }
 const localNum = (l: string) => { const n = parseInt(String(l).replace(/\D/g, ''), 10); return isNaN(n) ? 9999 : n; };
@@ -126,7 +126,8 @@ export type DeckQuery = { format?: Format | ''; sort?: 'likes' | 'views' | 'upda
 const SORT: Record<string, string> = { likes: 'like_count.desc,updated_at.desc', views: 'view_count.desc,updated_at.desc', updated: 'updated_at.desc', new: 'created_at.desc', price: 'price.desc' };
 
 export async function listDecks(o: DeckQuery & { mine?: boolean } = {}) {
-  const q: sb.Query = { select: DECK_LIST_COLS, order: SORT[o.sort || 'updated'] };
+  // Folders are private, so folder_id is only selected for your own decks.
+  const q: sb.Query = { select: o.mine ? DECK_LIST_COLS + ',folder_id' : DECK_LIST_COLS, order: SORT[o.sort || 'updated'] };
   if (!o.mine) q.is_public = 'eq.true';
   if (o.owner) q.owner = `eq.${o.owner}`;
   if (o.owners) q.owner = `in.(${o.owners.join(',') || '00000000-0000-0000-0000-000000000000'})`;

@@ -78,12 +78,17 @@ export function DeckPage({ id }: { id: string }) {
   /* ---------- saving ---------- */
   const pending = useRef<api.DeckWrite>({});
   const timer = useRef<number | undefined>(undefined);
-  const flush = useCallback(async () => {
-    const p = pending.current; pending.current = {};
-    if (!Object.keys(p).length) return;
-    setStatus('Saving…');
-    try { await api.saveDeck(id, p); setStatus('Saved'); }
-    catch (e: any) { pending.current = { ...p, ...pending.current }; setStatus('Not saved'); toast(`Couldn’t save: ${e.message}`, 'bad'); }
+  // Saves run one at a time, in order, so an older save can never land after a newer one.
+  const inflight = useRef<Promise<void>>(Promise.resolve());
+  const flush = useCallback(() => {
+    inflight.current = inflight.current.then(async () => {
+      const p = pending.current; pending.current = {};
+      if (!Object.keys(p).length) return;
+      setStatus('Saving…');
+      try { await api.saveDeck(id, p); if (!Object.keys(pending.current).length) setStatus('Saved'); }
+      catch (e: any) { pending.current = { ...p, ...pending.current }; setStatus('Not saved'); toast(`Couldn’t save: ${e.message}`, 'bad'); }
+    });
+    return inflight.current;
   }, [id]);
   const queue = useCallback((patch: api.DeckWrite) => {
     pending.current = { ...pending.current, ...patch };
@@ -104,7 +109,13 @@ export function DeckPage({ id }: { id: string }) {
     const keepCover = row?.cover && ls.some(l => l.card?.image === row.cover);
     queue({ cards: next.map(slim), card_count: sum(main, l => l.qty), price: Math.round(sum(main, l => (linePrice(l) || 0) * l.qty) * 100) / 100, cover: keepCover ? row!.cover : autoCover(ls) });
   };
-  const patchRow = (patch: Partial<DeckRow>) => { setRow(r => r && { ...r, ...patch }); queue(patch as api.DeckWrite); };
+  const patchRow = (patch: Partial<DeckRow>) => {
+    setRow(r => r && { ...r, ...patch });
+    // An empty name is only a moment while typing; don't send it.
+    const send = { ...patch } as api.DeckWrite;
+    if ('name' in send && !String(send.name || '').trim()) delete send.name;
+    if (Object.keys(send).length) queue(send);
+  };
 
   /* ---------- edits ---------- */
   const addCard = async (cid: string, qty: number, b: Board) => {
@@ -203,7 +214,7 @@ export function DeckPage({ id }: { id: string }) {
               {row.archetype && <span className="fmt-badge">{row.archetype}</span>}
             </div>
             {editable ? (
-              <input className="deck-title-input" value={row.name} maxLength={80} aria-label="Deck name" onChange={e => patchRow({ name: e.target.value })} onBlur={e => { if (!e.target.value.trim()) patchRow({ name: 'Untitled deck' }); }} />
+              <input className="deck-title-input" value={row.name} maxLength={80} aria-label="Deck name" onChange={e => patchRow({ name: e.target.value })} onBlur={e => { if (!e.target.value.trim()) patchRow({ name: 'Untitled deck' }); else if (e.target.value !== e.target.value.trim()) patchRow({ name: e.target.value.trim() }); }} />
             ) : <h1 className="deck-title">{row.name}</h1>}
             <div className="deck-byline">
               {row.owner_profile && <Link to={`/users/${row.owner_profile.username}`} className="author"><Avatar card={row.owner_profile.avatar_card} name={row.owner_profile.username} size={22} />{row.owner_profile.username}</Link>}

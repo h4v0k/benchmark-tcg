@@ -37,6 +37,10 @@ Rare Candy x3`);
     [4, 'Darkrai-EX', 'BKP', '74'], [4, 'Iono', 'PAL', '185'], [2, 'Ultra Ball', 'SVI', ''],
     [15, 'Darkness Energy', 'SUM', 'D'], [4, 'Basic Fire Energy', '', ''], [3, 'Rare Candy', '', '']]);
 });
+t('junk after names', () => {
+  const p = D.parseDeckText(`3 Iono 185\n2 Iono x\n1 Porygon2`);
+  assert.deepEqual(p.map(x => x.name), ['Iono', 'Iono', 'Porygon2']);
+});
 t('promo codes', () => {
   const p = D.parseDeckText(`1 Pecharunt ex PR-SV 149\n2 Mew ex MEW 151`);
   assert.deepEqual(p.map(x => [x.code, x.num]), [['PR-SV', '149'], ['MEW', '151']]);

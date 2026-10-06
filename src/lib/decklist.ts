@@ -58,7 +58,8 @@ export function parseDeckText(text: string): ParsedLine[] {
       break;
     }
     if (!qty || qty > 60 || !name) continue;
-    name = cleanName(name);
+    // "3 Iono 185" (a number with no set code) and "3 Iono x" (stray multiplier)
+    name = cleanName(name.replace(/\s+(?:#?\d{1,3}[a-z]?|x)$/i, ''));
     // descriptions are full of "1 thing to know" style lines: require something card-like
     if (name.length < 2 || name.length > 60 || /^(of|the|and|to|for|in|on|at|is|my|you|i)\b/i.test(name) || /[?!]$/.test(name)) continue;
     out.push({ i: out.length, qty, name, code: code.toUpperCase(), num, board, raw });

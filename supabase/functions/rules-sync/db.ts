@@ -38,17 +38,28 @@ export async function logRun(job: string, fn: () => Promise<object>) {
   }
 }
 
+const same = (a: string, b: string) => {
+  if (a.length !== b.length) return false;
+  let r = 0;
+  for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return r === 0;
+};
+let cronSecret: string | null = null;
+
 // Only the service role (cron jobs) or a Benchmark admin may run sync jobs.
 export async function isAuthorized(req: Request) {
   const auth = req.headers.get("Authorization") || "";
   const token = auth.replace(/^Bearer\s+/i, "");
   if (!token) return false;
-  if (token === SB_KEY) return true;
+  if (SB_KEY && same(token, SB_KEY)) return true;
   const given = req.headers.get("x-cron-secret");
   if (given) {
     // The cron jobs send a secret kept in app_settings (readable only with the service role).
-    const rows = await db("app_settings?key=eq.cron_secret&select=value").catch(() => []);
-    return !!rows?.[0]?.value && rows[0].value.length >= 32 && rows[0].value === given;
+    if (cronSecret === null) {
+      const rows = await db("app_settings?key=eq.cron_secret&select=value").catch(() => []);
+      cronSecret = rows?.[0]?.value || "";
+    }
+    return cronSecret.length >= 32 && same(cronSecret, given);
   }
   try {
     const u = await fetch(`${SB_URL}/auth/v1/user`, { headers: { apikey: SB_KEY, Authorization: `Bearer ${token}` } });

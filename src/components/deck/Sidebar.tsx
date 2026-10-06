@@ -42,6 +42,8 @@ export function BuyPanel({ lines }: { lines: Line[] }) {
   const main = lines.filter(l => l.board === 'main');
   const total = sum(main, l => (linePrice(l) || 0) * l.qty);
   const me = massEntry(main);
+  // Mass Entry can't mix exact products and names, so unmatched cards get their own link.
+  const rest = me.missing.length ? massEntry(main.filter(l => me.missing.includes(l.name)).map(l => ({ ...l, card: undefined }))) : null;
   const priced = main.filter(l => linePrice(l) != null).length;
   const top = [...main].sort((a, b) => (linePrice(b) || 0) * b.qty - (linePrice(a) || 0) * a.qty).slice(0, 5).filter(l => linePrice(l));
   const oldest = main.map(l => l.card?.prices_at).filter(Boolean).sort()[0];
@@ -51,8 +53,13 @@ export function BuyPanel({ lines }: { lines: Line[] }) {
       <a className="btn primary block" href={me.url} target="_blank" rel="noopener noreferrer"><Icon name="cart" />Buy this deck on TCGplayer</a>
       <p className="panel-foot">
         {me.exact ? `Opens TCGplayer Mass Entry with the exact printing of ${me.exact} card${me.exact > 1 ? 's' : ''}.` : 'Opens TCGplayer Mass Entry by card name.'}
-        {me.missing.length > 0 && <> Not matched to a TCGplayer product yet: {me.missing.join(', ')}.</>}
       </p>
+      {me.missing.length > 0 && rest && (
+        <div className="notice warn">
+          <Icon name="warn" size={15} />
+          <span>{me.missing.length} card{me.missing.length > 1 ? 's aren’t' : ' isn’t'} matched to an exact TCGplayer product yet ({me.missing.join(', ')}). <a href={rest.url} target="_blank" rel="noopener noreferrer">Buy {me.missing.length > 1 ? 'those' : 'it'} by name</a>.</span>
+        </div>
+      )}
       {top.length > 0 && (
         <ul className="price-top">
           {top.map(l => <li key={l.cid}><span>{l.qty}× {l.name}</span><span>{money((linePrice(l) || 0) * l.qty)}</span></li>)}

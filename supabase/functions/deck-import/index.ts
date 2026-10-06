@@ -38,12 +38,45 @@ export function limitlessUrl(raw: string) {
   return null;
 }
 
+const ALLOWED_HOSTS = /^(www\.|m\.)?(youtube\.com|limitlesstcg\.com|play\.limitlesstcg\.com)$/;
+
+// Fetches a page from an allowed host only, follows redirects only within those hosts,
+// and stops reading after MAX_BYTES.
 async function fetchText(url: string, headers = {}) {
-  const r = await fetch(url, { headers: { "User-Agent": UA, "Accept-Language": "en-US,en;q=0.9", ...headers }, redirect: "follow" });
-  if (!r.ok) throw new Error(`${new URL(url).hostname} returned ${r.status}`);
-  const buf = await r.arrayBuffer();
-  if (buf.byteLength > MAX_BYTES * 2) throw new Error("That page is too large to read.");
-  return new TextDecoder().decode(buf);
+  let target = url;
+  for (let hop = 0; hop < 3; hop++) {
+    const host = new URL(target).hostname;
+    if (!ALLOWED_HOSTS.test(host)) throw new Error("That link points somewhere Benchmark doesn't read.");
+    const r = await fetch(target, { headers: { "User-Agent": UA, "Accept-Language": "en-US,en;q=0.9", ...headers }, redirect: "manual" });
+    if (r.status >= 300 && r.status < 400 && r.headers.get("location")) { target = new URL(r.headers.get("location"), target).toString(); continue; }
+    if (!r.ok) throw new Error(`${host} returned ${r.status}`);
+    const reader = r.body.getReader();
+    const chunks = []; let size = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_BYTES) { reader.cancel(); break; }
+      chunks.push(value);
+    }
+    const buf = new Uint8Array(size > MAX_BYTES ? MAX_BYTES : size);
+    let off = 0;
+    for (const c of chunks) { const n = Math.min(c.byteLength, buf.length - off); buf.set(c.subarray(0, n), off); off += n; if (off >= buf.length) break; }
+    return new TextDecoder().decode(buf);
+  }
+  throw new Error("Too many redirects.");
+}
+
+// Signed-in Benchmark users only.
+async function signedIn(req: Request) {
+  const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!token) return false;
+  try {
+    const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/auth/v1/user`, { headers: { apikey: Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"), Authorization: `Bearer ${token}` } });
+    if (!r.ok) return false;
+    const u = await r.json();
+    return !!u?.id;
+  } catch { return false; }
 }
 
 const decode = (s: string) => String(s || "").replace(/&amp;/g, "&").replace(/&#0?39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&eacute;/g, "é").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n));
@@ -115,6 +148,7 @@ async function limitless(url: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Use POST" }, 405);
+  if (!(await signedIn(req))) return json({ error: "Sign in to import from a link." }, 401);
   const body = await req.json().catch(() => ({}));
   const url = String(body?.url || "").slice(0, 500);
   try {
@@ -124,6 +158,7 @@ Deno.serve(async (req) => {
     if (lim) return json(await limitless(lim));
     return json({ error: "Paste a YouTube video link or a Limitless deck list link." }, 400);
   } catch (e) {
-    return json({ error: String(e?.message || e) }, 502);
+    console.warn(String(e?.message || e));
+    return json({ error: "Couldn't read that page. Paste the list instead." }, 502);
   }
 });

@@ -5,7 +5,7 @@ export type Finish = 'normal' | 'holo' | 'reverse' | 'firstEdition' | 'firstEdit
 export type SetInfo = {
   id: string; name: string; code: string; series: string;
   release_date: string | null; legal_date: string | null;
-  symbol: string; logo: string; is_promo: boolean; is_classic: boolean;
+  symbol: string; logo: string; is_promo: boolean; is_classic: boolean; hidden?: boolean;
 };
 
 export type Attack = { name: string; cost: string[]; damage: string; effect: string };
