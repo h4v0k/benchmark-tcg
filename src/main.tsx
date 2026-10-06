@@ -19,6 +19,11 @@ function legacyRedirect() {
 
 (async () => {
   const fromLink = await auth.fromUrl().catch(() => null);
+  // Back from Google: return to the page they signed in from.
+  try {
+    const next = sessionStorage.getItem('bm-next');
+    if (next) { sessionStorage.removeItem('bm-next'); if (fromLink && !fromLink.error && next.startsWith('/') && !next.startsWith('//')) history.replaceState(null, '', next); }
+  } catch { /* storage blocked */ }
   legacyRedirect();
   createRoot(document.getElementById('root')!).render(<App authLink={fromLink} />);
 })();

@@ -26,13 +26,14 @@ export function ImportModal({ format, title = 'Import cards', initialText = '', 
   const [source, setSource] = useState<{ title: string; author: string; from: string; description?: string } | null>(null);
   const [rows, setRows] = useState<Resolved[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [printing, setPrinting] = useState<api.PrintingMode>('cheapest');
 
-  const resolve = async (t: string) => {
+  const resolve = async (t: string, pm: api.PrintingMode = printing) => {
     const parsed = parseDeckText(t);
     if (!parsed.length) { setRows(null); setError('No card lines found. Lines look like “4 Iono” or “4 Iono PAL 185”.'); return; }
     setBusy(true); setError(''); setStatus('Matching cards…');
     try {
-      const res = await api.resolveLines(parsed, format);
+      const res = await api.resolveLines(parsed, format, pm);
       const ids = [...res.values()].map(r => r.id).filter(Boolean) as string[];
       const cards = await api.cardsById(ids);
       setRows(parsed.map(p => { const r = res.get(p.i); return { ...p, card: r?.id ? cards.get(r.id) : undefined, how: r?.how }; }));
@@ -94,7 +95,9 @@ export function ImportModal({ format, title = 'Import cards', initialText = '', 
         <div className="import-text">
           <textarea value={text} onChange={e => setText(e.target.value)} rows={rows ? 6 : 14} spellCheck={false}
             placeholder={'Paste a deck list. Pokémon TCG Live, Limitless and plain lists all work:\n\nPokémon: 12\n4 Dreepy TWM 128\n4 Drakloak TWM 129\n3 Dragapult ex TWM 130\nTrainer: 36\n4 Iono PAL 185\n…'} aria-label="Deck list" />
-          <div className="row-end"><button className="btn primary" onClick={() => resolve(text)} disabled={busy || !text.trim()}>{busy ? 'Matching…' : 'Match cards'}</button></div>
+          <div className="row-end">
+            <Segmented label="Printings" value={printing} onChange={v => { setPrinting(v); if (rows) resolve(text, v); }} options={[{ value: 'cheapest', label: format === 'unlimited' ? 'Cheapest' : 'Cheapest legal' }, { value: 'exact', label: 'As listed' }]} />
+            <button className="btn primary" onClick={() => resolve(text)} disabled={busy || !text.trim()}>{busy ? 'Matching…' : 'Match cards'}</button></div>
         </div>
       ) : (
         <form className="import-link" onSubmit={e => { e.preventDefault(); fetchLink(); }}>
@@ -118,7 +121,7 @@ export function ImportModal({ format, title = 'Import cards', initialText = '', 
                   <td className="num">{r.qty}</td>
                   <td><span className="raw">{r.raw.replace(/^[*\-•]\s*/, '')}</span>{r.board === 'maybe' && <Tag tone="info">Considering</Tag>}</td>
                   <td>{r.card ? (
-                    <span className="matched" data-preview={r.card.image || undefined}><CardImg src={r.card.image} alt="" /><span>{r.card.name}<small className="muted"> {printLabel(r.card)}{r.how === 'name' && r.code ? ' (closest match)' : ''}</small></span></span>
+                    <span className="matched" data-preview={r.card.image || undefined}><CardImg src={r.card.image} alt="" /><span>{r.card.name}<small className="muted"> {printLabel(r.card)}{r.how === 'name' && r.code ? ' (closest match)' : r.how === 'cheapest' ? ' (your default or cheapest legal printing)' : ''}</small></span></span>
                   ) : <PickCard name={r.name} format={format} onPick={c => setRowCard(r.i, c)} />}</td>
                   <td>{r.card ? (legalIn(r.card, format) ? <Tag tone="ok">Legal</Tag> : <Tag tone="bad">Not legal</Tag>) : '—'}</td>
                   <td><button className="icon-btn" aria-label="Remove line" onClick={() => dropRow(r.i)}><Icon name="x" size={14} /></button></td>

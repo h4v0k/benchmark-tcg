@@ -31,15 +31,33 @@ export async function printingsOf(name: string): Promise<Card[]> {
 }
 const localNum = (l: string) => { const n = parseInt(String(l).replace(/\D/g, ''), 10); return isNaN(n) ? 9999 : n; };
 
-export const searchCards = (q: string, fmt: Format, cat = '', lim = 24) =>
+/* Preferred printings: card name → card id. */
+export type PrintingPref = { name: string; card_id: string; card?: Card };
+export async function printingPrefs(): Promise<PrintingPref[]> {
+  if (!sb.getSession()) return [];
+  const { rows } = await sb.select<PrintingPref>('printing_prefs', { select: `name,card_id,card:cards(${CARD_COLS})`, order: 'name.asc', limit: 1000 });
+  return rows;
+}
+export async function setPrintingPref(card: Pick<Card, 'id' | 'name'>) {
+  await sb.remove('printing_prefs', { name: `eq.${card.name}` });
+  await sb.insert('printing_prefs', { card_id: card.id }, { select: 'name,card_id' });
+}
+export async function clearPrintingPref(name: string) {
+  await sb.remove('printing_prefs', { name: `eq.${name}` });
+}
+
+export const searchCards =(q: string, fmt: Format, cat = '', lim = 24) =>
   sb.rpc<SearchHit[]>('search_cards', { q, fmt, cat, lim });
 
 /** Best catalog card for each parsed line. */
-export async function resolveLines(lines: ParsedLine[], fmt: Format): Promise<Map<number, { id: string | null; how: string | null }>> {
+/** 'cheapest': each card becomes your preferred printing, else the cheapest legal printing of
+ *  that same card. 'exact': keep the printing the list names. */
+export type PrintingMode = 'cheapest' | 'exact';
+export async function resolveLines(lines: ParsedLine[], fmt: Format, mode: PrintingMode = 'cheapest'): Promise<Map<number, { id: string | null; how: string | null }>> {
   const out = new Map<number, { id: string | null; how: string | null }>();
   for (let i = 0; i < lines.length; i += 80) {
     const chunk = lines.slice(i, i + 80).map(l => ({ i: l.i, qty: l.qty, name: l.name, code: l.code, num: l.num }));
-    const rows = await sb.rpc<{ i: number; card_id: string | null; how: string | null }[]>('resolve_decklist', { lines: chunk, fmt: fmt === 'unlimited' ? 'unlimited' : fmt });
+    const rows = await sb.rpc<{ i: number; card_id: string | null; how: string | null }[]>('resolve_decklist_v2', { lines: chunk, fmt: fmt === 'unlimited' ? 'unlimited' : fmt, p_mode: mode });
     rows.forEach(r => out.set(r.i, { id: r.card_id, how: r.how }));
   }
   return out;

@@ -186,7 +186,73 @@ export const auth = {
     save({ access_token: at, refresh_token: rt, expires_at: parseInt(h.get('expires_at') || '0', 10) || Math.floor(Date.now() / 1000) + parseInt(h.get('expires_in') || '3600', 10), user });
     return { type };
   },
+  /** Sends the browser to Google (or another provider); it comes back signed in. */
+  oauth(provider: 'google', next = '/') {
+    try { sessionStorage.setItem('bm-next', next); } catch { /* ignore */ }
+    location.href = `${base}/auth/v1/authorize?provider=${provider}&redirect_to=${redirectTo()}`;
+  },
+  /** One email for both new and returning people: clicking the link signs them in. */
+  async emailLink(email: string) { await authFetch(`otp?redirect_to=${redirectTo()}`, { email, create_user: true }); },
+  passkeysSupported: () => typeof window !== 'undefined' && !!window.PublicKeyCredential && !!navigator.credentials,
+  async passkeySignIn() {
+    const o = await authFetch('passkeys/authentication/options', {});
+    const cred = await navigator.credentials.get({ publicKey: requestOptions(o.options) }) as PublicKeyCredential | null;
+    if (!cred) throw new ApiError('Passkey sign-in was cancelled.', 400);
+    const j = await authFetch('passkeys/authentication/verify', { challenge_id: o.challenge_id, credential: credentialJSON(cred) });
+    save(sessionFrom(j));
+    return session!;
+  },
+  async passkeyRegister() {
+    const o = await authFetch('passkeys/registration/options', {}, true);
+    const cred = await navigator.credentials.create({ publicKey: creationOptions(o.options) }) as PublicKeyCredential | null;
+    if (!cred) throw new ApiError('Passkey setup was cancelled.', 400);
+    return authFetch('passkeys/registration/verify', { challenge_id: o.challenge_id, credential: credentialJSON(cred) }, true);
+  },
+  async passkeys(): Promise<{ id: string; friendly_name?: string; created_at: string; last_used_at?: string }[]> {
+    const r = await fetch(`${base}/auth/v1/passkeys/`, { headers: { apikey: anon, Authorization: `Bearer ${await token()}` } });
+    if (!r.ok) throw await readError(r);
+    return r.json();
+  },
+  async deletePasskey(id: string) {
+    const r = await fetch(`${base}/auth/v1/passkeys/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { apikey: anon, Authorization: `Bearer ${await token()}` } });
+    if (!r.ok) throw await readError(r);
+  },
   refresh,
 };
+
+/* ---------------- WebAuthn JSON helpers ---------------- */
+const b64uToBuf = (s: string) => {
+  const b = atob(s.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(s.length / 4) * 4, '='));
+  const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+  return u.buffer;
+};
+const bufToB64u = (b: ArrayBuffer | null | undefined) => {
+  if (!b) return undefined;
+  const u = new Uint8Array(b); let s = ''; for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+const descs = (list?: any[]) => list?.map(d => ({ ...d, id: b64uToBuf(d.id) }));
+function requestOptions(raw: any): PublicKeyCredentialRequestOptions {
+  const o = raw?.publicKey || raw;
+  return { ...o, challenge: b64uToBuf(o.challenge), allowCredentials: descs(o.allowCredentials) };
+}
+function creationOptions(raw: any): PublicKeyCredentialCreationOptions {
+  const o = raw?.publicKey || raw;
+  return { ...o, challenge: b64uToBuf(o.challenge), user: { ...o.user, id: b64uToBuf(o.user.id) }, excludeCredentials: descs(o.excludeCredentials) };
+}
+function credentialJSON(c: PublicKeyCredential): object {
+  try { if (typeof (c as any).toJSON === 'function') return (c as any).toJSON(); } catch { /* fall back */ }
+  const r: any = c.response;
+  const response: any = { clientDataJSON: bufToB64u(r.clientDataJSON) };
+  if (r.attestationObject) {
+    response.attestationObject = bufToB64u(r.attestationObject);
+    if (typeof r.getTransports === 'function') response.transports = r.getTransports();
+  } else {
+    response.authenticatorData = bufToB64u(r.authenticatorData);
+    response.signature = bufToB64u(r.signature);
+    response.userHandle = bufToB64u(r.userHandle);
+  }
+  return { id: c.id, rawId: bufToB64u(c.rawId), type: c.type, response, clientExtensionResults: c.getClientExtensionResults?.() || {}, authenticatorAttachment: (c as any).authenticatorAttachment || undefined };
+}
 
 export const configured = !!(CONFIG.supabaseUrl && CONFIG.supabaseAnonKey);

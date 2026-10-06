@@ -51,6 +51,7 @@ function Shell({ authLink }: { authLink: { type?: string; error?: string } | nul
   useEffect(() => {
     if (authLink?.error) toast(authLink.error, 'bad');
     else if (authLink?.type === 'signup') toast('Email confirmed. Welcome to Benchmark!', 'ok');
+    else if (authLink?.type === 'magiclink') toast('Signed in', 'ok');
   }, []);
   let page: ReactElement | null = null;
   for (const [pattern, render] of ROUTES) { const m = match(pattern, path); if (m) { page = render(m); break; } }
@@ -63,6 +64,7 @@ function Shell({ authLink }: { authLink: { type?: string; error?: string } | nul
       </main>
       <Footer />
       {needsUsername && <UsernameModal />}
+      {!needsUsername && session && <PasskeyNudge />}
       {recovery && session && <NewPasswordModal onDone={() => setRecovery(false)} />}
       <HoverPreview />
       <Toasts />
@@ -128,7 +130,13 @@ function NotFound() {
 
 function UsernameModal() {
   const { session, setProfile } = useAuth();
-  const [name, setName] = useState('');
+  // Suggest a username from their Google name or email so most people just press Continue.
+  const [name, setName] = useState(() => {
+    const meta: any = session?.user.user_metadata || {};
+    const base = String(meta.preferred_username || meta.name || meta.full_name || (session?.user.email || '').split('@')[0] || '');
+    const s = base.normalize('NFKD').replace(/[^A-Za-z0-9_]/g, '').slice(0, 20);
+    return s.length >= 3 ? s : '';
+  });
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const save = async () => {
@@ -165,5 +173,34 @@ function NewPasswordModal({ onDone }: { onDone: () => void }) {
         <div className="row-end"><button className="btn primary">Save password</button></div>
       </form>
     </Modal>
+  );
+}
+
+// After someone signs in, offer once to save a passkey so next time is one tap.
+function PasskeyNudge() {
+  const { session } = useAuth();
+  const key = `bm-passkey-nudge-${session?.user.id}`;
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    try { if (localStorage.getItem(key)) return; } catch { return; }
+    if (!sb.auth.passkeysSupported()) return;
+    sb.auth.passkeys().then(list => { if (alive && !list.length) setShow(true); }).catch(() => {});
+    return () => { alive = false; };
+  }, [key]);
+  if (!show) return null;
+  const done = () => { try { localStorage.setItem(key, '1'); } catch { /* ignore */ } setShow(false); };
+  const save = async () => {
+    setBusy(true);
+    try { await sb.auth.passkeyRegister(); toast('Passkey saved. Next time, sign in with one tap.', 'ok'); done(); }
+    catch (e: any) { if (!/NotAllowedError|cancel/i.test(String(e?.message || e) + (e?.name || ''))) toast(e.message, 'bad'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="passkey-nudge" role="dialog" aria-label="Save a passkey">
+      <div><b>Sign in faster next time</b><span className="muted small">Save a passkey and use your fingerprint, face or device PIN instead of a password or email link.</span></div>
+      <div className="row-gap"><button className="btn small" onClick={done}>Not now</button><button className="btn small primary" onClick={save} disabled={busy}>{busy ? 'One moment…' : 'Save a passkey'}</button></div>
+    </div>
   );
 }

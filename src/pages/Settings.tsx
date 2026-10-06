@@ -4,7 +4,7 @@ import { Link } from '../router';
 import { useAuth, toast, useTheme } from '../state';
 import * as api from '../lib/api';
 import * as sb from '../lib/supabase';
-import { img } from '../lib/cards';
+import { img, printLabel } from '../lib/cards';
 import type { SearchHit } from '../lib/types';
 
 export function SettingsPage() {
@@ -46,14 +46,73 @@ export function SettingsPage() {
         <h2>Appearance</h2>
         <label className="check-field"><input type="checkbox" checked={theme === 'dark'} onChange={e => setTheme(e.target.checked ? 'dark' : 'light')} /> Dark theme</label>
       </section>
+      <DefaultPrintings />
       <section className="panel">
         <h2>Account</h2>
         <p className="muted">Signed in as {session.user.email}. Your username is <b>{profile.username}</b>.</p>
         <form onSubmit={e => { e.preventDefault(); changePw(); }} className="field-row">
-          <label className="field grow"><span>New password</span><input type="password" value={pw} onChange={e => setPw(e.target.value)} autoComplete="new-password" /></label>
-          <button className="btn"><Icon name="check" />Change password</button>
+          <label className="field grow"><span>Password (optional: Google, email links and passkeys work without one)</span><input type="password" value={pw} onChange={e => setPw(e.target.value)} autoComplete="new-password" /></label>
+          <button className="btn"><Icon name="check" />Set password</button>
         </form>
       </section>
+      <Passkeys />
     </div>
+  );
+}
+
+function DefaultPrintings() {
+  const [prefs, setPrefs] = useState<api.PrintingPref[] | null>(null);
+  useEffect(() => { api.printingPrefs().then(setPrefs).catch(() => setPrefs([])); }, []);
+  const clear = async (name: string) => {
+    try { await api.clearPrintingPref(name); setPrefs(ps => ps && ps.filter(p => p.name !== name)); } catch (e: any) { toast(e.message, 'bad'); }
+  };
+  return (
+    <section className="panel">
+      <h2>Default printings</h2>
+      <p className="muted">When you import a list or add a card, Benchmark uses your default printing if it’s legal in the deck’s format, and otherwise the cheapest legal printing. Set a default with the ☆ on any printing in a card’s window.</p>
+      {prefs && prefs.length > 0 && (
+        <ul className="pref-list">
+          {prefs.map(p => (
+            <li key={p.name}>
+              {p.card?.image && <img src={img(p.card.image)} alt="" />}
+              <span className="grow"><b>{p.name}</b> <span className="muted">{p.card ? `${p.card.set?.name || ''} · ${printLabel(p.card)}` : p.card_id}</span></span>
+              <button className="btn small" onClick={() => clear(p.name)}>Clear</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {prefs && !prefs.length && <p className="muted small">No default printings yet.</p>}
+    </section>
+  );
+}
+
+function Passkeys() {
+  const [list, setList] = useState<{ id: string; friendly_name?: string; created_at: string; last_used_at?: string }[] | null>(null);
+  const [err, setErr] = useState('');
+  const load = () => sb.auth.passkeys().then(setList).catch((e: any) => { setList([]); setErr(/passkey_disabled|not enabled|404/i.test(e.message) ? 'Passkeys aren’t switched on for Benchmark yet.' : ''); });
+  useEffect(() => { load(); }, []);
+  if (!sb.auth.passkeysSupported()) return null;
+  const add = async () => {
+    try { await sb.auth.passkeyRegister(); toast('Passkey saved', 'ok'); load(); }
+    catch (e: any) { if (!/NotAllowedError|cancel/i.test(String(e?.message || e) + (e?.name || ''))) toast(/credential_exists/i.test(e.message) ? 'This device already has a passkey for Benchmark.' : e.message, 'bad'); }
+  };
+  const del = async (id: string) => {
+    try { await sb.auth.deletePasskey(id); setList(l => l && l.filter(p => p.id !== id)); } catch (e: any) { toast(e.message, 'bad'); }
+  };
+  return (
+    <section className="panel">
+      <h2>Passkeys</h2>
+      <p className="muted">Sign in with your fingerprint, face or device PIN. Passkeys sync through your password manager (iCloud Keychain, Google Password Manager, 1Password…).</p>
+      {err && <p className="muted small">{err}</p>}
+      {list && list.length > 0 && (
+        <ul className="pref-list">
+          {list.map(p => (
+            <li key={p.id}><span className="grow"><b>{p.friendly_name || 'Passkey'}</b> <span className="muted small">added {new Date(p.created_at).toLocaleDateString()}{p.last_used_at ? ` · last used ${new Date(p.last_used_at).toLocaleDateString()}` : ''}</span></span>
+              <button className="btn small" onClick={() => del(p.id)}>Remove</button></li>
+          ))}
+        </ul>
+      )}
+      <div className="row-end"><button className="btn primary" onClick={add} disabled={!!err}>Add a passkey</button></div>
+    </section>
   );
 }

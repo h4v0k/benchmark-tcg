@@ -32,7 +32,7 @@ export function AddCard({ format, board, onAdd }: { format: Format; board: Board
   const add = async (hit?: SearchHit) => {
     let id = hit?.card_id;
     if (!hit && entry.code && entry.num) {
-      const r = await api.resolveLines([{ i: 0, qty: entry.qty, name: entry.name, code: entry.code, num: entry.num, board, raw: q }], format);
+      const r = await api.resolveLines([{ i: 0, qty: entry.qty, name: entry.name, code: entry.code, num: entry.num, board, raw: q }], format, entry.code ? 'exact' : 'cheapest');
       id = r.get(0)?.id || undefined;
     }
     if (!id && hits[active]) id = hits[active].card_id;

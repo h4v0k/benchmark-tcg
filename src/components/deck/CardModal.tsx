@@ -6,6 +6,7 @@ import { cardProblem } from '../../lib/legality';
 import { buyUrl } from '../../lib/tcgplayer';
 import type { Board, Card, Finish, Format } from '../../lib/types';
 import { Link } from '../../router';
+import { toast, useAuth } from '../../state';
 
 type Props = {
   line: Line;
@@ -61,7 +62,20 @@ export function CardModal({ line, format, editable, isCover, onClose, onChange, 
   const c = line.card;
   const [prints, setPrints] = useState<Card[] | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const { session } = useAuth();
+  const [prefId, setPrefId] = useState<string | null>(null);
   useEffect(() => { let alive = true; api.printingsOf(line.name).then(p => alive && setPrints(p)).catch(() => alive && setPrints([])); return () => { alive = false; }; }, [line.name]);
+  useEffect(() => {
+    let alive = true;
+    if (session) api.printingPrefs().then(ps => alive && setPrefId(ps.find(p => p.name === line.name)?.card_id || null)).catch(() => {});
+    return () => { alive = false; };
+  }, [line.name, session?.user.id]);
+  const togglePref = async (p: Card) => {
+    try {
+      if (prefId === p.id) { await api.clearPrintingPref(p.name); setPrefId(null); toast(`Cleared your default printing of ${p.name}`, 'ok'); }
+      else { await api.setPrintingPref(p); setPrefId(p.id); toast(`New decks and imports will use ${printLabel(p)} for ${p.name} when it's legal`, 'ok'); }
+    } catch (e: any) { toast(e.message, 'bad'); }
+  };
   const finish = finishOf(line);
   const finishes = useMemo(() => {
     const keys = new Set<string>([...(c?.variants || []), ...Object.keys(c?.prices || {})]);
@@ -111,6 +125,7 @@ export function CardModal({ line, format, editable, isCover, onClose, onChange, 
           <div className="printings">
             <div className="printings-head">
               <h4>Printings {prints && <span className="muted">({prints.length})</span>}</h4>
+              {session && <span className="muted small">★ marks your default printing</span>}
               {format !== 'unlimited' && hiddenCount > 0 && <button className="link-btn" onClick={() => setShowAll(true)}>Show {hiddenCount} not {FORMAT_LABEL[format]} legal</button>}
             </div>
             {!prints ? <Spinner /> : (
@@ -128,6 +143,7 @@ export function CardModal({ line, format, editable, isCover, onClose, onChange, 
                         <span className="muted">{printLabel(p)} · {p.rarity || '—'}</span>
                         <span className="print-foot">
                           {!legal && format !== 'unlimited' ? <Tag tone="bad">Not legal</Tag> : <span>{money(price)}</span>}
+                          {session && <button className={`link-btn pref-star ${prefId === p.id ? 'on' : ''}`} onClick={() => togglePref(p)} title={prefId === p.id ? 'Your default printing (click to clear)' : 'Make this my default printing'} aria-pressed={prefId === p.id}>{prefId === p.id ? '★' : '☆'}</button>}
                           <a href={buyUrl(p)} target="_blank" rel="noopener noreferrer" className="link-btn" title="Buy on TCGplayer"><Icon name="cart" size={13} />Buy</a>
                         </span>
                       </div>
