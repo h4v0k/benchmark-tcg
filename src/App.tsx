@@ -14,6 +14,7 @@ import { MyDecks } from './pages/MyDecks';
 import { Feed } from './pages/Feed';
 import { CardsPage, CardPage } from './pages/Cards';
 import { RulesPage } from './pages/Rules';
+import { EventsPage, EventPage, EventDeckPage } from './pages/Events';
 import { LoginPage } from './pages/Login';
 import { SettingsPage } from './pages/Settings';
 import { AdminPage } from './pages/Admin';
@@ -38,6 +39,9 @@ const ROUTES: [string, (p: Record<string, string>) => ReactElement][] = [
   ['/cards', () => <CardsPage />],
   ['/cards/:id', p => <CardPage id={p.id} />],
   ['/rules', () => <RulesPage />],
+  ['/events', () => <EventsPage />],
+  ['/events/:id', p => <EventPage id={+p.id} />],
+  ['/events/:id/:place', p => <EventDeckPage id={+p.id} place={+p.place} />],
   ['/login', () => <LoginPage mode="signin" />],
   ['/signup', () => <LoginPage mode="signup" />],
   ['/settings', () => <SettingsPage />],
@@ -82,6 +86,7 @@ function TopBar() {
   const nav = [
     ['/decks', 'Decks'],
     ['/cards', 'Cards'],
+    ['/events', 'Tournaments'],
     ['/rules', 'Formats & bans'],
     ...(session ? [['/feed', 'Following'], ['/my/decks', 'My decks']] : []),
   ];

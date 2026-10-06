@@ -92,6 +92,13 @@ async function handleSupabase(route) {
   if (p === '/rest/v1/rpc/resolve_decklist' || p === '/rest/v1/rpc/resolve_decklist_v2') {
     return json(route, (body.lines || []).map(l => { const c = byName(l.name); return { i: l.i, card_id: c ? c.id : null, how: c ? 'name' : 'none' }; }));
   }
+  if (p === '/rest/v1/rpc/tourney_meta') return json(route, [{ archetype: 'Dragapult', top32: 41, top8: 10, wins: 1, events: 4, best_tournament: 580, best_place: 2 }, { archetype: "N's Zoroark", top32: 8, top8: 1, wins: 0, events: 3, best_tournament: 580, best_place: 4 }]);
+  if (p === '/rest/v1/tournaments') return json(route, [{ id: 580, name: 'Regional Recife', date: '2026-10-03', country: 'BR', players: 1074, kind: 'regional', status: 'lists', tournament_decks: [{ count: 32 }] }]);
+  if (p === '/rest/v1/tournament_decks') {
+    const mk = (place, arch) => ({ tournament_id: 580, place, player: 'Victor Carreira Rodrigues', country: 'BR', archetype: arch, list_id: 30000 + place, card_count: 60, price: 44.14, cards: DECK.cards, missing: [] });
+    if (u.searchParams.get('place')) return json(route, [mk(1, 'Ogerpon Meganium')]);
+    return json(route, Array.from({ length: 32 }, (_, i) => { const d = mk(i + 1, i % 2 ? 'Dragapult' : "N's Zoroark Lucario"); delete d.cards; if (i > 29) { d.card_count = null; d.list_id = null; } return d; }));
+  }
   if (p === '/rest/v1/rpc/record_view') return route.fulfill({ status: 204, headers: cors });
   if (p === '/rest/v1/cards') {
     const idq = u.searchParams.get('id'); const nameq = u.searchParams.get('name');
@@ -232,6 +239,17 @@ try {
     if (!(await page.locator('.modal select').isVisible()) || !(await page.locator('.modal button.primary').isVisible())) throw new Error('New deck fields not visible');
     await page.waitForTimeout(400);
     await page.screenshot({ path: path.join(OUT, 'new-deck-mobile.png') });
+    await page.context().close();
+  });
+  for (const w of [260, 390]) await scenario(`9m. tournaments pages at ${w}px`, async () => {
+    const page = await newPage({ width: w, height: 800 });
+    for (const [url, sel] of [['/events', '.meta-list li'], ['/events/580', '.standings li'], ['/events/580/1', '.deck-side .panel']]) {
+      await page.goto(BASE + url);
+      await page.locator(sel).first().waitFor({ timeout: 8000 });
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      if (over > 1) throw new Error(`${url}: ${over}px sideways overflow`);
+      if (w === 260) await page.screenshot({ path: path.join(OUT, `events${url.replace(/\//g, '_')}-${w}.png`), fullPage: false });
+    }
     await page.context().close();
   });
 } finally {

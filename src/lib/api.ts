@@ -248,3 +248,29 @@ export const saveBan = (row: object) => sb.insert('bans', row);
 export const setBanActive = (id: number, active: boolean) => sb.update('bans', { id: `eq.${id}` }, { active, removed_at: active ? null : new Date().toISOString() });
 
 export type { DeckEntry };
+
+/* ---------------- Tournaments (Regionals, Internationals, Worlds; from Limitless) ---------------- */
+export type Tournament = { id: number; name: string; date: string; country: string; players: number | null; kind: 'regional' | 'international' | 'worlds'; status: string };
+export type TourneyDeck = { tournament_id: number; place: number; player: string; country: string; archetype: string; list_id: number | null; card_count: number | null; price: number | null; cards?: DeckEntry[] | null; missing?: string[] };
+export type MetaRow = { archetype: string; top32: number; top8: number; wins: number; events: number; best_tournament: number | null; best_place: number | null };
+const T_COLS = 'id,name,date,country,players,kind,status';
+export async function tournaments(): Promise<(Tournament & { lists: number })[]> {
+  const { rows } = await sb.select<Tournament & { tournament_decks: { count: number }[] }>('tournaments',
+    { select: `${T_COLS},tournament_decks(count)`, 'tournament_decks.cards': 'not.is.null', status: 'neq.new', order: 'date.desc', limit: 60 });
+  return rows.map(r => ({ ...r, lists: r.tournament_decks?.[0]?.count || 0 }));
+}
+export async function tournament(id: number): Promise<{ t: Tournament; decks: TourneyDeck[] } | null> {
+  const [{ rows: ts }, { rows: decks }] = await Promise.all([
+    sb.select<Tournament>('tournaments', { select: T_COLS, id: `eq.${id}` }),
+    sb.select<TourneyDeck>('tournament_decks', { select: 'tournament_id,place,player,country,archetype,list_id,card_count,price', tournament_id: `eq.${id}`, order: 'place.asc' }),
+  ]);
+  return ts[0] ? { t: ts[0], decks } : null;
+}
+export async function tournamentDeck(id: number, place: number): Promise<{ t: Tournament; d: TourneyDeck } | null> {
+  const [{ rows: ts }, { rows: ds }] = await Promise.all([
+    sb.select<Tournament>('tournaments', { select: T_COLS, id: `eq.${id}` }),
+    sb.select<TourneyDeck>('tournament_decks', { select: '*', tournament_id: `eq.${id}`, place: `eq.${place}` }),
+  ]);
+  return ts[0] && ds[0] ? { t: ts[0], d: ds[0] } : null;
+}
+export const tourneyMeta = (days = 60) => sb.rpc<MetaRow[]>('tourney_meta', { days });
