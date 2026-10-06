@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Empty, ErrorBox, Icon, Spinner, Tag, useAsync } from '../components/ui';
+import { Avatar, Empty, ErrorBox, Icon, Spinner, Tag, useAsync } from '../components/ui';
+import { Link } from '../router';
 import { useAuth, toast } from '../state';
 import * as api from '../lib/api';
 import { ago, fmtDate } from '../lib/cards';
@@ -35,6 +36,7 @@ export function AdminPage() {
   return (
     <div className="wrap page">
       <div className="page-head"><h1>Admin</h1></div>
+      <UsersPanel />
       <div className="rules-grid">
         <section className="panel">
           <h2>Sync jobs</h2>
@@ -99,4 +101,41 @@ function summarize(d: any) {
   if (d.bans_error) parts.push(`bans: ${d.bans_error}`);
   if (d.rotation?.latest_season) parts.push(`season ${d.rotation.latest_season}`);
   return parts.join(' · ');
+}
+
+function UsersPanel() {
+  const u = useAsync(() => api.adminUsers(), []);
+  const [q, setQ] = useState('');
+  const list = (u.data || []).filter(x => !q || `${x.username || ''} ${x.email}`.toLowerCase().includes(q.toLowerCase()));
+  const label = (p: string) => p.split(', ').map(x => x === 'email' ? 'Email' : x === 'google' ? 'Google' : x).join(' + ');
+  return (
+    <section className="panel">
+      <div className="panel-head"><h2>Users {u.data && <span className="muted">({u.data.length})</span>}</h2>
+        <button className="btn small" onClick={u.reload}><Icon name="refresh" size={14} />Refresh</button></div>
+      {u.loading ? <Spinner /> : u.error ? <ErrorBox error={u.error} onRetry={u.reload} /> : (
+        <>
+          {(u.data?.length || 0) > 8 && <label className="field"><span>Find a user</span><input value={q} onChange={e => setQ(e.target.value)} placeholder="Username or email" /></label>}
+          <ul className="admin-users">
+            {list.map(x => (
+              <li key={x.id}>
+                <Avatar name={x.username || x.email} size={36} />
+                <div className="grow">
+                  <div className="au-name">
+                    {x.username ? <Link to={`/users/${x.username}`}>{x.username}</Link> : <span className="muted">No username yet</span>}
+                    {x.is_admin && <Tag tone="accent">Admin</Tag>}
+                    {!x.confirmed && <Tag tone="warn">Email not confirmed</Tag>}
+                  </div>
+                  <div className="muted au-email">{x.email}</div>
+                  <div className="muted small">
+                    Signs in with {label(x.sign_in) || '—'} · joined {fmtDate(x.created_at)} · last seen {x.last_sign_in_at ? ago(x.last_sign_in_at) : 'never'}
+                  </div>
+                </div>
+                <div className="au-decks"><b>{x.deck_count}</b><span className="muted small">deck{x.deck_count === 1 ? '' : 's'}{x.public_deck_count ? ` · ${x.public_deck_count} public` : ''}</span></div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
 }

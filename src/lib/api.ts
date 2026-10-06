@@ -231,6 +231,9 @@ export const renameFolder = (id: string, name: string) => sb.update('folders', {
 export const deleteFolder = (id: string) => sb.remove('folders', { id: `eq.${id}` });
 
 /* ---------------- admin ---------------- */
+export type AdminUser = { id: string; username: string | null; email: string; sign_in: string; confirmed: boolean; created_at: string; last_sign_in_at: string | null; deck_count: number; public_deck_count: number; is_admin: boolean };
+export const adminUsers = () => sb.rpc<AdminUser[]>('admin_users');
+
 export async function adminData() {
   const [runs, rotations, bans] = await Promise.all([
     sb.select('sync_runs', { select: '*', order: 'started_at.desc', limit: 25 }),
