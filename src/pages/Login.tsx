@@ -17,7 +17,7 @@ export function LoginPage({ mode }: { mode: 'signin' | 'signup' }) {
   const { query } = useRoute();
   const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
-  const [usePw, setUsePw] = useState(false);
+  const [usePw, setUsePw] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [sent, setSent] = useState<'' | 'link' | 'confirm' | 'reset'>('');
@@ -69,16 +69,16 @@ export function LoginPage({ mode }: { mode: 'signin' | 'signup' }) {
             <button className="btn block" onClick={passkey} disabled={busy}>Sign in with a passkey</button>
           )}
         </div>
-        <div className="auth-or"><span>or use your email</span></div>
+        <div className="auth-or"><span>or {mode === 'signup' ? 'sign up' : 'sign in'} with email</span></div>
 
         <form onSubmit={e => { e.preventDefault(); usePw ? withPassword() : emailLink(); }}>
           <label className="field"><span>Email</span><input type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email webauthn" /></label>
-          {usePw && <label className="field"><span>Password</span><input type="password" value={pw} onChange={e => setPw(e.target.value)} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} autoFocus /></label>}
+          {usePw && <label className="field"><span>Password</span><input type="password" value={pw} onChange={e => setPw(e.target.value)} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} /></label>}
           {err && <p className="form-error">{err}</p>}
           <button className="btn primary block" disabled={busy}>{busy ? 'One moment…' : usePw ? (mode === 'signin' ? 'Sign in' : 'Create account') : 'Email me a sign-in link'}</button>
         </form>
         <p className="auth-alt">
-          <button className="link-btn" onClick={() => { setUsePw(!usePw); setErr(''); }}>{usePw ? 'Use an email link instead' : 'Use a password instead'}</button>
+          <button className="link-btn" onClick={() => { setUsePw(!usePw); setErr(''); }}>{usePw ? 'No password? Email me a sign-in link instead' : 'Use a password instead'}</button>
           {usePw && mode === 'signin' && <> · <button className="link-btn" onClick={reset}>Forgot password?</button></>}
         </p>
         <p className="auth-alt">
