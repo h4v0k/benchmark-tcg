@@ -67,6 +67,7 @@ function Shell({ authLink }: { authLink: { type?: string; error?: string } | nul
       {!needsUsername && session && <PasskeyNudge />}
       {recovery && session && <NewPasswordModal onDone={() => setRecovery(false)} />}
       <HoverPreview />
+      <ToTop />
       <Toasts />
     </>
   );
@@ -203,4 +204,16 @@ function PasskeyNudge() {
       <div className="row-gap"><button className="btn small" onClick={done}>Not now</button><button className="btn small primary" onClick={save} disabled={busy}>{busy ? 'One moment…' : 'Save a passkey'}</button></div>
     </div>
   );
+}
+
+// Phones: a button back to the top once you've scrolled down a long page.
+function ToTop() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const on = () => setShow(window.scrollY > 700);
+    window.addEventListener('scroll', on, { passive: true });
+    return () => window.removeEventListener('scroll', on);
+  }, []);
+  if (!show) return null;
+  return <button className="to-top" aria-label="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}><span style={{ display: 'inline-flex', transform: 'rotate(180deg)' }}><Icon name="chevron" /></span></button>;
 }
