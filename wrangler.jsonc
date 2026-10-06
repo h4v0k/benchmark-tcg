@@ -1,0 +1,10 @@
+// Cloudflare (Workers static assets). Build: npm install && npm run build. Deploy: npx wrangler deploy
+{
+  "name": "benchmark-tcg",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    // Single-page app: unknown paths load index.html
+    "not_found_handling": "single-page-application"
+  }
+}
