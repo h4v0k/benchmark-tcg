@@ -128,7 +128,7 @@ select { cursor: pointer; width: auto; }
 
 /* ---------- menus ---------- */
 .menu-wrap { position: relative; }
-.menu { position: absolute; top: calc(100% + 6px); min-width: 210px; background: var(--panel); border: 1px solid var(--line2); border-radius: var(--radius); box-shadow: var(--shadow); padding: 5px; z-index: 60; }
+.menu { position: fixed; min-width: 210px; max-height: 70vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line2); border-radius: var(--radius); box-shadow: var(--shadow); padding: 5px; z-index: 120; }
 .menu.right { right: 0; } .menu.left { left: 0; }
 .menu-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 10px; border: 0; background: none; border-radius: 5px; cursor: pointer; color: var(--text); font-size: 13px; text-align: left; text-decoration: none !important; }
 .menu-item:hover { background: var(--hover); }
@@ -575,3 +575,9 @@ input[type=checkbox], input[type=radio] { width: 16px; height: 16px; margin: 0; 
 
 .export-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 @media (max-width: 640px) { .export-actions .btn { flex: 1 1 100%; justify-content: center; } }
+
+/* Menus on phones: a sheet along the bottom with big touch targets */
+.menu.sheet { position: fixed; left: 8px; right: 8px; bottom: 8px; top: auto; max-height: 75vh; padding: 8px; border-radius: 14px; animation: rise .16s ease-out; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+.menu.sheet .menu-item { padding: 14px 12px; font-size: 16px; }
+.menu-scrim { position: fixed; inset: 0; z-index: 119; background: rgba(5, 8, 14, .5); }
+.deck-actions .menu-wrap { flex: none; }

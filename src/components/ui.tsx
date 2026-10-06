@@ -83,18 +83,37 @@ export function Modal({ title, onClose, children, wide = false, footer }: { titl
 /* ---------------- menus ---------------- */
 export function Menu({ label, children, align = 'right', className = 'btn', title }: { label: ReactNode; children: ReactNode; align?: 'left' | 'right'; className?: string; title?: string }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left?: number; right?: number; sheet: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
+  const place = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    const sheet = innerWidth <= 640;
+    setPos(align === 'left' ? { top: r.bottom + 6, left: Math.max(8, r.left), sheet } : { top: r.bottom + 6, right: Math.max(8, innerWidth - r.right), sheet });
+  };
   useEffect(() => {
     if (!open) return;
-    const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    place();
+    const close = (e: Event) => { const t = e.target as Node; if (!ref.current?.contains(t) && !pop.current?.contains(t)) setOpen(false); };
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', close); document.addEventListener('keydown', esc);
-    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc); };
+    const away = (e: Event) => { if (!pop.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('pointerdown', close); document.addEventListener('keydown', esc);
+    window.addEventListener('resize', place); window.addEventListener('scroll', away, true);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', esc); window.removeEventListener('resize', place); window.removeEventListener('scroll', away, true); };
   }, [open]);
+  // The menu is drawn at the page root so a parent that clips its contents (like the deck header) can't hide it.
+  // On phones it opens as a sheet along the bottom of the screen.
   return (
     <div className="menu-wrap" ref={ref}>
-      <button className={className} aria-haspopup="menu" aria-expanded={open} title={title} onClick={() => setOpen(o => !o)}>{label}</button>
-      {open && <div className={`menu ${align}`} role="menu" onClick={e => { if ((e.target as HTMLElement).closest('[data-close]')) setOpen(false); }}>{children}</div>}
+      <button className={className} aria-haspopup="menu" aria-expanded={open} title={title} aria-label={typeof title === 'string' ? title : undefined} onClick={() => setOpen(o => !o)}>{label}</button>
+      {open && pos && createPortal(
+        <>
+          {pos.sheet && <div className="menu-scrim" onClick={() => setOpen(false)} />}
+          <div ref={pop} className={`menu ${pos.sheet ? 'sheet' : ''}`} role="menu"
+            style={pos.sheet ? undefined : { position: 'fixed', top: pos.top, left: pos.left, right: pos.right }}
+            onClick={e => { if ((e.target as HTMLElement).closest('[data-close]')) setOpen(false); }}>{children}</div>
+        </>, document.body)}
     </div>
   );
 }
