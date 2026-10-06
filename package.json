@@ -1,0 +1,23 @@
+{
+  "name": "benchmark-tcg",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Benchmark: a Moxfield-style deck builder for the Pokémon TCG",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --serve",
+    "test": "node tests/unit.mjs && node tests/e2e.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "esbuild": "0.28.2",
+    "typescript": "6.0.3"
+  }
+}
