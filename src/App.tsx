@@ -96,7 +96,7 @@ function TopBar() {
         <GlobalSearch />
         <div className="topbar-actions">
           <NewDeckButton />
-          <button className="icon-btn" aria-label={theme === 'dark' ? 'Use light theme' : 'Use dark theme'} title="Theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
+          <button className="icon-btn theme-btn" aria-label={theme === 'dark' ? 'Use light theme' : 'Use dark theme'} title="Theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
           {session ? (
             <Menu className="account-btn" label={<><Avatar card={profile?.avatar_card} name={profile?.username || session.user.email || '?'} /><span className="hide-sm">{profile?.username || 'Account'}</span><Icon name="chevron" size={14} /></>}>
               {profile && <MenuItem icon="user" onClick={() => navigate(`/users/${profile.username}`)}>Profile</MenuItem>}

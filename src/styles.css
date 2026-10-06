@@ -335,7 +335,7 @@ td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: mid
 .price-top li span:last-child { color: var(--text); font-variant-numeric: tabular-nums; }
 .bar-stack { display: flex; height: 10px; border-radius: 99px; overflow: hidden; gap: 2px; background: var(--bg2); }
 .seg.p, .dot.p { background: var(--p); } .seg.t, .dot.t { background: var(--t); } .seg.e, .dot.e { background: var(--e); }
-.legend { list-style: none; display: flex; gap: 14px; padding: 0; margin: 8px 0; font-size: 12px; color: var(--muted); }
+.legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0; margin: 8px 0; font-size: 12px; color: var(--muted); }
 .legend li { display: flex; align-items: center; gap: 5px; } .legend b { color: var(--text); }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .mini-stats { list-style: none; padding: 0; margin: 6px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 3px 14px; font-size: 12px; color: var(--muted); }
@@ -483,7 +483,7 @@ td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: mid
 /* ---------- responsive ---------- */
 @media (max-width: 1100px) {
   .deck-layout { grid-template-columns: minmax(0, 1fr); }
-  .deck-side { position: static; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .deck-side { position: static; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); }
   .hero-inner { grid-template-columns: 1fr; }
   .rules-grid { grid-template-columns: 1fr; }
 }
@@ -560,3 +560,15 @@ td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: mid
   .gsearch input, .add-input input { font-size: 16px !important; }
 }
 input[type=checkbox], input[type=radio] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); flex: none; }
+
+/* Very narrow screens, including phones with enlarged text */
+.gsearch { min-width: 0; }
+@media (max-width: 440px) {
+  .topbar-inner { gap: 6px; }
+  .theme-btn { display: none; } /* still in Settings → Appearance */
+  .account-btn > .icon { display: none; }
+  .account-btn { padding: 0 3px; }
+  .tabs { flex-wrap: wrap; gap: 0; }
+  .tabs button { padding: 10px 8px; }
+  .panel { min-width: 0; }
+}
