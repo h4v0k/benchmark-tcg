@@ -12,6 +12,7 @@ const OUT = '/tmp/claude-0/-home-claude/4df323f2-1f99-574d-acaf-99e0e324586e/scr
 fs.mkdirSync(OUT, { recursive: true });
 const DECK_ID = '11111111-1111-1111-1111-111111111111';
 const NOW = '2026-10-05T00:00:00Z';
+const ME = '22222222-2222-2222-2222-222222222222';
 
 /* ---------- fixtures ---------- */
 const SET = { id: 'sv06', name: 'Twilight Masquerade', code: 'TWM', series: 'Scarlet & Violet', release_date: '2024-05-24', legal_date: '2024-06-07', symbol: '', logo: '', is_promo: false, is_classic: false };
@@ -88,7 +89,7 @@ async function handleSupabase(route) {
       printings: 1, legal: body.fmt === 'standard' ? c.legal_standard : c.legal_expanded }));
     return json(route, hits);
   }
-  if (p === '/rest/v1/rpc/resolve_decklist') {
+  if (p === '/rest/v1/rpc/resolve_decklist' || p === '/rest/v1/rpc/resolve_decklist_v2') {
     return json(route, (body.lines || []).map(l => { const c = byName(l.name); return { i: l.i, card_id: c ? c.id : null, how: c ? 'name' : 'none' }; }));
   }
   if (p === '/rest/v1/rpc/record_view') return route.fulfill({ status: 204, headers: cors });
@@ -105,7 +106,9 @@ async function handleSupabase(route) {
     const rows = idq && idq.startsWith('eq.') ? (idq.slice(3) === DECK_ID ? [DECK] : []) : [DECK];
     return json(route, rows, { headers: { 'content-range': `0-0/1` } });
   }
-  if (['/rest/v1/rule_changes', '/rest/v1/deck_comments', '/rest/v1/profiles'].includes(p)) return json(route, [], { headers: { 'content-range': '*/0' } });
+  if (p === '/rest/v1/profiles' && u.searchParams.get('id') === `eq.${ME}`) return json(route, [{ id: ME, username: 'tester', bio: '', avatar_card: '', is_admin: false, created_at: NOW }], { headers: { 'content-range': '0-0/1' } });
+  if (p === '/auth/v1/passkeys/') return json(route, [{ id: 'pk1', created_at: NOW }]);
+  if (['/rest/v1/rule_changes', '/rest/v1/deck_comments', '/rest/v1/profiles', '/rest/v1/folders', '/rest/v1/printing_prefs'].includes(p)) return json(route, [], { headers: { 'content-range': '*/0' } });
   unexpected.push(`${method} ${p}${u.search}`);
   return json(route, p.startsWith('/auth/') ? {} : []);
 }
@@ -215,6 +218,21 @@ try {
     await deckChecks(mob, 'deck-mobile.png');
     const overflow = await mob.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     if (overflow > 1) throw new Error(`horizontal overflow of ${overflow}px`);
+  });
+  await scenario('8m. signed in on mobile: New deck opens full size', async () => {
+    const page = await newPage({ width: 390, height: 844 });
+    await page.addInitScript(([me]) => {
+      const exp = Math.floor(Date.now() / 1000) + 3600;
+      localStorage.setItem('sb-rnujzhrfiqjfjqskekpt-auth-token', JSON.stringify({ access_token: 'x', refresh_token: 'y', expires_at: exp, user: { id: me, email: 't@example.com' } }));
+    }, [ME]);
+    await page.goto(BASE + '/');
+    await page.locator('.topbar-actions button.btn.primary').first().click();
+    const box = await page.locator('.modal').boundingBox();
+    if (!box || box.height < 250) throw new Error(`New deck window is only ${box ? Math.round(box.height) : 0}px tall`);
+    if (!(await page.locator('.modal select').isVisible()) || !(await page.locator('.modal button.primary').isVisible())) throw new Error('New deck fields not visible');
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(OUT, 'new-deck-mobile.png') });
+    await page.context().close();
   });
 } finally {
   await browser.close();

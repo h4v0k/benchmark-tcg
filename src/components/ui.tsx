@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { img } from '../lib/cards';
 
 /* ---------------- icons (inline, 16px, stroke) ---------------- */
@@ -65,14 +66,17 @@ export function Modal({ title, onClose, children, wide = false, footer }: { titl
     setTimeout(() => (ref.current?.querySelector('input,textarea,select,button.primary') as HTMLElement | null)?.focus(), 30);
     return () => { document.removeEventListener('keydown', onKey, true); document.body.classList.remove('modal-open'); prev?.focus?.(); };
   }, []);
-  return (
+  // Rendered at the page root: a parent with a blur or transform (like the top bar) would
+  // otherwise trap the popup inside its own box.
+  return createPortal(
     <div className="modal-back" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className={`modal ${wide === 'xl' ? 'xl' : wide ? 'wide' : ''}`} role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined} ref={ref}>
         <div className="modal-head"><h2>{title}</h2><button className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button></div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
