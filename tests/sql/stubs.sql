@@ -31,3 +31,9 @@ end $$;
 
 create table public.app_settings (key text primary key, value text not null);
 create function public.is_admin() returns boolean language sql stable as $$ select false $$;
+
+create function cron.unschedule(job_name text) returns boolean language plpgsql as $$
+begin
+  delete from cron.job where jobname = job_name;
+  return found;
+end $$;
