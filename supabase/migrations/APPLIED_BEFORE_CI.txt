@@ -1,0 +1,16 @@
+# Migrations that were already applied to the live database before automatic deploys existed.
+# The deploy job marks these as done the first time it runs and never runs them.
+001_initial.sql
+002_catalog_rules_social.sql
+003_sync_helpers.sql
+004_app_settings.sql
+005_hidden_sets.sql
+006_youtube_import.sql
+007_url_checks.sql
+008_tighten_grants.sql
+009_review_fixes.sql
+010_infer_new_set_marks.sql
+011_search_counts_legal_printings.sql
+012_printing_prefs.sql
+013_admin_users.sql
+014_tournaments.sql

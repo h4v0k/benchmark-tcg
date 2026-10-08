@@ -1,0 +1,23 @@
+# Applies new database migrations to Supabase when they land on main.
+# One-time setup: repo Settings -> Secrets and variables -> Actions -> New repository secret
+#   SUPABASE_ACCESS_TOKEN = a token from supabase.com/dashboard/account/tokens
+name: Database migrations
+on:
+  push:
+    branches: [main]
+    paths: ['supabase/migrations/**', 'supabase/apply-migrations.sh']
+  workflow_dispatch:
+concurrency:
+  group: db-migrations
+  cancel-in-progress: false
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply new migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: rnujzhrfiqjfjqskekpt
+        run: bash supabase/apply-migrations.sh
