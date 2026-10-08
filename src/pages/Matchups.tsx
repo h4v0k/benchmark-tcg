@@ -6,7 +6,12 @@ import { Link, navigate, setQuery, useRoute } from '../router';
 import * as api from '../lib/api';
 import { fmtDate } from '../lib/cards';
 
-type Days = '14' | '30' | '60' | '90';
+type Days = '14' | '30' | '60' | '90' | '180';
+// Online results are kept for 60 days; official events (only a few a month) for 180.
+const PERIODS: Record<api.MatchupSource, { options: Days[]; def: Days }> = {
+  online: { options: ['14', '30', '60'], def: '30' },
+  official: { options: ['30', '60', '90', '180'], def: '90' },
+};
 const SOURCES: { value: api.MatchupSource; label: string }[] = [
   { value: 'online', label: 'Online events' },
   { value: 'official', label: 'Official events' },
@@ -25,9 +30,11 @@ const tone = (n: number | null): 'ok' | 'bad' | '' => { const p = whole(n); retu
 function Credit({ source }: { source: api.MatchupSource }) {
   return (
     <p className="muted small credit">
-      Match results from <a href={source === 'online' ? 'https://play.limitlesstcg.com' : 'https://labs.limitlesstcg.com'} target="_blank" rel="noopener noreferrer">
+      Results are updated every 6 hours. Match results from <a href={source === 'online' ? 'https://play.limitlesstcg.com' : 'https://labs.limitlesstcg.com'} target="_blank" rel="noopener noreferrer">
         {source === 'online' ? 'Limitless online tournaments' : 'Limitless Labs'}</a>.
       {' '}Win rate counts a tie as a third of a win, like tournament points. Mirror matches are left out.
+      {' '}{GOOD}% or better is “Favored”, {BAD}% or worse “Unfavored”. Fewer than {MIN_GAMES[source]} games is a small sample:
+      shown in grey and left out of Strong and Weak.
     </p>
   );
 }
@@ -35,7 +42,8 @@ function Credit({ source }: { source: api.MatchupSource }) {
 export function MatchupsPage({ deck }: { deck?: string }) {
   const { query } = useRoute();
   const source: api.MatchupSource = query.get('src') === 'official' ? 'official' : 'online';
-  const days = (['14', '30', '60', '90'].includes(query.get('days') || '') ? query.get('days') : source === 'official' ? '60' : '30') as Days;
+  const per = PERIODS[source];
+  const days = (per.options as string[]).includes(query.get('days') || '') ? query.get('days') as Days : per.def;
   const decks = useAsync(() => api.matchupDecks(source, +days), [source, days]);
   const cover = useAsync(() => api.matchupCoverage(source, +days), [source, days]);
   const [find, setFind] = useState('');
@@ -49,8 +57,8 @@ export function MatchupsPage({ deck }: { deck?: string }) {
   const controls = (
     <div className="mu-controls">
       <Segmented label="Data" value={source} onChange={v => setQuery({ src: v === 'online' ? null : v, days: null })} options={SOURCES} />
-      <Segmented label="Period" value={days} onChange={v => setQuery({ days: v })}
-        options={[{ value: '14', label: '14 days' }, { value: '30', label: '30 days' }, { value: '60', label: '60 days' }, { value: '90', label: '90 days' }]} />
+      <Segmented label="Period" value={days} onChange={v => setQuery({ days: v === per.def ? null : v })}
+        options={per.options.map(d => ({ value: d, label: `${d} days` }))} />
     </div>
   );
 
@@ -126,10 +134,12 @@ function DeckMatchups({ deck, source, days, decks, cover, controls }: { deck: st
             <section className="panel">
               <div className="panel-head"><h2>Strong against</h2><Tag tone="ok">{GOOD}%+</Tag></div>
               <MuList rows={strong} empty={`No matchup at ${GOOD}% or better with ${min}+ games.`} />
+              <p className="panel-foot">Only matchups with {min}+ games.</p>
             </section>
             <section className="panel">
               <div className="panel-head"><h2>Weak against</h2><Tag tone="bad">{BAD}% or less</Tag></div>
               <MuList rows={weak} empty={`No matchup at ${BAD}% or worse with ${min}+ games.`} />
+              <p className="panel-foot">Only matchups with {min}+ games.</p>
             </section>
           </div>
 

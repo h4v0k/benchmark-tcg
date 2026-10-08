@@ -83,10 +83,16 @@ begin
   insert into public.mu_fetch (net_id, kind, event_id, round) values (nid, p_kind, p_event, p_round);
 end $$;
 
+-- Deck ids from Limitless look like 'dragapult-ex'; anything else is ignored.
+create or replace function public.mu_slug_ok(p text) returns boolean
+language sql immutable as $$ select coalesce(p, '') ~ '^[a-z0-9][a-z0-9-]{0,63}$' and p <> 'other' $$;
+
 create or replace function public.mu_archetype(p_slug text, p_name text, p_icons text[]) returns void
 language sql security definer set search_path = public as $$
   insert into public.archetypes (slug, name, icons)
-  select p_slug, coalesce(nullif(p_name, ''), p_slug), coalesce(p_icons, '{}') where coalesce(p_slug, '') not in ('', 'other')
+  select p_slug, left(coalesce(nullif(btrim(p_name), ''), p_slug), 100),
+         coalesce((select array_agg(left(x, 40)) from (select x from unnest(p_icons) x where x ~ '^[a-z0-9-]{1,40}$' limit 4) y), '{}')
+  where public.mu_slug_ok(p_slug)
   on conflict (slug) do update set name = excluded.name, icons = excluded.icons, updated_at = now()
   where archetypes.name is distinct from excluded.name or archetypes.icons is distinct from excluded.icons
 $$;
@@ -95,7 +101,7 @@ $$;
 create or replace function public.mu_add(p_source text, p_event text, p_a text, p_b text, p_result text) returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if p_a is null or p_b is null or p_a = '' or p_b = '' or p_a = 'other' or p_b = 'other' then return; end if;
+  if not public.mu_slug_ok(p_a) or not public.mu_slug_ok(p_b) then return; end if;
   insert into public.mu_results as r (source, event_id, deck, opp, wins, losses, ties)
   values (p_source, p_event, p_a, p_b, (p_result = 'w')::int, (p_result = 'l')::int, (p_result = 't')::int)
   on conflict (source, event_id, deck, opp) do update
@@ -144,6 +150,10 @@ begin
 
   elsif f.kind = 'online_pairings' then
     if jsonb_typeof(j) is distinct from 'array' or jsonb_array_length(j) = 0 then raise exception 'online_pairings: no pairings yet'; end if;
+    -- a match with two players and no result means the event is still running: try again next run
+    if exists (select 1 from jsonb_array_elements(j) x where coalesce(x->>'player2', '') <> '' and (x->'winner' is null or x->'winner' = 'null'::jsonb)) then
+      raise exception 'online_pairings: event not finished';
+    end if;
     delete from public.mu_results where source = 'online' and event_id = f.event_id;  -- safe to re-run
     for e in select * from jsonb_array_elements(j) loop
       continue when coalesce(e->>'player2', '') = '' or e->>'winner' = '-1';
@@ -204,41 +214,52 @@ end $$;
 -- Two cron jobs call this (see bottom of file):
 --   every 6 hours: read anything still waiting, then send the next small batch (p_send = true)
 --   5 minutes later: only read the answers to that batch (p_send = false), before pg_net clears them
--- At most `budget` event requests go to Limitless per 6-hour run, plus the event lists (1-3 requests).
-create or replace function public.mu_tick(budget int default 30, p_send boolean default true) returns jsonb
+-- Each send run sends at most `budget` event requests (no more than `site_cap` to the Labs site), plus the
+-- event lists (1-3 requests). If Limitless answers 429 (too many requests), sending stops for at least
+-- 12 hours, doubling on each repeat (up to 4 days), or longer if Limitless says so (Retry-After).
+drop function if exists public.mu_tick(int, boolean);  -- older two-argument version
+create or replace function public.mu_tick(budget int default 20, p_send boolean default true, site_cap int default 8) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
-declare f public.mu_fetch; resp record; sent int := 0; ev_sent int := 0; ev public.mu_events; last_at timestamptz; pages int; ok boolean; rnd int;
-  failed text[] := '{}'; worked text[] := '{}'; k text;
+declare f public.mu_fetch; resp record; sent int := 0; ev_sent int := 0; labs_sent int := 0; ev public.mu_events;
+  last_at timestamptz; pages int; ok boolean; rnd int; failed text[] := '{}'; worked text[] := '{}'; k text;
+  pause interval; retry_after int; streak int;
 begin
   -- one run at a time (cron plus a manual call must not read the same response twice)
   if not pg_try_advisory_xact_lock(hashtext('benchmark_mu_tick')) then return jsonb_build_object('busy', true); end if;
 
   -- 1. read finished responses
   for f in select * from public.mu_fetch where handled_at is null order by created_at loop
-    select status_code, content into resp from net._http_response where id = f.net_id;
+    select status_code, content, headers into resp from net._http_response where id = f.net_id;
     if not found then
-      if f.created_at < now() - interval '3 hours' then update public.mu_fetch set handled_at = now() where net_id = f.net_id; end if;
+      -- pg_net already cleared it (or it never came back): counts as a failed try for the event
+      if f.created_at < now() - interval '3 hours' then
+        if f.event_id is not null then
+          failed := failed || ((case when f.kind like 'online%' then 'online' else 'official' end) || ':' || f.event_id);
+        elsif f.kind like '%index' then
+          update public.app_settings set value = '-infinity' where key = 'mu_' || f.kind || '_at';  -- fetch the list again next run
+        end if;
+        update public.mu_fetch set handled_at = now() where net_id = f.net_id;
+      end if;
       continue;
     end if;
-    ok := false;
-    if f.kind like '%index' and resp.status_code is distinct from 200 then
-      delete from public.app_settings where key = 'mu_' || f.kind || '_at';  -- the list failed: fetch it again after any pause
-    end if;
-    if resp.status_code is null or resp.status_code >= 500 then
-      -- Limitless is down or erroring: pause for 20 minutes (the failed try still counts, below), so a short
-      -- outage costs an event at most a couple of tries instead of a try every 5 minutes
-      insert into public.app_settings (key, value) values ('mu_backoff_until', (now() + interval '20 minutes')::text)
-        on conflict (key) do update set value = excluded.value;
-    end if;
+
     if resp.status_code = 429 then
-      -- rate limited: pause everything for 30 minutes; this doesn't count against the event
-      insert into public.app_settings (key, value) values ('mu_backoff_until', (now() + interval '30 minutes')::text)
+      -- rate limited: stop sending for 12h (skips the next run), doubling on repeats, at least Retry-After
+      streak := coalesce((select value::int from public.app_settings where key = 'mu_429_streak'), 0) + 1;
+      retry_after := case when coalesce(resp.headers->>'Retry-After', resp.headers->>'retry-after', '') ~ '^\d{1,7}$'
+                          then coalesce(resp.headers->>'Retry-After', resp.headers->>'retry-after')::int end;
+      pause := least(interval '12 hours' * power(2, least(streak - 1, 3)), interval '4 days');
+      if retry_after is not null and make_interval(secs => retry_after) > pause then pause := make_interval(secs => retry_after); end if;
+      insert into public.app_settings (key, value) values ('mu_backoff_until', (now() + pause)::text), ('mu_429_streak', streak::text)
         on conflict (key) do update set value = excluded.value;
+      if f.kind like '%index' then update public.app_settings set value = '-infinity' where key = 'mu_' || f.kind || '_at'; end if;
       update public.mu_fetch set handled_at = now() where net_id = f.net_id;
-      continue;
+      continue;  -- not the event's fault: no try counted
     end if;
+
+    ok := false;
     begin
-      -- anything else that isn't a 200 (5xx, timeout, 404) counts as a failed try for the event
+      -- anything that isn't a usable 200 (5xx, timeout, 404, a body in the wrong shape) is a failed try
       if resp.status_code = 200 and resp.content is not null then perform public.mu_read(f, resp.content); ok := true; end if;
     exception when others then
       raise warning 'mu_read % % failed: %', f.kind, f.event_id, sqlerrm;
@@ -246,6 +267,10 @@ begin
     if f.event_id is not null then
       k := case when f.kind like 'online%' then 'online' else 'official' end || ':' || f.event_id;
       if ok then worked := worked || k; else failed := failed || k; end if;
+    end if;
+    if ok then delete from public.app_settings where key = 'mu_429_streak'; end if;  -- a good answer ends a 429 streak
+    if f.event_id is null and not ok and f.kind like '%index' then
+      update public.app_settings set value = '-infinity' where key = 'mu_' || f.kind || '_at';  -- fetch the list again next run
     end if;
     update public.mu_fetch set handled_at = now() where net_id = f.net_id;
   end loop;
@@ -259,27 +284,37 @@ begin
     return jsonb_build_object('waiting', (select count(*) from public.mu_fetch where handled_at is null));
   end if;
 
-  -- give up on events that fail 5 times in a row (with the pauses above, that's well over an hour of errors),
-  -- and drop anything partly counted from them
+  -- give up on events that fail 5 runs in a row (30 hours). An official event that already has some rounds
+  -- counted keeps them and is finished as is (a round Limitless never serves shouldn't wipe the rest);
+  -- anything else is skipped and whatever it had is dropped.
+  update public.mu_events set status = 'done', done_at = now()
+   where status = 'rounds' and tries >= 5 and cardinality(rounds_done) > 0;
   with gone as (
     update public.mu_events set status = 'skip', done_at = now() where status not in ('done', 'skip') and tries >= 5
     returning source, event_id)
   delete from public.mu_results r using gone g where r.source = g.source and r.event_id = g.event_id;
+  delete from public.mu_players p where not exists (select 1 from public.mu_events e where e.source = 'online' and e.event_id = p.event_id and e.status = 'standings');
+
+  -- 4. forget events older than 180 days, and archetypes nothing refers to any more
+  delete from public.mu_events where date < current_date - 180;
+  delete from public.archetypes a where updated_at < now() - interval '30 days'
+    and not exists (select 1 from public.mu_results r where r.deck = a.slug);
 
   if coalesce((select value::timestamptz from public.app_settings where key = 'mu_backoff_until'), '-infinity') > now() then
     return jsonb_build_object('backoff_until', (select value from public.app_settings where key = 'mu_backoff_until'));
   end if;
-  delete from public.mu_players p where not exists (select 1 from public.mu_events e where e.source = 'online' and e.event_id = p.event_id and e.status = 'standings');
 
-  -- 2. event lists: online every run (two pages the first time, to fill the last few weeks), official once a day
+  -- 2. event lists: online every run (two pages the very first time, to fill the last few weeks), official once a day
   select value::timestamptz into last_at from public.app_settings where key = 'mu_online_index_at';
   if last_at is null or last_at < now() - interval '5 hours' then
-    pages := case when last_at is null then 2 else 1 end;
+    pages := case when exists (select 1 from public.app_settings where key = 'mu_online_backfill') then 1 else 2 end;
     for i in 1..pages loop
       perform public.mu_get('online_index', 'https://play.limitlesstcg.com/api/tournaments?game=PTCG&format=STANDARD&limit=200&page=' || i);
       sent := sent + 1;
     end loop;
-    insert into public.app_settings (key, value) values ('mu_online_index_at', now()::text) on conflict (key) do update set value = excluded.value;
+    insert into public.app_settings (key, value) values ('mu_online_index_at', now()::text), ('mu_online_backfill', now()::text)
+      on conflict (key) do update set value = excluded.value
+      where app_settings.key = 'mu_online_index_at';
   end if;
   select value::timestamptz into last_at from public.app_settings where key = 'mu_official_index_at';
   if last_at is null or last_at < now() - interval '23 hours' then
@@ -300,34 +335,34 @@ begin
       else
         perform public.mu_get('online_pairings', 'https://play.limitlesstcg.com/api/tournaments/' || ev.event_id || '/pairings', ev.event_id);
       end if;
+      ev_sent := ev_sent + 1;
+    elsif labs_sent >= site_cap then
+      continue;  -- enough for the Labs site this run; online events can still use the rest of the budget
     elsif ev.status = 'new' then
       perform public.mu_get('official_info', 'https://mew.limitlesstcg.com/labs/data/tcg/tournament?id=' || ev.event_id || '&division=MA', ev.event_id);
+      ev_sent := ev_sent + 1; labs_sent := labs_sent + 1;
     else
-      -- every round not counted yet, as far as the budget allows
+      -- rounds not counted yet, as far as the budget and the per-site cap allow
       for rnd in 1..coalesce(ev.rounds, 0) loop
         continue when rnd = any(ev.rounds_done);
-        exit when ev_sent >= budget;
+        exit when ev_sent >= budget or labs_sent >= site_cap;
         perform public.mu_get('official_round', 'https://mew.limitlesstcg.com/labs/data/tcg/pairings?tournamentId=' || ev.event_id
           || '&division=MA&round=' || rnd, ev.event_id, rnd);
-        ev_sent := ev_sent + 1;
+        ev_sent := ev_sent + 1; labs_sent := labs_sent + 1;
       end loop;
-      continue;
     end if;
-    ev_sent := ev_sent + 1;
   end loop;
   sent := sent + ev_sent;
-
-  -- 4. forget events older than 180 days
-  delete from public.mu_events where date < current_date - 180;
 
   return jsonb_build_object('sent', sent);
 end $$;
 
 revoke execute on function public.mu_get(text, text, text, int) from public, anon, authenticated;
 revoke execute on function public.mu_archetype(text, text, text[]) from public, anon, authenticated;
+revoke execute on function public.mu_slug_ok(text) from public, anon, authenticated;
 revoke execute on function public.mu_add(text, text, text, text, text) from public, anon, authenticated;
 revoke execute on function public.mu_read(public.mu_fetch, text) from public, anon, authenticated;
-revoke execute on function public.mu_tick(int, boolean) from public, anon, authenticated;
+revoke execute on function public.mu_tick(int, boolean, int) from public, anon, authenticated;
 
 -- Every 6 hours at :17 (off the top of the hour), plus a read-only pass 5 minutes later.
 -- cron.schedule with an existing name updates that job, so re-running this is safe.
@@ -386,6 +421,7 @@ returns jsonb language sql stable security definer set search_path = public as $
     'to', max(date) filter (where status = 'done' and exists (select 1 from public.mu_results r where r.source = e.source and r.event_id = e.event_id)),
     'event_names', (select jsonb_agg(x.name order by x.date desc) from (select e2.name, e2.date from public.mu_events e2
         where e2.source = p_source and e2.status = 'done' and e2.date >= current_date - least(greatest(p_days, 7), 180)
+          and exists (select 1 from public.mu_results r2 where r2.source = e2.source and r2.event_id = e2.event_id)
         order by e2.date desc limit 8) x))
   from public.mu_events e
   where e.source = p_source and e.date >= current_date - least(greatest(p_days, 7), 180)

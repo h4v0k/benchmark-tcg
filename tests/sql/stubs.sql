@@ -19,7 +19,7 @@ begin
   return id;
 end $$;
 
-create table net._http_response (id bigint, status_code int, content text, timed_out bool, error_msg text, created timestamptz not null default now());
+create table net._http_response (id bigint, status_code int, content text, timed_out bool, error_msg text, created timestamptz not null default now(), headers jsonb);
 create table net.sent (id bigserial primary key, url text, at timestamptz default now());
 create function net.http_get(url text, params jsonb default '{}', headers jsonb default '{}', timeout_milliseconds int default 5000)
 returns bigint language plpgsql as $$

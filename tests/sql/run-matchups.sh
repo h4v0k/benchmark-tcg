@@ -27,6 +27,6 @@ echo "== tests"
 set +e
 "${P[@]}" -f "$HERE/matchups-test.sql" >"$TMP/test.out" 2>&1
 RC=$?
-sed -E 's/^psql:[^ ]+ ?//; s/^NOTICE:  //' "$TMP/test.out" | grep -E 'PASS|FAIL|ERROR|SUMMARY|WARNING|DETAIL' || true
+sed -E 's/^psql:[^ ]+ ?//; s/^NOTICE:  //' "$TMP/test.out" | grep -E "PASS|FAIL|ERROR|SUMMARY|WARNING|DETAIL|LINE|HINT" || true
 if [ "$RC" -eq 0 ] && grep -q "FAIL |" "$TMP/test.out"; then RC=3; fi
 exit "$RC"
