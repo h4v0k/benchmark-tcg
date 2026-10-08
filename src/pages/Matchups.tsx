@@ -169,6 +169,7 @@ function DeckMatchups({ deck, source, days, decks, cover, controls }: { deck: st
         {me && <p className="mu-overall"><span className={`mu-pct ${meFew ? '' : tone(me.win_pct)}`}>{pct(me.win_pct)}</span>
           <span className="muted small">overall · {games(me.games)}{meFew ? ' · few games' : ''}</span></p>}
       </div>
+      <Link className="btn mu-lists-cta" to={`/matchups/${encodeURIComponent(deck)}/lists`}><Icon name="list" />Winning {name} lists<Icon name="forward" size={14} /></Link>
       {controls}
       {r.loading ? <Spinner /> : r.error ? <ErrorBox error={r.error} onRetry={r.reload} /> : !rows.length ? (
         <Empty title="No results for this deck yet" icon="list"><p>Try a longer period or the other results.</p>
@@ -221,7 +222,7 @@ function MuRow({ m, min, bar = false, big = false, note = false }: { m: api.Matc
   return (
     <li className={`mu-item${few ? ' few' : ''}${big ? ' big' : ''}`}>
       <div className="mu-row">
-        <span className="mu-name"><b>{m.name}</b>
+        <span className="mu-name"><Link className="mu-deck-link" to={`/matchups/${encodeURIComponent(m.opp)}/lists`} title={`Winning ${m.name} lists`}><b>{m.name}</b></Link>
           <span className="muted small">{games(m.games)} · {record(m)}{few ? ' · few games' : note && t ? ` · ${verdict(m.win_pct)}` : ''}</span></span>
         {big ? (
           <span><span className={`mu-pct ${t}`}>{pct(m.win_pct)}</span>

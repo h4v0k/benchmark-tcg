@@ -984,6 +984,39 @@ select public.mu_read(row(4, 'online_index', null, 1, now(), null)::public.mu_fe
   json_build_array(json_build_object('id', 'onl1', 'format', 'STANDARD', 'name', 'X', 'date', to_char(now() - interval '3 days', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), 'players', 40))::text);
 select t.eq('P5 done event untouched by a later list', (select status from public.mu_events where event_id = 'onl1'), 'done');
 
+-- ================= R. winning lists (017) =================
+select t.reset(false);
+select t.eq('R1 decklist JSON to text (sections in order, set+number when present)',
+  public.mu_list_text('{"trainer":[{"count":4,"name":"Iono","set":"PAL","number":"185"}],"pokemon":[{"count":3,"name":"Dreepy","set":"TWM","number":"128"}],"energy":[{"count":2,"name":"Basic Psychic Energy","set":"","number":""}]}'::jsonb),
+  E'3 Dreepy TWM 128\n4 Iono PAL 185\n2 Basic Psychic Energy');
+select t.eq('R1b junk lines dropped, empty/odd input gives empty text',
+  public.mu_list_text('{"pokemon":[{"count":"x","name":"A"},{"count":2,"name":""}],"trainer":"nope"}'::jsonb) || '|' || public.mu_list_text(null), '|');
+-- an online event whose standings carry lists: 20 players, places 1..20, first two Dragapult
+insert into public.mu_events (source, event_id, name, date, starts_at, players, status) values ('online', 'L1', 'List Cup', current_date - 2, now() - interval '2 days', 64, 'new');
+select public.mu_read(row(1, 'online_standings', 'L1', null, now(), null)::public.mu_fetch,
+  (select jsonb_agg(jsonb_build_object('player', 'p' || g, 'name', 'Player ' || g, 'placing', g,
+      'record', jsonb_build_object('wins', 9 - least(g, 8), 'losses', least(g, 8) - 1, 'ties', case when g = 2 then 1 else 0 end),
+      'deck', jsonb_build_object('id', case when g <= 2 or g = 18 then 'dragapult-ex' else 'n-zoroark' end, 'name', 'X', 'icons', '[]'::jsonb),
+      'decklist', jsonb_build_object('pokemon', jsonb_build_array(jsonb_build_object('count', 4, 'name', 'Dreepy', 'set', 'TWM', 'number', '128')))))
+   from generate_series(1, 20) g)::text);
+select t.eq('R2 only the top 16 lists are kept', (select count(*)::text || ':' || max(place) from public.mu_lists where event_id = 'L1'), '16:16');
+select t.eq('R2b names stored, list text stored', (select name || '|' || list from public.mu_lists where event_id = 'L1' and place = 1), E'Player 1|4 Dreepy TWM 128');
+select t.eq('R3 lists hidden until the event is done', (select count(*)::text from public.deck_lists('dragapult-ex')), '0');
+update public.mu_events set status = 'done' where event_id = 'L1';
+select t.eq('R4 deck_lists: best record first, place 18 not kept',
+  (select string_agg(place::text || ':' || wins || '-' || losses || '-' || ties, ',' order by ord) from (select *, row_number() over () ord from public.deck_lists('dragapult-ex')) x), '1:8-0-0,2:7-1-1');
+insert into public.mu_lists (source, event_id, player, name, deck, place, wins, losses, ties, list) values ('online', 'L1', 'short', 'S', 'dragapult-ex', 99, 3, 0, 0, '1 X');
+select t.eq('R5 lists with fewer than 5 games are left out', (select count(*)::text from public.deck_lists('dragapult-ex')), '2');
+select t.eq('R6 deck_list returns the cards', (select list from public.deck_list((select id from public.mu_lists where event_id = 'L1' and place = 1))), '4 Dreepy TWM 128');
+select public.mu_read(row(2, 'online_standings', 'L1', null, now(), null)::public.mu_fetch,
+  '[{"player":"z","name":"Z","placing":1,"record":{"wins":5,"losses":0,"ties":0},"deck":{"id":"crustle-dri","name":"Crustle","icons":[]},"decklist":{"pokemon":[{"count":4,"name":"Dwebble","set":"DRI","number":"1"}]}}]');
+select t.eq('R7 re-reading standings replaces that event''s lists', (select string_agg(player, ',') from public.mu_lists where event_id = 'L1'), 'z');
+delete from public.mu_events where event_id = 'L1';
+select t.eq('R8 lists go with their event', (select count(*)::text from public.mu_lists), '0');
+select t.check('R9 public can use deck_lists/deck_list but not the table or the text helper',
+  has_function_privilege('anon', 'public.deck_lists(text,int,int)', 'execute') and has_function_privilege('anon', 'public.deck_list(bigint)', 'execute')
+  and not has_table_privilege('anon', 'public.mu_lists', 'select') and not has_function_privilege('anon', 'public.mu_list_text(jsonb)', 'execute'), '');
+
 -- ================= summary =================
 \o
 select count(*) filter (where ok) as pass, count(*) filter (where not ok) as fail from t.results \gset

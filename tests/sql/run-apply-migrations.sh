@@ -21,7 +21,7 @@ n() { "${P[@]}" -X -At -c "$1"; }
 
 out=$(bash "$ROOT/supabase/apply-migrations.sh" 2>&1); echo "$out" | sed 's/^/    /'
 check "first run records 14 earlier migrations" '[ "$(n "select count(*) from ci.migrations where sha = '"'"'before-ci'"'"'")" = 14 ]'
-check "first run applies the new ones (015, 016)" '[ "$(n "select string_agg(file, '"'"','"'"' order by file) from ci.migrations where sha = '"'"'testsha'"'"'")" = "015_matchups.sql,016_matchups_catchup.sql" ]'
+check "first run applies the new ones (015, 016, 017)" '[ "$(n "select string_agg(file, '"'"','"'"' order by file) from ci.migrations where sha = '"'"'testsha'"'"'")" = "015_matchups.sql,016_matchups_catchup.sql,017_winning_lists.sql" ]'
 check "really applied (tables, functions, 3 cron jobs)" '[ "$(n "select (to_regclass('"'"'public.mu_events'"'"') is not null)::text || (to_regprocedure('"'"'public.mu_tick(int,boolean,int)'"'"') is not null)::text || (select count(*) from cron.job)")" = "truetrue3" ]'
 
 out=$(bash "$ROOT/supabase/apply-migrations.sh" 2>&1)

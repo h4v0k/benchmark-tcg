@@ -83,6 +83,13 @@ const MU_DRAGAPULT = [
   muOpp('crustle-dri', 'Crustle', 9, 7, 2, 0),
   muOpp('froslass', 'Froslass', 5, 1, 4, 0),
 ];
+const DECK_LISTS = [
+  { id: 101, event_id: 'ev-9001', event_name: 'Online Series #12', date: '2026-10-03', event_players: 64, player: 'Ana', place: 1, wins: 8, losses: 0, ties: 0, win_pct: 100 },
+  { id: 102, event_id: 'ev-9002', event_name: 'Weekly Cup #31', date: '2026-10-01', event_players: 48, player: 'Bo', place: 2, wins: 7, losses: 1, ties: 0, win_pct: 87.5 },
+  { id: 103, event_id: 'ev-9003', event_name: 'Weekly Cup #30', date: '2026-09-28', event_players: 40, player: 'Cy', place: 5, wins: 6, losses: 2, ties: 1, win_pct: 70.4 },
+  { id: 104, event_id: 'ev-9004', event_name: 'Online Series #11', date: '2026-09-25', event_players: 36, player: 'Di', place: 9, wins: 5, losses: 3, ties: 0, win_pct: 62.5 },
+];
+const LIST_TEXT = '4 Dreepy TWM 128\n3 Drakloak TWM 129\n2 Dragapult ex TWM 130\n4 Ultra Ball TWM 196\n1 Mystery Card XYZ 1';
 const RULES = {"standard_min_mark":"H","formats":[{"format":"standard","min_mark":"H","min_release":null,"season":"2026-27","notes":"","source":"","checked_at":"2026-10-05T12:00:00Z","updated_at":"2026-10-05T12:00:00Z"},{"format":"expanded","min_mark":null,"min_release":"2011-04-25","season":"","notes":"","source":"","checked_at":"2026-10-05T12:00:00Z","updated_at":"2026-10-05T12:00:00Z"}],"next_rotation":null,"bans":[{"format":"expanded","card_name":"Red Card","printings":[{"set":"XY","num":"124/146"}],"card_ids":["xy1-124"],"effective_date":null,"source":""}],"upcoming_sets":[],"last_checked":"2026-10-05T12:00:00Z","last_catalog_sync":"2026-10-05T12:00:00Z","card_count":20000};
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
@@ -131,6 +138,9 @@ async function handleSupabase(route) {
   if (p === '/rest/v1/rpc/matchup_decks') return json(route, body.p_source === 'official' ? MU_DECKS_OFFICIAL : MU_DECKS_ONLINE);
   if (p === '/rest/v1/rpc/matchups') return json(route, body.p_deck === 'dragapult-ex' && body.p_source !== 'official' ? MU_DRAGAPULT : []);
   if (p === '/rest/v1/rpc/matchup_coverage') return json(route, { events: body.p_source === 'official' ? 6 : 38, pending: 2, from: '2026-09-07', to: '2026-10-05', event_names: ['Regional Recife', 'Online Series #12'] });
+  if (p === '/rest/v1/rpc/deck_lists') return json(route, body.p_deck === 'dragapult-ex' ? DECK_LISTS : []);
+  if (p === '/rest/v1/rpc/deck_list') return json(route, DECK_LISTS.filter(r => r.id === body.p_id).map(r => ({ ...r, deck: 'dragapult-ex', list: LIST_TEXT })));
+  if (p === '/rest/v1/archetypes') return json(route, u.searchParams.get('slug') === 'eq.dragapult-ex' ? [{ name: 'Dragapult' }] : [], { headers: { 'content-range': '*/0' } });
   if (p === '/rest/v1/rpc/record_view') return route.fulfill({ status: 204, headers: cors });
   if (p === '/rest/v1/cards') {
     const idq = u.searchParams.get('id'); const nameq = u.searchParams.get('name');
@@ -494,6 +504,134 @@ try {
     if (await page.evaluate(() => document.documentElement.dataset.theme) !== 'light') throw new Error('theme not light');
     await noOverflow(page, 'deck light');
     await shotP(page, 'mu-deck-light.png');
+    await page.context().close();
+  });
+  const lsec = p => p.locator('section[aria-label="Selected list"]');
+  const otherLists = p => p.locator('section.mu-section', { has: p.getByRole('heading', { name: /^(Other lists|Lists)/ }) });
+  const listsReady = async p => { await p.getByRole('heading', { name: 'Dragapult lists', level: 1 }).waitFor({ state: 'visible', ...T }); await lsec(p).getByText('Dreepy').first().waitFor({ state: 'visible', ...T }); };
+  const rec = r => `${r.wins}-${r.losses}-${r.ties}`;
+  await scenario('15. winning lists: CTA, best list, other lists, selection, period', async () => {
+    const page = await newPage({ width: 390, height: 844 });
+    await page.goto(BASE + '/matchups/dragapult-ex');
+    await deckReady(page);
+    await page.getByRole('link', { name: /Winning Dragapult lists/ }).click(T);
+    await page.waitForURL(u => new URL(u).pathname === '/matchups/dragapult-ex/lists', T);
+    await listsReady(page);
+    const best = DECK_LISTS[0], sel = lsec(page);
+    await sel.getByText('Winningest list').waitFor({ state: 'visible', ...T });
+    await sel.getByText(rec(best), { exact: true }).waitFor({ state: 'visible', ...T });
+    await sel.getByText(/1st of 64/).waitFor({ state: 'visible', ...T });
+    for (const n of ['Dreepy', 'Drakloak', 'Dragapult ex', 'Ultra Ball']) await sel.getByText(n).first().waitFor({ state: 'visible', ...T });
+    await see(page, 'Not matched to a card yet: Mystery Card');
+    for (const b of ['Copy to my decks', 'Export']) await sel.getByRole('button', { name: b }).waitFor({ state: 'visible', ...T });
+    const ev = await sel.getByRole('link', { name: 'Event' }).getAttribute('href');
+    if (ev !== `https://play.limitlesstcg.com/tournament/${best.event_id}/standings`) throw new Error(`Event href: ${ev}`);
+    // other lists: the other 3 rows
+    const oth = otherLists(page);
+    await oth.locator('li button.mu-pick').first().waitFor({ state: 'visible', ...T });
+    if (await oth.locator('li button.mu-pick').count() !== DECK_LISTS.length - 1) throw new Error('expected other lists = rows - 1');
+    if (await oth.locator('li button.mu-pick', { hasText: rec(best) }).count()) throw new Error('best list also in Other lists');
+    await noOverflow(page, 'lists 390');
+    await shotP(page, 'lists-phone.png');
+    // select another
+    const pick = DECK_LISTS[2];
+    await oth.locator('li button.mu-pick').nth(1).click(T);
+    await page.waitForURL(u => new URL(u).searchParams.get('list') === String(pick.id), T);
+    await sel.getByText('Selected list', { exact: true }).waitFor({ state: 'visible', ...T });
+    await sel.getByText(rec(pick), { exact: true }).waitFor({ state: 'visible', ...T });
+    if (await sel.getByText('Winningest list').count()) throw new Error('still says Winningest');
+    await oth.locator('li button.mu-pick', { hasText: rec(best) }).waitFor({ state: 'visible', ...T });
+    if (await oth.locator('li button.mu-pick').count() !== DECK_LISTS.length - 1) throw new Error('other lists count changed');
+    // period
+    const period = page.getByLabel('Period');
+    if (await period.inputValue() !== '30') throw new Error('default period should be 30');
+    if ((await period.locator('option').allTextContents()).join('|') !== 'Last 14 days|Last 30 days|Last 60 days') throw new Error('period options');
+    await period.selectOption('60');
+    await page.waitForURL(u => { const s = new URL(u).searchParams; return s.get('days') === '60' && s.get('list') === null; }, T);
+    await sel.getByText('Winningest list').waitFor({ state: 'visible', ...T });
+    await period.selectOption('30');
+    await page.waitForURL(u => new URL(u).searchParams.get('days') === null, T);
+    await page.context().close();
+  });
+  await scenario('16. winning lists: opponent link, empty state', async () => {
+    const page = await newPage({ width: 390, height: 844 });
+    await page.goto(BASE + '/matchups/dragapult-ex');
+    await deckReady(page);
+    const link = page.locator('a.mu-deck-link', { hasText: "N's Zoroark" }).first();
+    await link.waitFor({ state: 'visible', ...T });
+    if (await link.getAttribute('href') !== '/matchups/n-zoroark/lists') throw new Error(`opp href: ${await link.getAttribute('href')}`);
+    await link.click(T);
+    await page.waitForURL(u => new URL(u).pathname === '/matchups/n-zoroark/lists', T);
+    await see(page, 'No lists yet');
+    await page.getByRole('heading', { name: /lists$/, level: 1 }).waitFor({ state: 'visible', ...T });
+    const back = page.getByRole('link', { name: 'Back to matchups' });
+    await back.waitFor({ state: 'visible', ...T });
+    await noOverflow(page, 'empty lists');
+    await shotP(page, 'lists-empty.png');
+    await back.click(T);
+    await page.waitForURL(u => new URL(u).pathname === '/matchups/n-zoroark', T);
+    await page.context().close();
+  });
+  await scenario('17. winning lists: Copy to my decks signed out -> /signup, signed in -> POST /decks', async () => {
+    const out = await newPage({ width: 390, height: 844 });
+    await out.goto(BASE + '/matchups/dragapult-ex/lists');
+    await listsReady(out);
+    await lsec(out).getByRole('button', { name: 'Copy to my decks' }).click(T);
+    await out.waitForURL(u => new URL(u).pathname === '/signup', T);
+    await out.context().close();
+    const page = await newPage({ width: 390, height: 844 });
+    await page.addInitScript(([me]) => {
+      const exp = Math.floor(Date.now() / 1000) + 3600;
+      localStorage.setItem('sb-rnujzhrfiqjfjqskekpt-auth-token', JSON.stringify({ access_token: 'x', refresh_token: 'y', expires_at: exp, user: { id: me, email: 't@example.com' } }));
+    }, [ME]);
+    const posts = [];
+    page.on('request', r => { if (r.method() === 'POST' && new URL(r.url()).pathname === '/rest/v1/decks') { try { posts.push(r.postDataJSON()); } catch { posts.push(null); } } });
+    await page.goto(BASE + '/matchups/dragapult-ex/lists');
+    await listsReady(page);
+    await lsec(page).getByRole('button', { name: 'Copy to my decks' }).click(T);
+    await page.waitForURL(u => new URL(u).pathname === `/decks/${DECK_ID}`, T);
+    if (posts.length !== 1) throw new Error(`expected 1 POST /decks, got ${posts.length}`);
+    const b = Array.isArray(posts[0]) ? posts[0][0] : posts[0];
+    if (!b || b.format !== 'standard' || b.is_public !== false) throw new Error(`POST body: ${JSON.stringify(b).slice(0, 300)}`);
+    if (!Array.isArray(b.cards) || b.cards.length !== 4) throw new Error(`expected 4 cards, got ${b.cards && b.cards.length}`);
+    const qty = Object.fromEntries(b.cards.map(c => [c.name, c.qty]));
+    if (JSON.stringify(qty) !== JSON.stringify({ Dreepy: 4, Drakloak: 3, 'Dragapult ex': 2, 'Ultra Ball': 4 })) throw new Error(`cards: ${JSON.stringify(qty)}`);
+    if (b.cards.some(c => /Mystery/.test(c.name))) throw new Error('unmatched card was included');
+    if (!/8-0-0/.test(b.name) || !/Dragapult/.test(b.name)) throw new Error(`deck name: ${b.name}`);
+    await page.context().close();
+  });
+  for (const [w, h] of sizes) for (const big of [false, true]) await scenario(`18. winning lists at ${w}x${h}${big ? ' with large text (24px)' : ''}`, async () => {
+    const page = await newPage({ width: w, height: h });
+    await page.goto(BASE + '/matchups/dragapult-ex');
+    await deckReady(page);
+    if (big) await page.addStyleTag({ content: BIG });
+    await noOverflow(page, 'deck page with CTA');
+    if (w === 390 && !big) await shotP(page, 'mu-deck-phone.png');
+    await page.goto(BASE + '/matchups/dragapult-ex/lists');
+    await listsReady(page);
+    if (big) await page.addStyleTag({ content: BIG });
+    await page.waitForTimeout(300);
+    await noOverflow(page, 'lists');
+    await page.goto(BASE + '/matchups/dragapult-ex/lists?list=' + DECK_LISTS[1].id);
+    await listsReady(page);
+    if (big) await page.addStyleTag({ content: BIG });
+    await noOverflow(page, 'lists (selected)');
+    await lsec(page).getByRole('button', { name: 'Export' }).click(T);
+    await page.getByRole('dialog').waitFor({ state: 'visible', ...T });
+    await noOverflow(page, 'export dialog');
+    await page.keyboard.press('Escape');
+    await page.getByRole('dialog').waitFor({ state: 'hidden', ...T });
+    if (w === 390 && big) await shotP(page, 'lists-bigtext.png');
+    await page.context().close();
+  });
+  await scenario('18. winning lists light theme at 390', async () => {
+    const page = await newPage({ width: 390, height: 844 });
+    await page.addInitScript(() => { try { localStorage.setItem('bm:theme', 'light'); } catch {} });
+    await page.goto(BASE + '/matchups/dragapult-ex/lists');
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+    await listsReady(page);
+    await noOverflow(page, 'lists light');
+    await shotP(page, 'lists-light.png');
     await page.context().close();
   });
   await scenario('14. nav has Matchups link', async () => {

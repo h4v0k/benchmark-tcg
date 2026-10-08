@@ -7,7 +7,7 @@ ROOT=$(cd "$HERE/../.." && pwd)
 PGBIN=${PGBIN:-/usr/lib/postgresql/16/bin}
 # MIGRATIONS: space-separated list, applied in order (MIGRATION=<file> still works as a single override)
 if [ -n "${MIGRATION:-}" ]; then MIGRATIONS=$MIGRATION; fi
-MIGRATIONS=${MIGRATIONS:-"$ROOT/supabase/migrations/015_matchups.sql $ROOT/supabase/migrations/016_matchups_catchup.sql"}
+MIGRATIONS=${MIGRATIONS:-"$ROOT/supabase/migrations/015_matchups.sql $ROOT/supabase/migrations/016_matchups_catchup.sql $ROOT/supabase/migrations/017_winning_lists.sql"}
 TMP=$(mktemp -d)
 AS=()
 if [ "$(id -u)" = 0 ]; then AS=(runuser -u postgres --); chown postgres "$TMP"; chmod 755 "$TMP"; fi

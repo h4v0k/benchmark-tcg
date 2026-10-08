@@ -283,3 +283,13 @@ export type MatchupCoverage = { events: number; pending: number; from: string | 
 export const matchupDecks = (source: MatchupSource, days: number) => sb.rpc<MatchupDeck[]>('matchup_decks', { p_source: source, p_days: days });
 export const matchups = (deck: string, source: MatchupSource, days: number) => sb.rpc<Matchup[]>('matchups', { p_deck: deck, p_source: source, p_days: days });
 export const matchupCoverage = (source: MatchupSource, days: number) => sb.rpc<MatchupCoverage>('matchup_coverage', { p_source: source, p_days: days });
+
+/* Winning lists: top decklists from online events, with records */
+export type DeckListRow = { id: number; event_name: string; date: string; event_players: number | null; player: string; place: number | null; wins: number; losses: number; ties: number; win_pct: number | null };
+export type DeckListFull = DeckListRow & { deck: string; event_id: string; list: string };
+export const deckLists = (deck: string, days: number) => sb.rpc<DeckListRow[]>('deck_lists', { p_deck: deck, p_days: days });
+export const deckList = async (id: number) => (await sb.rpc<DeckListFull[]>('deck_list', { p_id: id }))[0] || null;
+export async function archetypeName(slug: string): Promise<string | null> {
+  const { rows } = await sb.select<{ name: string }>('archetypes', { select: 'name', slug: `eq.${slug}` });
+  return rows[0]?.name || null;
+}

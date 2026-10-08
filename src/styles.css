@@ -670,3 +670,16 @@ a.mu-link:hover { border-color: var(--accent); }
 .mu-about p { margin: 0; }
 .mu-about summary { cursor: pointer; color: var(--muted); width: fit-content; }
 .mu-about ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+
+/* Winning lists */
+.mu-lists-cta { display: flex; width: 100%; justify-content: flex-start; gap: 8px; margin: 0 0 12px; min-height: 44px; }
+.mu-lists-cta .icon:last-child { margin-left: auto; color: var(--faint); }
+.mu-deck-link { color: inherit; text-decoration: none; }
+.mu-deck-link:hover b, .mu-deck-link:focus-visible b { text-decoration: underline; text-underline-offset: 3px; }
+.mu-pick { width: 100%; background: none; border: 0; padding: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; min-height: 44px; }
+.mu-pick:hover b { color: var(--accent); }
+.mu-kicker { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ok); }
+.mu-record { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0 0 12px; }
+.mu-record .mu-pct { font-size: 1.8em; line-height: 1; }
+.mu-listview .deck-actions { margin: 0 0 12px; }
+.mu-deck-link b { text-decoration: underline dotted; text-decoration-color: var(--faint); text-underline-offset: 4px; }
