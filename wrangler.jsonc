@@ -6,5 +6,7 @@
     "directory": "./dist",
     // Single-page app: unknown paths load index.html
     "not_found_handling": "single-page-application"
-  }
+  },
+  // Builds of branches other than main run `wrangler preview`, which needs this block (it can stay empty).
+  "previews": {}
 }
