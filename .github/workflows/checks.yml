@@ -1,0 +1,17 @@
+name: Checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Type-check src/lib
+        run: TSC="npx -y -p typescript@6.0.3 tsc" bash tests/typecheck-lib.sh

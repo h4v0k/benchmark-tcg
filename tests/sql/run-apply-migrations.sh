@@ -13,6 +13,11 @@ trap cleanup EXIT
 "${AS[@]}" "$PGBIN/pg_ctl" -D "$TMP/data" -l "$TMP/log" -w -s -o "-k $TMP -p $PORT -c listen_addresses='' -c fsync=off -c timezone=UTC" start
 P=(psql -h "$TMP" -p "$PORT" -U postgres)
 "${P[@]}" -X -q -v ON_ERROR_STOP=1 -f "$HERE/stubs.sql"
+PGOPTIONS="-c client_min_messages=warning" "${P[@]}" -X -q -v ON_ERROR_STOP=1 -f "$HERE/stubs-full.sql"
+# the live database already had 001-014 before CI existed
+for m in $(sed 's/#.*//' "$ROOT/supabase/migrations/APPLIED_BEFORE_CI.txt"); do
+  "${P[@]}" -X -q -v ON_ERROR_STOP=1 -f "$ROOT/supabase/migrations/$m" >/dev/null 2>"$TMP/pre.err" || { echo "FAIL | pre-CI migration $m does not apply"; cat "$TMP/pre.err"; exit 1; }
+done
 python3 "$HERE/fake-supabase-api.py" "$APIPORT" "${P[@]}" & API_PID=$!
 sleep 1
 export SUPABASE_ACCESS_TOKEN=test-token SUPABASE_API="http://127.0.0.1:$APIPORT" GITHUB_SHA=testsha
@@ -21,8 +26,8 @@ n() { "${P[@]}" -X -At -c "$1"; }
 
 out=$(bash "$ROOT/supabase/apply-migrations.sh" 2>&1); echo "$out" | sed 's/^/    /'
 check "first run records 14 earlier migrations" '[ "$(n "select count(*) from ci.migrations where sha = '"'"'before-ci'"'"'")" = 14 ]'
-check "first run applies the new ones (015, 016, 017)" '[ "$(n "select string_agg(file, '"'"','"'"' order by file) from ci.migrations where sha = '"'"'testsha'"'"'")" = "015_matchups.sql,016_matchups_catchup.sql,017_winning_lists.sql" ]'
-check "really applied (tables, functions, 3 cron jobs)" '[ "$(n "select (to_regclass('"'"'public.mu_events'"'"') is not null)::text || (to_regprocedure('"'"'public.mu_tick(int,boolean,int)'"'"') is not null)::text || (select count(*) from cron.job)")" = "truetrue3" ]'
+check "first run applies the new ones (015-019)" '[ "$(n "select string_agg(file, '"'"','"'"' order by file) from ci.migrations where sha = '"'"'testsha'"'"'")" = "015_matchups.sql,016_matchups_catchup.sql,017_winning_lists.sql,018_advisor_fixes.sql,019_weighted_lists.sql" ]'
+check "really applied (tables, functions, 3 cron jobs)" '[ "$(n "select (to_regclass('"'"'public.mu_events'"'"') is not null)::text || (to_regprocedure('"'"'public.mu_tick(int,boolean,int)'"'"') is not null)::text || (select count(*) from cron.job where jobname like '"'"'benchmark-matchups%'"'"')")" = "truetrue3" ]'
 
 out=$(bash "$ROOT/supabase/apply-migrations.sh" 2>&1)
 check "second run applies nothing" 'grep -q "Applied 0 new migration" <<<"$out"'

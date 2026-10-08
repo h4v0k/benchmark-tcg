@@ -67,7 +67,7 @@ export function AddCard({ format, board, onAdd }: { format: Format; board: Board
           {hits.map((h, i) => (
             <button key={h.card_id} role="option" aria-selected={i === active} className={`add-item ${i === active ? 'active' : ''}`}
               onMouseEnter={() => setActive(i)} onMouseDown={e => e.preventDefault()} onClick={() => add(h)} data-preview={h.image || undefined}>
-              {h.image ? <img src={img(h.image)} alt="" /> : <span className="thumb-ph" />}
+              {h.image ? <img src={img(h.image)} alt="" loading="lazy" decoding="async" /> : <span className="thumb-ph" />}
               <span className="add-item-text"><strong>{h.name}</strong><small>{h.sub || h.category}{h.printings > 1 ? ` · ${h.printings} printings` : ''}{!h.legal && format !== 'unlimited' ? ' · not legal' : ''}</small></span>
               <span className="add-qty">+{entry.qty}</span>
             </button>

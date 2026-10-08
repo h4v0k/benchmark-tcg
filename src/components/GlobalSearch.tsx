@@ -45,7 +45,7 @@ export function GlobalSearch() {
         <div className="gsearch-pop" role="listbox">
           {hits.map((h, i) => (
             <button key={h.card_id} role="option" aria-selected={i === active} className={`gsearch-item ${i === active ? 'active' : ''}`} onMouseDown={e => e.preventDefault()} onClick={() => go(`/cards/${h.card_id}`)}>
-              {h.image ? <img src={img(h.image)} alt="" /> : <span className="thumb-ph" />}
+              {h.image ? <img src={img(h.image)} alt="" loading="lazy" decoding="async" /> : <span className="thumb-ph" />}
               <span><strong>{h.name}</strong><small>{h.sub || h.category} · {h.printings} printing{h.printings > 1 ? 's' : ''}</small></span>
             </button>
           ))}

@@ -636,6 +636,7 @@ a.event-row:hover, a.st-row:hover { border-color: var(--accent); }
 .mu-list { list-style: none; margin: 0; padding: 0; }
 .mu-row { display: flex; align-items: center; gap: 12px; }
 .mu-name { flex: 1; min-width: 0; display: grid; gap: 1px; overflow-wrap: anywhere; }
+.mu-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .mu-pct { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 1.1em; white-space: nowrap; }
 .mu-pct.ok { color: var(--ok); } .mu-pct.bad { color: var(--bad); }
 .few .mu-name b, .few .mu-pct { color: var(--muted); }

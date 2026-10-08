@@ -1003,7 +1003,7 @@ select t.eq('R2 only the top 16 lists are kept', (select count(*)::text || ':' |
 select t.eq('R2b names stored, list text stored', (select name || '|' || list from public.mu_lists where event_id = 'L1' and place = 1), E'Player 1|4 Dreepy TWM 128');
 select t.eq('R3 lists hidden until the event is done', (select count(*)::text from public.deck_lists('dragapult-ex')), '0');
 update public.mu_events set status = 'done' where event_id = 'L1';
-select t.eq('R4 deck_lists: best record first, place 18 not kept',
+select t.eq('R4 deck_lists (017 version; 019 replaces it, see chain-test.sql): best record first, place 18 not kept',
   (select string_agg(place::text || ':' || wins || '-' || losses || '-' || ties, ',' order by ord) from (select *, row_number() over () ord from public.deck_lists('dragapult-ex')) x), '1:8-0-0,2:7-1-1');
 insert into public.mu_lists (source, event_id, player, name, deck, place, wins, losses, ties, list) values ('online', 'L1', 'short', 'S', 'dragapult-ex', 99, 3, 0, 0, '1 X');
 select t.eq('R5 lists with fewer than 5 games are left out', (select count(*)::text from public.deck_lists('dragapult-ex')), '2');

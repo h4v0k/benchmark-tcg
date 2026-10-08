@@ -54,6 +54,12 @@ const DECK = {
   cover: '', price: 12.5, card_count: 20, like_count: 3, view_count: 10, comment_count: 0, featured: false, tags: ['test'], folder_id: null,
   archetype: 'Dragapult', created_at: '2026-10-01T00:00:00Z', updated_at: NOW, owner_profile: { username: 'tester', avatar_card: '' },
 };
+const DECK_B_ID = '33333333-3333-3333-3333-333333333333';
+const DECK_B = { ...DECK, id: DECK_B_ID, name: 'Second deck B', cards: [{ cid: id('Iono'), qty: 4, board: 'main', name: 'Iono', cat: 'Trainer' }] };
+const BIG_ID = '44444444-4444-4444-4444-444444444444';
+const BIG_N = 170; // 170 unique cards -> ceil(170/80) = 3 chunks
+const BIG_CARDS = Array.from({ length: BIG_N }, (_, i) => mk(2000 + i, `Bulk Card ${i + 1}`, { tcgp_product_id: 600000 + i, tcgp: { normal: 600000 + i } }));
+const DECK_BIG = { ...DECK, id: BIG_ID, name: 'Bulk deck', cards: BIG_CARDS.map(c => ({ cid: c.id, qty: 1, board: 'main', name: c.name, cat: 'Pokemon' })), card_count: BIG_N };
 const muDeck = (deck, name, games, wins, losses, ties, events) => ({ deck, name, icons: [], games, wins, losses, ties, win_pct: Math.round(1000 * (wins + ties / 3) / games) / 10, events });
 const MU_DECKS_ONLINE = [
   muDeck('dragapult-ex', 'Dragapult', 412, 210, 190, 12, 31),
@@ -84,10 +90,11 @@ const MU_DRAGAPULT = [
   muOpp('froslass', 'Froslass', 5, 1, 4, 0),
 ];
 const DECK_LISTS = [
-  { id: 101, event_id: 'ev-9001', event_name: 'Online Series #12', date: '2026-10-03', event_players: 64, player: 'Ana', place: 1, wins: 8, losses: 0, ties: 0, win_pct: 100 },
-  { id: 102, event_id: 'ev-9002', event_name: 'Weekly Cup #31', date: '2026-10-01', event_players: 48, player: 'Bo', place: 2, wins: 7, losses: 1, ties: 0, win_pct: 87.5 },
-  { id: 103, event_id: 'ev-9003', event_name: 'Weekly Cup #30', date: '2026-09-28', event_players: 40, player: 'Cy', place: 5, wins: 6, losses: 2, ties: 1, win_pct: 70.4 },
-  { id: 104, event_id: 'ev-9004', event_name: 'Online Series #11', date: '2026-09-25', event_players: 36, player: 'Di', place: 9, wins: 5, losses: 3, ties: 0, win_pct: 62.5 },
+  { key: 'o101', tier: 'online', event_id: 'ev-9001', event_name: 'Online Series #12', date: '2026-10-03', event_players: 64, player: 'Ana', place: 1, wins: 8, losses: 0, ties: 0, score: 3 },
+  { key: 't580-2', tier: 'regional', event_id: '580', event_name: 'Regional Recife', date: '2026-10-03', event_players: 1074, player: 'Bea', place: 2, wins: null, losses: null, ties: null, score: 9.07 },
+  { key: 'o102', tier: 'online', event_id: 'ev-9002', event_name: 'Weekly Cup #31', date: '2026-10-01', event_players: 48, player: 'Bo', place: 2, wins: 7, losses: 1, ties: 0, score: 2.29 },
+  { key: 'o103', tier: 'online', event_id: 'ev-9003', event_name: 'Weekly Cup #30', date: '2026-09-28', event_players: 40, player: 'Cy', place: 5, wins: 6, losses: 2, ties: 1, score: 1.5 },
+  { key: 'o104', tier: 'online', event_id: 'ev-9004', event_name: 'Online Series #11', date: '2026-09-25', event_players: 36, player: 'Di', place: 9, wins: 5, losses: 3, ties: 0, score: 1 },
 ];
 const LIST_TEXT = '4 Dreepy TWM 128\n3 Drakloak TWM 129\n2 Dragapult ex TWM 130\n4 Ultra Ball TWM 196\n1 Mystery Card XYZ 1';
 const archRow = (tid, name, date, kind, players, place, player, cc, lid, price) => ({ tournament_id: tid, place, player, country: 'US', archetype: 'Dragapult', list_id: lid, card_count: cc, price, tournaments: { id: tid, name, date, kind, players } });
@@ -116,6 +123,9 @@ const BASE = `http://127.0.0.1:${server.address().port}`;
 
 /* ---------- mock backend ---------- */
 const unexpected = [];
+const deckDelay = {}; // deck id -> ms to hold the decks response
+const cardReqs = []; // { start, end, n } per /rest/v1/cards `in.` request
+const passkeyReqs = [];
 const json = (route, body, extra = {}) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*', ...(extra.headers || {}) }, body: JSON.stringify(body) });
 async function handleSupabase(route) {
   const req = route.request();
@@ -149,12 +159,20 @@ async function handleSupabase(route) {
   if (p === '/rest/v1/rpc/matchups') return json(route, body.p_deck === 'dragapult-ex' && body.p_source !== 'official' ? MU_DRAGAPULT : []);
   if (p === '/rest/v1/rpc/matchup_coverage') return json(route, { events: body.p_source === 'official' ? 6 : 38, pending: 2, from: '2026-09-07', to: '2026-10-05', event_names: ['Regional Recife', 'Online Series #12'] });
   if (p === '/rest/v1/rpc/deck_lists') return json(route, body.p_deck === 'dragapult-ex' ? DECK_LISTS : []);
-  if (p === '/rest/v1/rpc/deck_list') return json(route, DECK_LISTS.filter(r => r.id === body.p_id).map(r => ({ ...r, deck: 'dragapult-ex', list: LIST_TEXT })));
+  if (p === '/rest/v1/rpc/deck_list') return json(route, DECK_LISTS.filter(r => r.key === body.p_key).map(r => r.tier === 'online'
+    ? { ...r, deck: 'dragapult-ex', list: LIST_TEXT, cards: null, missing: [], list_id: null }
+    : { ...r, deck: 'dragapult-ex', list: null, cards: DECK.cards, missing: [], list_id: 30002 }));
   if (p === '/rest/v1/archetypes') return json(route, u.searchParams.get('slug') === 'eq.dragapult-ex' ? [{ name: 'Dragapult' }] : [], { headers: { 'content-range': '*/0' } });
   if (p === '/rest/v1/rpc/record_view') return route.fulfill({ status: 204, headers: cors });
   if (p === '/rest/v1/cards') {
     const idq = u.searchParams.get('id'); const nameq = u.searchParams.get('name');
     let rows = CARDS;
+    if (idq && idq.startsWith('in.') && idq.includes('sv06-2')) {
+      const ids = [...idq.matchAll(/"([^"]+)"/g)].map(m => m[1]); const rec = { start: Date.now(), end: 0, n: ids.length }; cardReqs.push(rec);
+      await new Promise(r => setTimeout(r, 250)); rec.end = Date.now();
+      const got = BIG_CARDS.filter(c => ids.includes(c.id));
+      return json(route, got, { headers: { 'content-range': `0-${Math.max(got.length - 1, 0)}/${got.length}` } });
+    }
     if (idq && idq.startsWith('in.')) { const ids = [...idq.matchAll(/"([^"]+)"/g)].map(m => m[1]); const bare = ids.length ? ids : idq.slice(4).replace(/[()]/g, '').split(','); rows = CARDS.filter(c => bare.includes(c.id)); }
     else if (idq && idq.startsWith('eq.')) rows = CARDS.filter(c => c.id === idq.slice(3));
     else if (nameq && nameq.startsWith('eq.')) rows = CARDS.filter(c => c.name.toLowerCase() === nameq.slice(3).toLowerCase());
@@ -162,10 +180,14 @@ async function handleSupabase(route) {
   }
   if (p === '/rest/v1/decks') {
     const idq = u.searchParams.get('id');
-    const rows = idq && idq.startsWith('eq.') ? (idq.slice(3) === DECK_ID ? [DECK] : []) : [DECK];
+    const want = idq && idq.startsWith('eq.') ? idq.slice(3) : null;
+    if (want && deckDelay[want]) await new Promise(r => setTimeout(r, deckDelay[want]));
+    const rows = want ? [DECK, DECK_B, DECK_BIG].filter(d => d.id === want) : [DECK];
     return json(route, rows, { headers: { 'content-range': `0-0/1` } });
   }
   if (p === '/rest/v1/profiles' && u.searchParams.get('id') === `eq.${ME}`) return json(route, [{ id: ME, username: 'tester', bio: '', avatar_card: '', is_admin: false, created_at: NOW }], { headers: { 'content-range': '0-0/1' } });
+  if (p === '/rest/v1/follows') return json(route, [], { headers: { 'content-range': '*/0' } });
+  if (p === '/auth/v1/passkeys/') passkeyReqs.push(Date.now());
   if (p === '/auth/v1/passkeys/') return json(route, [{ id: 'pk1', created_at: NOW }]);
   if (['/rest/v1/rule_changes', '/rest/v1/deck_comments', '/rest/v1/profiles', '/rest/v1/folders', '/rest/v1/printing_prefs'].includes(p)) return json(route, [], { headers: { 'content-range': '*/0' } });
   unexpected.push(`${method} ${p}${u.search}`);
@@ -546,7 +568,7 @@ try {
     // select another
     const pick = DECK_LISTS[2];
     await oth.locator('li button.mu-pick').nth(1).click(T);
-    await page.waitForURL(u => new URL(u).searchParams.get('list') === String(pick.id), T);
+    await page.waitForURL(u => new URL(u).searchParams.get('list') === pick.key, T);
     await sel.getByText('Selected list', { exact: true }).waitFor({ state: 'visible', ...T });
     await sel.getByText(rec(pick), { exact: true }).waitFor({ state: 'visible', ...T });
     if (await sel.getByText('Winningest list').count()) throw new Error('still says Winningest');
@@ -554,12 +576,12 @@ try {
     if (await oth.locator('li button.mu-pick').count() !== DECK_LISTS.length - 1) throw new Error('other lists count changed');
     // period
     const period = page.getByLabel('Period');
-    if (await period.inputValue() !== '30') throw new Error('default period should be 30');
-    if ((await period.locator('option').allTextContents()).join('|') !== 'Last 14 days|Last 30 days|Last 60 days') throw new Error('period options');
-    await period.selectOption('60');
-    await page.waitForURL(u => { const s = new URL(u).searchParams; return s.get('days') === '60' && s.get('list') === null; }, T);
+    if (await period.inputValue() !== '60') throw new Error('default period should be 60');
+    if ((await period.locator('option').allTextContents()).join('|') !== 'Last 30 days|Last 60 days|Last 90 days') throw new Error('period options');
+    await period.selectOption('90');
+    await page.waitForURL(u => { const s = new URL(u).searchParams; return s.get('days') === '90' && s.get('list') === null; }, T);
     await sel.getByText('Winningest list').waitFor({ state: 'visible', ...T });
-    await period.selectOption('30');
+    await period.selectOption('60');
     await page.waitForURL(u => new URL(u).searchParams.get('days') === null, T);
     await page.context().close();
   });
@@ -622,7 +644,7 @@ try {
     if (big) await page.addStyleTag({ content: BIG });
     await page.waitForTimeout(300);
     await noOverflow(page, 'lists');
-    await page.goto(BASE + '/matchups/dragapult-ex/lists?list=' + DECK_LISTS[1].id);
+    await page.goto(BASE + '/matchups/dragapult-ex/lists?list=' + DECK_LISTS[1].key);
     await listsReady(page);
     if (big) await page.addStyleTag({ content: BIG });
     await noOverflow(page, 'lists (selected)');
@@ -649,6 +671,30 @@ try {
   const archSummary = (() => { const w = ARCH_ROWS.filter(r => r.place === 1).length, t8 = ARCH_ROWS.filter(r => r.place <= 8).length, ev = new Set(ARCH_ROWS.map(r => r.tournament_id)).size;
     return `${ARCH_ROWS.length} top 32 finishes · ${t8} top 8 · ${w} wins · ${ev} events`; })();
   const archReady = async p => { await p.getByRole('heading', { name: 'Dragapult', level: 1 }).waitFor({ state: 'visible', ...T }); await p.locator('.mu-list li').first().waitFor({ state: 'visible', ...T }); };
+  await scenario('25. winning lists: official major list shows placing + tier, renders stored cards, links to our event page', async () => {
+    const page = await newPage({ width: 390, height: 844 });
+    const asked = [];
+    page.on('request', r => { if (new URL(r.url()).pathname === '/rest/v1/rpc/deck_lists') { try { asked.push(r.postDataJSON()); } catch {} } });
+    await page.goto(BASE + '/matchups/dragapult-ex/lists');
+    await listsReady(page);
+    if (!asked.length || asked[0].p_days !== 60) throw new Error(`deck_lists days: ${JSON.stringify(asked[0])}`);
+    const oth = otherLists(page);
+    const row = oth.locator('li button.mu-pick', { hasText: 'Regional Recife' });
+    await row.waitFor({ state: 'visible', ...T });
+    const txt = (await row.innerText()).replace(/\s+/g, ' ');
+    if (!/2nd/.test(txt) || !/Regional/.test(txt) || !/of 1,074/.test(txt)) throw new Error(`official row: ${txt}`);
+    if (/null/.test(txt)) throw new Error(`official row shows null: ${txt}`);
+    await row.click(T);
+    await page.waitForURL(u => new URL(u).searchParams.get('list') === 't580-2', T);
+    const sel = lsec(page);
+    await sel.getByText('Selected list', { exact: true }).waitFor({ state: 'visible', ...T });
+    await sel.getByText(DECK.cards[0].name).first().waitFor({ state: 'visible', ...T });
+    const ev = await sel.getByRole('link', { name: 'Event' }).getAttribute('href');
+    if (ev !== '/events/580') throw new Error(`official Event href: ${ev}`);
+    if (await sel.getByText(/null|undefined/).count()) throw new Error('null/undefined shown');
+    await noOverflow(page, 'official list');
+    await page.context().close();
+  });
   await scenario('19. archetype page: link from What\'s winning, summary, order, row links, period', async () => {
     const page = await newPage({ width: 390, height: 844 });
     const dates = [];
@@ -730,11 +776,174 @@ try {
     await noOverflow(page, 'archetype light');
     await page.context().close();
   });
+  await scenario('22. deck navigation race: slow deck A never replaces deck B', async () => {
+    const page = await newPage({ width: 1366, height: 900 });
+    deckDelay[DECK_ID] = 1500;
+    await page.goto(BASE + '/');
+    await page.evaluate(([a, b]) => { history.pushState({}, '', '/decks/' + a); dispatchEvent(new PopStateEvent('popstate')); setTimeout(() => { history.pushState({}, '', '/decks/' + b); dispatchEvent(new PopStateEvent('popstate')); }, 200); }, [DECK_ID, DECK_B_ID]);
+    await see(page, 'Second deck B');
+    await page.waitForTimeout(2000); // let the slow A response land
+    delete deckDelay[DECK_ID];
+    if (await page.getByText('Dragapult test').count()) throw new Error('stale deck A replaced deck B');
+    await see(page, 'Second deck B');
+    await page.context().close();
+  });
+  await scenario('23. deck with >80 unique cards: chunked card requests run concurrently', async () => {
+    const page = await newPage({ width: 1366, height: 900 });
+    cardReqs.length = 0;
+    await page.goto(`${BASE}/decks/${BIG_ID}`);
+    await see(page, 'Bulk deck');
+    await see(page, 'Bulk Card 170');
+    const want = Math.ceil(BIG_N / 80);
+    if (cardReqs.length !== want) throw new Error(`expected ${want} card requests, got ${cardReqs.length}`);
+    if (cardReqs.reduce((s, r) => s + r.n, 0) !== BIG_N) throw new Error('chunks did not cover all ids once');
+    if (Math.max(...cardReqs.map(r => r.start)) >= Math.min(...cardReqs.map(r => r.end))) throw new Error('card chunks were sequential, not concurrent');
+    await page.context().close();
+  });
+  await scenario('24. signed-in /feed (follows mocked) and /settings fetches passkeys exactly once', async () => {
+    const page = await newPage({ width: 1366, height: 900 });
+    await page.addInitScript(([me]) => {
+      const exp = Math.floor(Date.now() / 1000) + 3600;
+      localStorage.setItem('sb-rnujzhrfiqjfjqskekpt-auth-token', JSON.stringify({ access_token: 'x', refresh_token: 'y', expires_at: exp, user: { id: me, email: 't@example.com' } }));
+    }, [ME]);
+    await page.goto(BASE + '/feed');
+    await page.waitForTimeout(800);
+    passkeyReqs.length = 0;
+    await page.goto(BASE + '/settings');
+    await see(page, 'Passkeys');
+    await page.waitForTimeout(1000);
+    if (passkeyReqs.length !== 1) throw new Error(`expected 1 passkeys request, got ${passkeyReqs.length}`);
+    await page.context().close();
+  });
   await scenario('14. nav has Matchups link', async () => {
     await desk.goto(BASE + '/');
     await desk.locator('a[href="/matchups"]').first().waitFor({ state: 'attached', ...T });
     const t = await desk.locator('a[href="/matchups"]').first().textContent();
     if (!/Matchups/.test(t)) throw new Error(`nav link text: ${t}`);
+  });
+  await scenario('38. a hung request ends in a friendly error, not an endless spinner', async () => {
+    const page = await newPage({ width: 1000, height: 800 });
+    await page.addInitScript(() => { globalThis.__BM_TIMEOUT_MS = 1500; });
+    await page.route('**/rest/v1/decks*', () => {}); // never answers
+    const t0 = Date.now();
+    await page.goto(BASE + `/decks/${DECK_ID}`);
+    await see(page, 'took too long');
+    if (Date.now() - t0 > 15000) throw new Error('error took too long to appear');
+    await page.context().close();
+  });
+  await scenario('41. browsers without AbortSignal.timeout (Safari 15) still load data and still time out', async () => {
+    const page = await newPage({ width: 1000, height: 800 });
+    await page.addInitScript(() => { delete AbortSignal.timeout; globalThis.__BM_TIMEOUT_MS = 1500; });
+    await page.goto(BASE + '/matchups/dragapult-ex/lists');
+    await lsec(page).getByText('Dreepy').first().waitFor({ state: 'visible', ...T });
+    await page.route('**/rest/v1/decks*', () => {}); // never answers
+    await page.goto(BASE + `/decks/${DECK_ID}`);
+    await see(page, 'took too long');
+    await page.context().close();
+  });
+  const SKEY = 'sb-rnujzhrfiqjfjqskekpt-auth-token';
+  await scenario('44. slow edge function outlasts the normal request deadline; old numeric ?list= links still open that list', async () => {
+    const page = await newPage({ width: 1000, height: 800 });
+    await page.addInitScript(([me, key]) => {
+      globalThis.__BM_TIMEOUT_MS = 1500;
+      localStorage.setItem(key, JSON.stringify({ access_token: 'x', refresh_token: 'y', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: me, email: 't@example.com' } }));
+    }, [ME, SKEY]);
+    await page.route('**/functions/v1/deck-import', async route => {
+      if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' } });
+      await new Promise(r => setTimeout(r, 2500));
+      await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+        body: JSON.stringify({ kind: 'limitless', title: 'Slow list', author: 'Ana', text: '4 Dreepy TWM 128\n3 Drakloak TWM 129\n2 Dragapult ex TWM 130\n4 Ultra Ball TWM 196' }) });
+    });
+    await page.goto(BASE + `/decks/${DECK_ID}?import=1`);
+    const dlg = page.getByRole('dialog');
+    await dlg.waitFor({ state: 'visible', ...T });
+    await dlg.getByRole('radio', { name: /Limitless link/ }).click(T);
+    await dlg.getByLabel('Link').fill('https://limitlesstcg.com/decks/list/777');
+    await dlg.getByRole('button', { name: 'Get list' }).click(T);
+    await dlg.getByText('Drakloak').first().waitFor({ state: 'visible', timeout: 12000 });
+    if (await dlg.getByText('took too long').count()) throw new Error('import timed out at the normal deadline');
+    await page.goto(BASE + '/matchups/dragapult-ex/lists?list=102');
+    const sel = lsec(page);
+    await sel.getByText('Selected list', { exact: true }).waitFor({ state: 'visible', ...T });
+    await sel.getByText('7-1-0', { exact: true }).waitFor({ state: 'visible', ...T });
+    await page.context().close();
+  });
+  await scenario('42. password sign-in succeeds: session stored, user sent on', async () => {
+    const page = await newPage({ width: 1000, height: 800 });
+    let asked = null;
+    await page.route('**/auth/v1/token*', async route => {
+      asked = route.request().url();
+      await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+        body: JSON.stringify({ access_token: 'pw-at', refresh_token: 'pw-rt', expires_in: 3600, user: { id: ME, email: 't@example.com' } }) });
+    });
+    await page.goto(BASE + '/login');
+    const pwToggle = page.getByRole('button', { name: 'Use a password instead' });
+    if (await pwToggle.count()) await pwToggle.click(T);
+    await page.getByLabel('Email').fill('t@example.com');
+    await page.getByLabel('Password').fill('hunter22');
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click(T);
+    await page.waitForURL(u => new URL(u).pathname !== '/login', T);
+    if (!asked || !/grant_type=password/.test(asked)) throw new Error(`token request: ${asked}`);
+    const stored = await page.evaluate(k => localStorage.getItem(k), SKEY);
+    if (!stored || !stored.includes('pw-at')) throw new Error('session not stored: ' + stored);
+    await page.context().close();
+  });
+  await scenario('43. importing a Limitless link calls the deck-import function and shows the cards', async () => {
+    const page = await newPage({ width: 1000, height: 800 });
+    await page.addInitScript(([me, key]) => {
+      localStorage.setItem(key, JSON.stringify({ access_token: 'x', refresh_token: 'y', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: me, email: 't@example.com' } }));
+    }, [ME, SKEY]);
+    let body = null;
+    await page.route('**/functions/v1/deck-import', async route => {
+      if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' } });
+      body = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+        body: JSON.stringify({ kind: 'limitless', title: 'Test list', author: 'Ana', text: '4 Dreepy TWM 128\n3 Drakloak TWM 129\n2 Dragapult ex TWM 130\n4 Ultra Ball TWM 196' }) });
+    });
+    await page.goto(BASE + `/decks/${DECK_ID}?import=1`);
+    const dlg = page.getByRole('dialog');
+    await dlg.waitFor({ state: 'visible', ...T });
+    await dlg.getByRole('radio', { name: /Limitless link/ }).click(T);
+    await dlg.getByLabel('Link').fill('https://limitlesstcg.com/decks/list/12345');
+    await dlg.getByRole('button', { name: 'Get list' }).click(T);
+    await dlg.getByText('Drakloak').first().waitFor({ state: 'visible', ...T });
+    if (!body || body.url !== 'https://limitlesstcg.com/decks/list/12345') throw new Error(`deck-import body: ${JSON.stringify(body)}`);
+    await page.context().close();
+  });
+  await scenario('39. failing profile lookup does not ask a signed-in user to pick a username', async () => {
+    const page = await newPage({ width: 1000, height: 800 });
+    const before = pageErrors.length;
+    await page.addInitScript(([me, key]) => {
+      localStorage.setItem(key, JSON.stringify({ access_token: 'x', refresh_token: 'y', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: me, email: 't@example.com' } }));
+    }, [ME, SKEY]);
+    await page.route('**/rest/v1/profiles*', route => route.fulfill({ status: 503, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{}' }));
+    await page.goto(BASE + '/');
+    await page.locator('.topbar-actions button.btn.primary').first().waitFor({ state: 'visible', ...T });
+    await page.waitForTimeout(3500); // past the quiet retry
+    if (await page.getByText('Pick a username').count()) throw new Error('username prompt shown after a failed profile lookup');
+    pageErrors.length = before; // the failed loads are expected
+    await page.context().close();
+  });
+  await scenario('40. a 400 on token refresh keeps the user signed in when another tab stored a newer token', async () => {
+    const page = await newPage({ width: 1000, height: 800 });
+    const before = pageErrors.length;
+    await page.addInitScript(([me, key]) => {
+      localStorage.setItem(key, JSON.stringify({ access_token: 'old', refresh_token: 'old-rt', expires_at: Math.floor(Date.now() / 1000) - 100, user: { id: me, email: 't@example.com' } }));
+    }, [ME, SKEY]);
+    await page.route('**/auth/v1/token*', async route => {
+      // "another tab" rotates the token just before our refresh is rejected
+      await page.evaluate(([me, key]) => localStorage.setItem(key, JSON.stringify({ access_token: 'new', refresh_token: 'new-rt', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: me, email: 't@example.com' } })), [ME, SKEY]);
+      await route.fulfill({ status: 400, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"error":"invalid_grant"}' });
+    });
+    const rejected = page.waitForResponse(r => new URL(r.url()).pathname === '/auth/v1/token', T);
+    await page.goto(BASE + '/');
+    await rejected;
+    await page.locator('.topbar-actions button.btn.primary').first().waitFor({ state: 'visible', ...T });
+    const stored = await page.evaluate(k => localStorage.getItem(k), SKEY);
+    if (!stored || !stored.includes('new-rt')) throw new Error('session was dropped or not adopted: ' + stored);
+    await page.waitForTimeout(500); // let the browser's own "Failed to load resource" log for the expected 400 arrive
+    pageErrors.length = before; // that 400 is the point of this test
+    await page.context().close();
   });
 } finally {
   await browser.close();

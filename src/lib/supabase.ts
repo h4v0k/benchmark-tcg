@@ -40,6 +40,31 @@ function save(s: Session | null) {
 }
 export const onAuthChange = (f: Listener) => { listeners.add(f); return () => { listeners.delete(f); }; };
 export const getSession = () => session;
+// Another tab signed in, out, or rotated the token: follow it.
+if (typeof window !== 'undefined') window.addEventListener('storage', e => {
+  if (e.key !== null && e.key !== STORE_KEY) return;
+  try { if (e.storageArea && e.storageArea !== localStorage) return; } catch { return; }
+  const next = load();
+  if (next?.access_token === session?.access_token && next?.refresh_token === session?.refresh_token) return;
+  session = next;
+  listeners.forEach(f => f(session));
+});
+
+// Every request gets a deadline so a hung server shows an error instead of an endless spinner.
+const TIMEOUT_MS = (globalThis as any).__BM_TIMEOUT_MS || 15000;
+// AbortSignal.timeout is missing before Safari 16, so build the same thing by hand there.
+const timeoutSignal = (ms = TIMEOUT_MS): AbortSignal => {
+  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms);
+  const c = new AbortController();
+  setTimeout(() => c.abort(new DOMException('The operation timed out.', 'TimeoutError')), ms);
+  return c.signal;
+};
+const isTimeout = (e: unknown) => (e as any)?.name === 'TimeoutError' || (e as any)?.name === 'AbortError';
+const netError = (e: unknown) => isTimeout(e)
+  ? new ApiError('The server took too long to answer. Try again in a moment.', 0)
+  : new ApiError("Couldn't reach the server. Check your connection and try again.", 0);
+// The deadline also covers reading the body: report a timeout there the same friendly way.
+const withDeadline = <T,>(p: Promise<T>): Promise<T> => p.catch(e => { throw isTimeout(e) ? netError(e) : e; });
 
 const base = CONFIG.supabaseUrl.replace(/\/$/, '');
 const anon = CONFIG.supabaseAnonKey;
@@ -65,9 +90,19 @@ async function refresh(): Promise<Session | null> {
     const rt = session.refresh_token;
     refreshing = (async () => {
       try {
-        const r = await fetch(`${base}/auth/v1/token?grant_type=refresh_token`, { method: 'POST', headers: { apikey: anon, 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: rt }) });
-        if (r.ok) { const s = sessionFrom(await r.json()); save(s); return s; }
-        if (r.status === 400 || r.status === 401 || r.status === 403) save(null); // token revoked or expired
+        const r = await fetch(`${base}/auth/v1/token?grant_type=refresh_token`, { method: 'POST', headers: { apikey: anon, 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: rt }), signal: timeoutSignal() });
+        if (r.ok) { const s = sessionFrom(await withDeadline(r.json())); save(s); return s; }
+        if (r.status === 400 || r.status === 401 || r.status === 403) {
+          // Another tab may have rotated the token already: use what it stored instead of signing out.
+          // If both tabs refreshed at the same moment, the other one may not have stored its token yet: wait briefly.
+          for (const wait of [0, 1500]) {
+            if (wait) await new Promise(res => setTimeout(res, wait));
+            const stored = load();
+            if (stored && stored.refresh_token !== rt) { save(stored); return stored; }
+          }
+          if (session?.refresh_token !== rt) return session; // signed in again meanwhile
+          save(null); // token revoked or expired
+        }
         return session;
       } catch { return session; } finally { refreshing = null; }
     })();
@@ -80,15 +115,15 @@ async function token(): Promise<string> {
   return session?.access_token || anon;
 }
 
-async function call(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
+async function call(path: string, init: RequestInit = {}, retry = true, timeoutMs = TIMEOUT_MS): Promise<Response> {
   const headers = new Headers(init.headers);
   headers.set('apikey', anon);
   headers.set('Authorization', `Bearer ${await token()}`);
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   let r: Response;
-  try { r = await fetch(base + path, { ...init, headers }); }
-  catch { throw new ApiError("Couldn't reach the server. Check your connection and try again.", 0); }
-  if (r.status === 401 && retry && session) { await refresh(); return call(path, init, false); }
+  try { r = await fetch(base + path, { ...init, headers, signal: timeoutSignal(timeoutMs) }); }
+  catch (e) { throw netError(e); }
+  if (r.status === 401 && retry && session) { await refresh(); return call(path, init, false, timeoutMs); }
   return r;
 }
 
@@ -107,7 +142,7 @@ export async function select<T = any>(table: string, q: Query = {}, opts: { coun
   if (opts.range) { headers['Range-Unit'] = 'items'; headers.Range = `${opts.range[0]}-${opts.range[1]}`; }
   const r = await call(`/rest/v1/${table}${qs(q)}`, { headers });
   if (!r.ok && r.status !== 416) throw await readError(r);
-  const rows = r.status === 416 ? [] : await r.json();
+  const rows = r.status === 416 ? [] : await withDeadline(r.json());
   const cr = r.headers.get('content-range');
   const count = cr && cr.includes('/') && cr.split('/')[1] !== '*' ? parseInt(cr.split('/')[1], 10) : null;
   return { rows, count };
@@ -115,12 +150,12 @@ export async function select<T = any>(table: string, q: Query = {}, opts: { coun
 export async function insert<T = any>(table: string, row: object | object[], q: Query = {}): Promise<T[]> {
   const r = await call(`/rest/v1/${table}${qs(q)}`, { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(row) });
   if (!r.ok) throw await readError(r);
-  return r.json();
+  return withDeadline(r.json());
 }
 export async function update<T = any>(table: string, q: Query, patch: object): Promise<T[]> {
   const r = await call(`/rest/v1/${table}${qs(q)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) });
   if (!r.ok) throw await readError(r);
-  return r.json();
+  return withDeadline(r.json());
 }
 export async function remove(table: string, q: Query): Promise<void> {
   const r = await call(`/rest/v1/${table}${qs(q)}`, { method: 'DELETE' });
@@ -129,13 +164,15 @@ export async function remove(table: string, q: Query): Promise<void> {
 export async function rpc<T = any>(fn: string, args: object = {}): Promise<T> {
   const r = await call(`/rest/v1/rpc/${fn}`, { method: 'POST', body: JSON.stringify(args) });
   if (!r.ok) throw await readError(r);
-  const t = await r.text();
+  const t = await withDeadline(r.text());
   return (t ? JSON.parse(t) : null) as T;
 }
+// Edge functions can run long (catalog-sync works for up to 100 s; deck-import may chain several fetches).
+const FN_TIMEOUT_MS: Record<string, number> = { 'catalog-sync': 130000, 'rules-sync': 130000, 'deck-import': 45000 };
 export async function invoke<T = any>(fn: string, body: object): Promise<T> {
-  const r = await call(`/functions/v1/${fn}`, { method: 'POST', body: JSON.stringify(body) });
+  const r = await call(`/functions/v1/${fn}`, { method: 'POST', body: JSON.stringify(body) }, true, Math.max(FN_TIMEOUT_MS[fn] || 0, TIMEOUT_MS));
   if (!r.ok) throw await readError(r);
-  return r.json();
+  return withDeadline(r.json());
 }
 
 /* ---------------- Auth ---------------- */
@@ -143,14 +180,15 @@ const authFetch = async (path: string, body: object, withToken = false) => {
   const headers: Record<string, string> = { apikey: anon, 'Content-Type': 'application/json' };
   if (withToken) headers.Authorization = `Bearer ${await token()}`;
   let r: Response;
-  try { r = await fetch(`${base}/auth/v1/${path}`, { method: path === 'user' ? 'PUT' : 'POST', headers, body: JSON.stringify(body) }); }
-  catch { throw new ApiError("Couldn't reach the server. Check your connection and try again.", 0); }
+  try { r = await fetch(`${base}/auth/v1/${path}`, { method: path === 'user' ? 'PUT' : 'POST', headers, body: JSON.stringify(body), signal: timeoutSignal() }); }
+  catch (e) { throw netError(e); }
   if (!r.ok) throw await readError(r);
-  const t = await r.text();
+  const t = await withDeadline(r.text());
   return t ? JSON.parse(t) : {};
 };
 const redirectTo = () => encodeURIComponent(location.origin + '/');
 
+let passkeyShare: { at: number; p: Promise<any> } | null = null;
 export const auth = {
   async signIn(email: string, password: string) {
     const j = await authFetch('token?grant_type=password', { email, password });
@@ -167,11 +205,11 @@ export const auth = {
   async resetPassword(email: string) { await authFetch(`recover?redirect_to=${redirectTo()}`, { email }); },
   async setPassword(password: string) { await authFetch('user', { password }, true); },
   async signOut() {
-    try { if (session) await fetch(`${base}/auth/v1/logout`, { method: 'POST', headers: { apikey: anon, Authorization: `Bearer ${session.access_token}` } }); } catch { /* offline */ }
+    try { if (session) await fetch(`${base}/auth/v1/logout`, { method: 'POST', headers: { apikey: anon, Authorization: `Bearer ${session.access_token}` }, signal: timeoutSignal(5000) }); } catch { /* offline */ }
     save(null);
   },
   /** Picks up tokens Supabase puts in the URL after email confirmation or a password reset. */
-  async fromUrl(): Promise<{ type?: string; error?: string } | null> {
+  async fromUrl(stillWanted: () => boolean = () => true): Promise<{ type?: string; error?: string } | null> {
     const h = new URLSearchParams(location.hash.replace(/^#/, ''));
     const q = new URLSearchParams(location.search);
     const err = h.get('error_description') || q.get('error_description');
@@ -180,9 +218,14 @@ export const auth = {
     if (!at || !rt) return null;
     const type = h.get('type') || undefined;
     history.replaceState(null, '', location.pathname);
-    const r = await fetch(`${base}/auth/v1/user`, { headers: { apikey: anon, Authorization: `Bearer ${at}` } });
-    if (!r.ok) return { error: 'That link has expired. Request a new one.' };
-    const user = await r.json();
+    let r: Response;
+    let user: any;
+    try {
+      r = await fetch(`${base}/auth/v1/user`, { headers: { apikey: anon, Authorization: `Bearer ${at}` }, signal: timeoutSignal(5000) });
+      if (!r.ok) return { error: 'That link has expired. Request a new one.' };
+      user = await r.json();
+    } catch (e) { return { error: netError(e).message }; }
+    if (!stillWanted()) return null; // the page already gave up waiting and told the user
     save({ access_token: at, refresh_token: rt, expires_at: parseInt(h.get('expires_at') || '0', 10) || Math.floor(Date.now() / 1000) + parseInt(h.get('expires_in') || '3600', 10), user });
     return { type };
   },
@@ -206,16 +249,28 @@ export const auth = {
     const o = await authFetch('passkeys/registration/options', {}, true);
     const cred = await navigator.credentials.create({ publicKey: creationOptions(o.options) }) as PublicKeyCredential | null;
     if (!cred) throw new ApiError('Passkey setup was cancelled.', 400);
-    return authFetch('passkeys/registration/verify', { challenge_id: o.challenge_id, credential: credentialJSON(cred) }, true);
+    const done = await authFetch('passkeys/registration/verify', { challenge_id: o.challenge_id, credential: credentialJSON(cred) }, true);
+    passkeyShare = null;
+    return done;
   },
-  async passkeys(): Promise<{ id: string; friendly_name?: string; created_at: string; last_used_at?: string }[]> {
-    const r = await fetch(`${base}/auth/v1/passkeys/`, { headers: { apikey: anon, Authorization: `Bearer ${await token()}` } });
-    if (!r.ok) throw await readError(r);
-    return r.json();
+  // The sign-in nudge (App) and the Settings page both list passkeys on load; share one request
+  // for a few seconds. Registering or removing a passkey clears the share.
+  passkeys(): Promise<{ id: string; friendly_name?: string; created_at: string; last_used_at?: string }[]> {
+    if (passkeyShare && Date.now() - passkeyShare.at < 3000) return passkeyShare.p;
+    const p = (async () => {
+      const r = await fetch(`${base}/auth/v1/passkeys/`, { headers: { apikey: anon, Authorization: `Bearer ${await token()}` }, signal: timeoutSignal() }).catch(e => { throw netError(e); });
+      if (!r.ok) throw await readError(r);
+      return withDeadline(r.json());
+    })();
+    const share = { at: Date.now(), p };
+    passkeyShare = share;
+    p.catch(() => { if (passkeyShare === share) passkeyShare = null; });
+    return p;
   },
   async deletePasskey(id: string) {
-    const r = await fetch(`${base}/auth/v1/passkeys/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { apikey: anon, Authorization: `Bearer ${await token()}` } });
+    const r = await fetch(`${base}/auth/v1/passkeys/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { apikey: anon, Authorization: `Bearer ${await token()}` }, signal: timeoutSignal() }).catch(e => { throw netError(e); });
     if (!r.ok) throw await readError(r);
+    passkeyShare = null;
   },
   refresh,
 };

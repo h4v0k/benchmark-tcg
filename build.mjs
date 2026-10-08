@@ -15,23 +15,26 @@ async function build() {
     entryPoints: ['src/main.tsx'],
     bundle: true,
     minify: !serve,
-    sourcemap: true,
+    splitting: true,
+    sourcemap: serve,
     format: 'esm',
     target: ['es2020', 'safari15'],
     jsx: 'automatic',
     outdir: `${out}/assets`,
     entryNames: '[name]-[hash]',
+    chunkNames: 'chunks/[name]-[hash]',
     metafile: true,
     define: { 'process.env.NODE_ENV': JSON.stringify(serve ? 'development' : 'production') },
     logLevel: 'warning',
   });
   const css = await readFile('src/styles.css', 'utf8');
-  const cssName = `styles-${createHash('sha1').update(css).digest('hex').slice(0, 8)}.css`;
-  await writeFile(`${out}/assets/${cssName}`, css);
-  const js = Object.keys(result.metafile.outputs).find(f => f.endsWith('.js'));
+  const cssOut = serve ? css : (await esbuild.transform(css, { loader: 'css', minify: true })).code;
+  const cssName = `styles-${createHash('sha1').update(cssOut).digest('hex').slice(0, 8)}.css`;
+  await writeFile(`${out}/assets/${cssName}`, cssOut);
+  const js = Object.entries(result.metafile.outputs).find(([f, o]) => o.entryPoint === 'src/main.tsx')[0];
   const html = (await readFile('index.html', 'utf8'))
     .replace('%CSS%', `/assets/${cssName}`)
-    .replace('%JS%', '/' + path.relative(out, js));
+    .replaceAll('%JS%', '/' + path.relative(out, js));
   await writeFile(`${out}/index.html`, html);
   await cp('public', out, { recursive: true });
   console.log(`built ${js} (${(result.metafile.outputs[js].bytes / 1024).toFixed(0)} KB)`);

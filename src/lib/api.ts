@@ -11,13 +11,26 @@ const DECK_COLS = '*,owner_profile:profiles!decks_owner_fkey(username,avatar_car
 const cardCache = new Map<string, Card>();
 export const cachedCard = (id: string) => cardCache.get(id);
 
+// Card ids currently being fetched, so concurrent callers asking for the same ids share one request.
+const cardInflight = new Map<string, Promise<void>>();
+
 export async function cardsById(ids: string[]): Promise<Map<string, Card>> {
   const want = [...new Set(ids)].filter(id => id && !cardCache.has(id));
-  for (let i = 0; i < want.length; i += 80) {
-    const chunk = want.slice(i, i + 80);
-    const { rows } = await sb.select<Card>('cards', { select: CARD_COLS, id: `in.(${chunk.map(x => `"${x.replace(/"/g, '')}"`).join(',')})` });
-    rows.forEach(c => cardCache.set(c.id, c));
+  const waits: Promise<void>[] = [];
+  const fresh: string[] = [];
+  for (const id of want) {
+    const p = cardInflight.get(id);
+    if (p) waits.push(p); else fresh.push(id);
   }
+  for (let i = 0; i < fresh.length; i += 80) {
+    const chunk = fresh.slice(i, i + 80);
+    const req = sb.select<Card>('cards', { select: CARD_COLS, id: `in.(${chunk.map(x => `"${x.replace(/"/g, '')}"`).join(',')})` })
+      .then(({ rows }) => { rows.forEach(c => cardCache.set(c.id, c)); })
+      .finally(() => chunk.forEach(id => cardInflight.delete(id)));
+    chunk.forEach(id => cardInflight.set(id, req));
+    waits.push(req);
+  }
+  await Promise.all(waits);
   const out = new Map<string, Card>();
   ids.forEach(id => { const c = cardCache.get(id); if (c) out.set(id, c); });
   return out;
@@ -55,11 +68,10 @@ export const searchCards =(q: string, fmt: Format, cat = '', lim = 24) =>
 export type PrintingMode = 'cheapest' | 'exact';
 export async function resolveLines(lines: ParsedLine[], fmt: Format, mode: PrintingMode = 'cheapest'): Promise<Map<number, { id: string | null; how: string | null }>> {
   const out = new Map<number, { id: string | null; how: string | null }>();
-  for (let i = 0; i < lines.length; i += 80) {
-    const chunk = lines.slice(i, i + 80).map(l => ({ i: l.i, qty: l.qty, name: l.name, code: l.code, num: l.num }));
-    const rows = await sb.rpc<{ i: number; card_id: string | null; how: string | null }[]>('resolve_decklist_v2', { lines: chunk, fmt: fmt === 'unlimited' ? 'unlimited' : fmt, p_mode: mode });
-    rows.forEach(r => out.set(r.i, { id: r.card_id, how: r.how }));
-  }
+  const chunks: ParsedLine[][] = [];
+  for (let i = 0; i < lines.length; i += 80) chunks.push(lines.slice(i, i + 80));
+  const results = await Promise.all(chunks.map(ch => sb.rpc<{ i: number; card_id: string | null; how: string | null }[]>('resolve_decklist_v2', { lines: ch.map(l => ({ i: l.i, qty: l.qty, name: l.name, code: l.code, num: l.num })), fmt: fmt === 'unlimited' ? 'unlimited' : fmt, p_mode: mode })));
+  results.forEach(rows => rows.forEach(r => out.set(r.i, { id: r.card_id, how: r.how })));
   return out;
 }
 
@@ -285,10 +297,11 @@ export const matchups = (deck: string, source: MatchupSource, days: number) => s
 export const matchupCoverage = (source: MatchupSource, days: number) => sb.rpc<MatchupCoverage>('matchup_coverage', { p_source: source, p_days: days });
 
 /* Winning lists: top decklists from online events, with records */
-export type DeckListRow = { id: number; event_name: string; date: string; event_players: number | null; player: string; place: number | null; wins: number; losses: number; ties: number; win_pct: number | null };
-export type DeckListFull = DeckListRow & { deck: string; event_id: string; list: string };
+export type ListTier = 'online' | 'regional' | 'international' | 'worlds';
+export type DeckListRow = { key: string; tier: ListTier; event_name: string; date: string; event_players: number | null; player: string; place: number | null; wins: number | null; losses: number | null; ties: number | null; score: number };
+export type DeckListFull = DeckListRow & { deck: string | null; event_id: string; list: string | null; cards: DeckEntry[] | null; missing: string[] | null; list_id: number | null };
 export const deckLists = (deck: string, days: number) => sb.rpc<DeckListRow[]>('deck_lists', { p_deck: deck, p_days: days });
-export const deckList = async (id: number) => (await sb.rpc<DeckListFull[]>('deck_list', { p_id: id }))[0] || null;
+export const deckList = async (key: string) => (await sb.rpc<DeckListFull[]>('deck_list', { p_key: key }))[0] || null;
 export async function archetypeName(slug: string): Promise<string | null> {
   const { rows } = await sb.select<{ name: string }>('archetypes', { select: 'name', slug: `eq.${slug}` });
   return rows[0]?.name || null;

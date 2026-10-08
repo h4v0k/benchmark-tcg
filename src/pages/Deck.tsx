@@ -52,19 +52,34 @@ export function DeckPage({ id }: { id: string }) {
   const editable = isOwner && editing;
 
   /* ---------- load ---------- */
+  // Each load gets a ticket; only the newest ticket may touch state, so a slow response for a
+  // previous deck (or previous signed-in user) can't overwrite the deck now on screen.
+  const loadSeq = useRef(0);
+  const uid = session?.user?.id;
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
+    const stale = () => seq !== loadSeq.current;
     setLoading(true); setError(null);
     try {
       const d = await api.getDeck(id);
-      if (!d) { setRow(null); setLoading(false); return; }
+      if (stale()) return;
+      if (!d) { setRow(null); setEntries([]); setCards(new Map()); setLoading(false); return; }
       const list = (Array.isArray(d.cards) ? d.cards : []).filter(e => e && e.cid && e.qty > 0).map(e => ({ ...e, board: (e.board === 'maybe' ? 'maybe' : 'main') as Board, name: e.name || String(e.cid) }));
       const map = await api.cardsById(list.map(e => e.cid));
+      if (stale()) return;
       setRow(d); setEntries(list); setCards(map);
-      if (session?.user && session.user.id !== d.owner) api.likedSet(session.user.id, [d.id]).then(s => setLiked(s.has(d.id))).catch(() => {});
-      if (!session || session.user.id !== d.owner) api.recordView(d.id);
-    } catch (e: any) { setError(e); } finally { setLoading(false); }
-  }, [id, session?.user?.id]);
-  useEffect(() => { load(); }, [load]);
+      if (uid && uid !== d.owner) api.likedSet(uid, [d.id]).then(s => { if (!stale()) setLiked(s.has(d.id)); }).catch(() => {});
+      if (!uid || uid !== d.owner) api.recordView(d.id);
+    } catch (e: any) { if (!stale()) setError(e); } finally { if (!stale()) setLoading(false); }
+  }, [id, uid]);
+  // Reload only when the deck or the signed-in user actually changes (not when the session re-emits the same id).
+  const loadedFor = useRef('');
+  useEffect(() => {
+    const key = `${id}|${uid ?? ''}`;
+    if (loadedFor.current === key) return;
+    loadedFor.current = key; load();
+  }, [load, id, uid]);
+  useEffect(() => () => { loadSeq.current++; }, []);
   useEffect(() => { api.rules().then(setRules).catch(() => {}); }, []);
   useEffect(() => { if (query.get('import') === '1' && isOwner) { setEditing(true); setModal({ kind: 'import' }); setQuery({ import: null, edit: '1' }); } }, [isOwner]);
 

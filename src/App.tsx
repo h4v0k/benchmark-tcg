@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { Component, Suspense, lazy, useEffect, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
 import { AuthProvider, Toasts, toast, useAuth, useTheme } from './state';
 import { Link, match, navigate, useRoute } from './router';
 import { Avatar, HoverPreview, Icon, Menu, MenuItem, Modal, Spinner } from './components/ui';
@@ -8,20 +8,44 @@ import * as api from './lib/api';
 import * as sb from './lib/supabase';
 import { Home } from './pages/Home';
 import { Browse } from './pages/Browse';
-import { DeckPage } from './pages/Deck';
-import { ProfilePage } from './pages/Profile';
-import { MyDecks } from './pages/MyDecks';
-import { Feed } from './pages/Feed';
 import { CardsPage, CardPage } from './pages/Cards';
-import { RulesPage } from './pages/Rules';
-import { EventsPage, EventPage, EventDeckPage } from './pages/Events';
-import { MatchupsPage } from './pages/Matchups';
-import { DeckListsPage } from './pages/DeckLists';
-import { ArchetypePage } from './pages/Archetype';
-import { LoginPage } from './pages/Login';
-import { SettingsPage } from './pages/Settings';
-import { AdminPage } from './pages/Admin';
-import { UsersPage } from './pages/Users';
+
+// Pages most first-time visitors never open are split into their own chunks.
+const DeckPage = lazy(() => import('./pages/Deck').then(m => ({ default: m.DeckPage })));
+const ProfilePage = lazy(() => import('./pages/Profile').then(m => ({ default: m.ProfilePage })));
+const MyDecks = lazy(() => import('./pages/MyDecks').then(m => ({ default: m.MyDecks })));
+const Feed = lazy(() => import('./pages/Feed').then(m => ({ default: m.Feed })));
+const RulesPage = lazy(() => import('./pages/Rules').then(m => ({ default: m.RulesPage })));
+const EventsPage = lazy(() => import('./pages/Events').then(m => ({ default: m.EventsPage })));
+const EventPage = lazy(() => import('./pages/Events').then(m => ({ default: m.EventPage })));
+const EventDeckPage = lazy(() => import('./pages/Events').then(m => ({ default: m.EventDeckPage })));
+const MatchupsPage = lazy(() => import('./pages/Matchups').then(m => ({ default: m.MatchupsPage })));
+const DeckListsPage = lazy(() => import('./pages/DeckLists').then(m => ({ default: m.DeckListsPage })));
+const ArchetypePage = lazy(() => import('./pages/Archetype').then(m => ({ default: m.ArchetypePage })));
+const LoginPage = lazy(() => import('./pages/Login').then(m => ({ default: m.LoginPage })));
+const SettingsPage = lazy(() => import('./pages/Settings').then(m => ({ default: m.SettingsPage })));
+const AdminPage = lazy(() => import('./pages/Admin').then(m => ({ default: m.AdminPage })));
+const UsersPage = lazy(() => import('./pages/Users').then(m => ({ default: m.UsersPage })));
+
+const isId = (v: string) => /^[1-9]\d{0,14}$/.test(v);
+
+// A stale tab after a deploy can't fetch old chunk files; show a reload prompt instead of a blank page.
+class PageBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error(error, info.componentStack); }
+  render() {
+    if (!this.state.error) return this.props.children;
+    const stale = /dynamically imported module|Importing a module script|ChunkLoadError|Loading chunk/i.test(String(this.state.error.message || this.state.error));
+    return (
+      <div className="wrap page"><div className="empty" role="alert">
+        <h2>{stale ? 'The site was updated' : 'Something went wrong'}</h2>
+        <p>{stale ? 'A newer version of Benchmark is available. Reload to continue.' : 'This page failed to load. Reloading may fix it.'}</p>
+        <button className="btn primary" onClick={() => location.reload()}>Reload</button>
+      </div></div>
+    );
+  }
+}
 
 export function App({ authLink }: { authLink: { type?: string; error?: string } | null }) {
   return (
@@ -43,8 +67,8 @@ const ROUTES: [string, (p: Record<string, string>) => ReactElement][] = [
   ['/cards/:id', p => <CardPage id={p.id} />],
   ['/rules', () => <RulesPage />],
   ['/events', () => <EventsPage />],
-  ['/events/:id', p => <EventPage id={+p.id} />],
-  ['/events/:id/:place', p => <EventDeckPage id={+p.id} place={+p.place} />],
+  ['/events/:id', p => isId(p.id) ? <EventPage id={+p.id} /> : <NotFound />],
+  ['/events/:id/:place', p => isId(p.id) && isId(p.place) ? <EventDeckPage id={+p.id} place={+p.place} /> : <NotFound />],
   ['/matchups', () => <MatchupsPage />],
   ['/matchups/:deck', p => <MatchupsPage deck={p.deck} />],
   ['/matchups/:deck/lists', p => <DeckListsPage deck={p.deck} />],
@@ -71,7 +95,7 @@ function Shell({ authLink }: { authLink: { type?: string; error?: string } | nul
       <a className="skip" href="#main">Skip to content</a>
       <TopBar />
       <main id="main" tabIndex={-1}>
-        {!ready ? <Spinner /> : page || <NotFound />}
+        {!ready ? <Spinner /> : <PageBoundary key={path}><Suspense fallback={<Spinner />}>{page || <NotFound />}</Suspense></PageBoundary>}
       </main>
       <Footer />
       {needsUsername && <UsernameModal />}

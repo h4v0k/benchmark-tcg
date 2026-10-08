@@ -19,23 +19,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState(sb.getSession());
   const [profile, setProfile] = useState<Profile | null>(null);
   const [ready, setReady] = useState(false);
+  const [profileError, setProfileError] = useState(false); // lookup failed: we don't know if they have a username
   const refreshProfile = useCallback(async () => {
     const s = sb.getSession();
-    if (!s) { setProfile(null); return; }
-    try { setProfile(await api.myProfile(s.user.id)); } catch { /* offline: keep what we have */ }
+    if (!s) { setProfile(null); setProfileError(false); return; }
+    try { setProfile(await api.myProfile(s.user.id)); setProfileError(false); } catch { setProfileError(true); /* offline: keep what we have */ }
   }, []);
   useEffect(() => sb.onAuthChange(s => { setSession(s); if (!s) setProfile(null); }), []);
   useEffect(() => {
     let alive = true;
     (async () => {
       if (session) {
-        try { const p = await api.myProfile(session.user.id); if (alive) setProfile(p); } catch { /* ignore */ }
-      }
+        try { const p = await api.myProfile(session.user.id); if (alive) { setProfile(p); setProfileError(false); } }
+        catch {
+          if (alive) setProfileError(true);
+          // One quiet retry a little later, without holding up the page.
+          setTimeout(async () => {
+            if (!alive) return;
+            try { const p = await api.myProfile(session.user.id); if (alive) { setProfile(p); setProfileError(false); } } catch { /* stay in error state */ }
+          }, 2500);
+        }
+      } else setProfileError(false);
       if (alive) setReady(true);
     })();
     return () => { alive = false; };
   }, [session?.user?.id]);
-  const value = useMemo(() => ({ ready, session, profile, needsUsername: ready && !!session && !profile, refreshProfile, setProfile }), [ready, session, profile, refreshProfile]);
+  const value = useMemo(() => ({ ready, session, profile, needsUsername: ready && !!session && !profile && !profileError, refreshProfile, setProfile }), [ready, session, profile, profileError, refreshProfile]);
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }
 
