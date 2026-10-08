@@ -34,6 +34,10 @@ create table if not exists public.mu_events (
   done_at timestamptz,
   primary key (source, event_id)
 );
+-- columns added while this migration was being written, in case an earlier draft of it was ever applied
+alter table public.mu_events add column if not exists starts_at timestamptz;
+alter table public.mu_events add column if not exists rounds_done int[] not null default '{}';
+alter table public.mu_events add column if not exists revived boolean not null default false;
 create index if not exists mu_events_todo on public.mu_events (status, date desc) where status not in ('done', 'skip');
 create index if not exists mu_events_source_date on public.mu_events (source, date desc) where status = 'done';
 
