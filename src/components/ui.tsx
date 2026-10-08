@@ -125,8 +125,19 @@ export const MenuItem = ({ children, onClick, href, danger, icon }: { children: 
 
 export function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: ReactNode; title?: string }[]; onChange: (v: T) => void; label: string }) {
   return (
-    <div className="segmented" role="radiogroup" aria-label={label}>
-      {options.map(o => <button key={o.value} role="radio" aria-checked={value === o.value} title={o.title} className={value === o.value ? 'on' : ''} onClick={() => onChange(o.value)}>{o.label}</button>)}
+    <div className="segmented" role="radiogroup" aria-label={label}
+      onKeyDown={e => {
+        const i = options.findIndex(o => o.value === value);
+        const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+        if (!step || i < 0) return;
+        e.preventDefault();
+        const group = e.currentTarget;  // React clears currentTarget after the handler returns
+        const next = options[(i + step + options.length) % options.length];
+        onChange(next.value);
+        requestAnimationFrame(() => (group.querySelector(`[data-v="${CSS.escape(next.value)}"]`) as HTMLElement | null)?.focus());
+      }}>
+      {options.map(o => <button key={o.value} type="button" role="radio" data-v={o.value} aria-checked={value === o.value} tabIndex={value === o.value ? 0 : -1}
+        title={o.title} className={value === o.value ? 'on' : ''} onClick={() => onChange(o.value)}>{o.label}</button>)}
     </div>
   );
 }

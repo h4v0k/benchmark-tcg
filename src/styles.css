@@ -18,7 +18,7 @@
   --line: #e1e4ea; --line2: #d2d7df;
   --text: #1b1f27; --muted: #5d6676; --faint: #8b93a1;
   --accent: #2f6fe0; --accent2: #2560c8; --accent-soft: rgba(47, 111, 224, .1);
-  --ok: #17924f; --ok-soft: rgba(23, 146, 79, .1);
+  --ok: #107a3f; --ok-soft: rgba(16, 122, 63, .1);
   --bad: #d43b3b; --bad-soft: rgba(212, 59, 59, .09);
   --warn: #b97800; --warn-soft: rgba(185, 120, 0, .11);
   --info: #2f6fe0; --info-soft: rgba(47, 111, 224, .1);
@@ -624,14 +624,14 @@ a.event-row:hover, a.st-row:hover { border-color: var(--accent); }
 .mu-head h1 { overflow-wrap: anywhere; }
 .mu-overall { display: flex; align-items: baseline; gap: 8px; margin: 0; flex-wrap: wrap; }
 .mu-overall .mu-pct { font-size: 1.6em; }
-.crumbs a { display: inline-flex; align-items: center; gap: 4px; }
+.mu-page .crumbs a { display: inline-flex; align-items: center; gap: 4px; }
 .mu-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
 .mu-filters .select-inline select { min-height: 34px; font-size: 13px; padding: 4px 10px; }
 .mu-search { display: flex; min-width: 0; margin: 0 0 14px; }
-.mu-search input[type=search] { width: 100%; min-height: 44px; font-size: 16px; padding-left: 36px; } /* 16px stops iPhone zooming in */
+.mu-search input[type=search] { background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--radius-sm); outline: none; color: var(--text); width: 100%; min-height: 44px; font-size: 16px; padding-left: 36px; } /* 16px stops iPhone zooming in */
 .mu-search .icon { left: 12px; }
-input[type=search] { background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--radius-sm); padding: 7px 10px; outline: none; color: var(--text); }
-input[type=search]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.mu-search input[type=search]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+@media (pointer: coarse) { .mu-filters .segmented button { height: 40px; padding: 0 14px; } .mu-filters .select-inline select { min-height: 42px; } }
 
 .mu-list { list-style: none; margin: 0; padding: 0; }
 .mu-row { display: flex; align-items: center; gap: 12px; }

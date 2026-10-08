@@ -30,7 +30,7 @@ export function match(pattern: string, path: string): Record<string, string> | n
   if (a.length !== b.length) return null;
   const out: Record<string, string> = {};
   for (let i = 0; i < a.length; i++) {
-    if (a[i].startsWith(':')) out[a[i].slice(1)] = decodeURIComponent(b[i]);
+    if (a[i].startsWith(':')) { try { out[a[i].slice(1)] = decodeURIComponent(b[i]); } catch { out[a[i].slice(1)] = b[i]; } }
     else if (a[i] !== b[i]) return null;
   }
   return out;

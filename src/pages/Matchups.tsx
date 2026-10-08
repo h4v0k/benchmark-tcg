@@ -1,7 +1,7 @@
 // Matchups: pick an archetype, see what it beats and what beats it.
 // Two data sets, kept apart: online tournaments (Limitless Play) and official events (Limitless Labs).
 // Built for quick use at a tournament: on a deck's page, "Who are you facing?" comes first.
-import { useMemo, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import { Empty, ErrorBox, Icon, Segmented, Spinner, useAsync } from '../components/ui';
 import { Link, navigate, setQuery, useRoute } from '../router';
 import * as api from '../lib/api';
@@ -96,7 +96,7 @@ export function MatchupsPage({ deck }: { deck?: string }) {
   const [find, setFind] = useState('');
   const min = MIN_GAMES[source];
 
-  if (deck) return <DeckMatchups deck={deck} source={source} days={days} decks={decks.data} cover={cover.data} controls={controls} />;
+  if (deck) return <DeckMatchups key={deck} deck={deck} source={source} days={days} decks={decks.data} cover={cover.data} controls={controls} />;
 
   const q = find.trim().toLowerCase();
   const list = (decks.data || []).filter(d => !q || d.name.toLowerCase().includes(q));
@@ -140,6 +140,7 @@ function DeckMatchups({ deck, source, days, decks, cover, controls }: { deck: st
   const r = useAsync(() => api.matchups(deck, source, +days), [deck, source, days]);
   const [find, setFind] = useState('');
   const [all, setAll] = useState(false);
+  useEffect(() => setAll(false), [source, days]);  // a new data set starts collapsed (the opponent search is kept)
   const me = decks?.find(d => d.deck === deck);
   const name = me?.name || deck.replace(/-/g, ' ');
   const min = MIN_GAMES[source];
@@ -153,7 +154,9 @@ function DeckMatchups({ deck, source, days, decks, cover, controls }: { deck: st
   }, [rows, min]);
   const q = find.trim().toLowerCase();
   const found = q ? rows.filter(m => m.name.toLowerCase().includes(q)) : [];
-  const shown = all ? rows : rows.slice(0, FIRST);
+  // "Other matchups" = everything not already in best/worst, so nothing is shown twice
+  const others = rows.filter(m => !best.includes(m) && !worst.includes(m));
+  const shown = all ? others : others.slice(0, FIRST);
   const meFew = me ? me.games < min : false;
 
   return (
@@ -171,8 +174,9 @@ function DeckMatchups({ deck, source, days, decks, cover, controls }: { deck: st
       ) : (
         <>
           <SearchBox value={find} onChange={setFind} label="Who are you facing?" placeholder="Who are you facing?" />
+          <p className="sr-only" aria-live="polite">{q ? `${found.length} result${found.length === 1 ? '' : 's'}` : ''}</p>
           {q ? (
-            <section className="mu-section" aria-live="polite">
+            <section className="mu-section">
               {!found.length ? <p className="muted">No results against “{find}” {source === 'online' ? 'online' : 'at official events'} in this period.</p>
                 : <ul className="mu-list">{found.map(m => <MuRow key={m.opp} m={m} min={min} bar big />)}</ul>}
             </section>
@@ -191,11 +195,12 @@ function DeckMatchups({ deck, source, days, decks, cover, controls }: { deck: st
                 </section>
               </div>
               <section className="mu-section">
-                <h2 className="mu-h">All matchups <span className="muted small">most played first</span></h2>
-                <ul className="mu-list">{shown.map(m => <MuRow key={m.opp} m={m} min={min} bar />)}</ul>
-                {rows.length > FIRST && (
+                <h2 className="mu-h">{best.length || worst.length ? 'Other matchups' : 'All matchups'} <span className="muted small">most played first</span></h2>
+                {others.length ? <ul className="mu-list">{shown.map(m => <MuRow key={m.opp} m={m} min={min} />)}</ul>
+                  : <p className="muted small">Every matchup is listed above.</p>}
+                {others.length > FIRST && (
                   <button className="btn block mu-more" onClick={() => setAll(a => !a)} aria-expanded={all}>
-                    {all ? 'Show fewer' : `Show all ${rows.length}`}
+                    {all ? 'Show fewer' : `Show all ${others.length}`}
                   </button>
                 )}
               </section>
