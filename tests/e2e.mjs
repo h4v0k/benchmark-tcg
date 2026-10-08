@@ -70,9 +70,16 @@ const MU_DECKS_OFFICIAL = [
 const muOpp = (opp, name, games, wins, losses, ties) => ({ opp, name, icons: [], games, wins, losses, ties, win_pct: Math.round(1000 * (wins + ties / 3) / games) / 10 });
 const MU_DRAGAPULT = [
   muOpp('n-zoroark', "N's Zoroark", 60, 36, 22, 2),
-  muOpp('gardevoir-ex', 'Gardevoir', 55, 22, 31, 2),
+  muOpp('gardevoir-ex', 'Gardevoir', 55, 15, 38, 2),
+  muOpp('raging-bolt-ex', 'Raging Bolt', 50, 30, 19, 1),
+  muOpp('charizard-ex', 'Charizard', 45, 14, 30, 1),
   muOpp('basic-box-m', 'Basic Box', 40, 20, 20, 0),
+  muOpp('lugia-vstar', 'Lugia', 35, 20, 14, 1),
+  muOpp('ceruledge-ex', 'Ceruledge', 30, 18, 12, 0),
+  muOpp('toxtricity', 'Toxtricity', 30, 10, 20, 0),
+  muOpp('terapagos-ex', 'Terapagos', 25, 8, 17, 0),
   muOpp('crustle-dri', 'Crustle', 9, 7, 2, 0),
+  muOpp('froslass', 'Froslass', 5, 1, 4, 0),
 ];
 const RULES = {"standard_min_mark":"H","formats":[{"format":"standard","min_mark":"H","min_release":null,"season":"2026-27","notes":"","source":"","checked_at":"2026-10-05T12:00:00Z","updated_at":"2026-10-05T12:00:00Z"},{"format":"expanded","min_mark":null,"min_release":"2011-04-25","season":"","notes":"","source":"","checked_at":"2026-10-05T12:00:00Z","updated_at":"2026-10-05T12:00:00Z"}],"next_rotation":null,"bans":[{"format":"expanded","card_name":"Red Card","printings":[{"set":"XY","num":"124/146"}],"card_ids":["xy1-124"],"effective_date":null,"source":""}],"upcoming_sets":[],"last_checked":"2026-10-05T12:00:00Z","last_catalog_sync":"2026-10-05T12:00:00Z","card_count":20000};
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
@@ -275,64 +282,151 @@ try {
     }
     await page.context().close();
   });
-  const mu = await newPage({ width: 390, height: 844 });
   const overflowOf = p => p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  await scenario('10m. matchups deck list + Find a deck filter', async () => {
+  const BIG = 'body{font-size:24px}';
+  const shotP = (p, f) => p.screenshot({ path: '/home/claude/' + f, fullPage: true });
+  const noOverflow = async (p, what) => { const o = await overflowOf(p); if (o > 1) throw new Error(`${what}: horizontal overflow of ${o}px`); };
+  const sec = (p, t) => p.locator('section.mu-section', { has: p.getByRole('heading', { name: t }) });
+  const deckReady = async p => { await p.getByRole('heading', { name: 'Dragapult', level: 1 }).waitFor({ state: 'visible', ...T }); await sec(p, 'All matchups').locator('li').first().waitFor({ state: 'visible', ...T }); };
+  const mu = await newPage({ width: 390, height: 844 });
+  await scenario('10m. matchups list renders + Find a deck filter', async () => {
     await mu.goto(BASE + '/matchups');
-    await see(mu, 'Dragapult');
-    for (const n of ['Dragapult', "N's Zoroark", 'Gardevoir', 'Basic Box', 'Crustle']) await mu.locator('.mu-decks').getByText(n, { exact: true }).waitFor({ state: 'visible', ...T });
-    await mu.screenshot({ path: '/home/claude/mu-list-phone.png', fullPage: true });
+    await mu.getByLabel('Find a deck').waitFor({ state: 'visible', ...T });
+    const rows = mu.locator('a.mu-link');
+    await rows.first().waitFor({ state: 'visible', ...T });
+    if (await rows.count() !== 5) throw new Error(`expected 5 deck rows, got ${await rows.count()}`);
+    for (const n of ['Dragapult', "N's Zoroark", 'Gardevoir', 'Basic Box', 'Crustle']) await rows.filter({ hasText: n }).first().waitFor({ state: 'visible', ...T });
+    const first = (await rows.first().textContent()) || '';
+    if (!/412 games/.test(first) || !/%/.test(first)) throw new Error(`row text: ${first}`);
+    await noOverflow(mu, 'list 390');
+    await shotP(mu, 'mu-list-phone.png');
     await mu.getByLabel('Find a deck').fill('zor');
-    await mu.locator('.mu-decks li').first().waitFor({ state: 'visible', ...T });
-    const n = await mu.locator('.mu-decks li').count();
-    if (n !== 1) throw new Error(`expected 1 deck after filtering, got ${n}`);
-    await mu.locator('.mu-decks').getByText("N's Zoroark", { exact: true }).waitFor({ state: 'visible', ...T });
+    await mu.waitForFunction(() => document.querySelectorAll('a.mu-link').length === 1, null, T);
+    await rows.filter({ hasText: "N's Zoroark" }).first().waitFor({ state: 'visible', ...T });
+    await mu.getByLabel('Find a deck').fill('nope-xyz');
+    await mu.waitForFunction(() => document.querySelectorAll('a.mu-link').length === 0, null, T);
+    await see(mu, 'No deck matches');
   });
-  await scenario('11m. matchups Official events toggle', async () => {
+  await scenario('11m. matchups Official switch + period select change URL', async () => {
     await mu.goto(BASE + '/matchups');
-    await see(mu, 'Crustle');
-    await mu.getByRole('button', { name: 'Official events' }).or(mu.getByRole('radio', { name: 'Official events' })).or(mu.getByText('Official events', { exact: true })).first().click(T);
-    await mu.waitForURL(u => new URL(u).searchParams.get('src') === 'official', T);
-    await see(mu, 'Raging Bolt');
-    if (await mu.locator('.mu-decks').getByText('Crustle', { exact: true }).count()) throw new Error('Crustle still listed for official');
-    const n = await mu.locator('.mu-decks li').count();
-    if (n !== 3) throw new Error(`expected 3 official decks, got ${n}`);
-    await mu.getByText('30 days', { exact: true }).or(mu.getByText('90 days', { exact: true })).first().click(T);
-    await mu.waitForURL(u => new URL(u).searchParams.get('days') !== null, T);
+    await mu.locator('a.mu-link').first().waitFor({ state: 'visible', ...T });
+    const period = mu.getByLabel('Period');
+    if (await period.inputValue() !== '30') throw new Error('online default period should be 30');
+    const optsOnline = await period.locator('option').allTextContents();
+    if (optsOnline.join('|') !== 'Last 14 days|Last 30 days|Last 60 days') throw new Error(`online options: ${optsOnline}`);
+    await period.selectOption('60');
+    await mu.waitForURL(u => new URL(u).searchParams.get('days') === '60', T);
+    await mu.getByRole('radiogroup', { name: 'Results from' }).getByText('Official', { exact: true }).click(T);
+    await mu.waitForURL(u => { const s = new URL(u).searchParams; return s.get('src') === 'official' && s.get('days') === null; }, T);
+    await mu.locator('a.mu-link', { hasText: 'Raging Bolt' }).first().waitFor({ state: 'visible', ...T });
+    if (await mu.locator('a.mu-link', { hasText: 'Crustle' }).count()) throw new Error('Crustle still listed for official');
+    if (await mu.locator('a.mu-link').count() !== 3) throw new Error(`expected 3 official decks, got ${await mu.locator('a.mu-link').count()}`);
+    if (await period.inputValue() !== '90') throw new Error('official default period should be 90');
+    const optsOff = await period.locator('option').allTextContents();
+    if (optsOff.join('|') !== 'Last 30 days|Last 60 days|Last 90 days|Last 180 days') throw new Error(`official options: ${optsOff}`);
+    await period.selectOption('180');
+    await mu.waitForURL(u => new URL(u).searchParams.get('days') === '180', T);
+    await period.selectOption('90');
+    await mu.waitForURL(u => new URL(u).searchParams.get('days') === null, T);
+    await mu.getByRole('radiogroup', { name: 'Results from' }).getByText('Online', { exact: true }).click(T);
+    await mu.waitForURL(u => new URL(u).searchParams.get('src') === null, T);
+    await mu.locator('a.mu-link', { hasText: 'Crustle' }).first().waitFor({ state: 'visible', ...T });
   });
-  await scenario('12m. matchups deck page sections + opponent filter', async () => {
+  await scenario('12m. matchups deck page: best/worst, few games, show all, search, details', async () => {
     await mu.goto(BASE + '/matchups/dragapult-ex');
-    await see(mu, 'Strong against');
-    const sec = t => mu.locator('section.panel', { has: mu.getByRole('heading', { name: t }) });
-    const strong = sec('Strong against'), weak = sec('Weak against'), every = sec('Every matchup');
-    await strong.getByText("N's Zoroark").first().waitFor({ state: 'visible', ...T });
-    await weak.getByText('Gardevoir').first().waitFor({ state: 'visible', ...T });
-    if (await strong.getByText('Crustle').count() || await weak.getByText('Crustle').count()) throw new Error('small-sample opponent listed in strong/weak');
-    await every.getByText('Crustle').first().waitFor({ state: 'visible', ...T });
-    await every.getByText('small sample').first().waitFor({ state: 'visible', ...T });
-    if (await every.locator('li').count() !== 4) throw new Error('expected 4 rows in Every matchup');
-    await every.getByLabel('Find an opponent').fill('gard');
-    await every.locator('li').first().waitFor({ state: 'visible', ...T });
-    const n = await every.locator('li').count();
-    if (n !== 1) throw new Error(`expected 1 row after opponent filter, got ${n}`);
-    await mu.screenshot({ path: '/home/claude/mu-deck-phone.png', fullPage: true });
-    const o = await overflowOf(mu);
-    if (o > 1) throw new Error(`horizontal overflow of ${o}px`);
+    await deckReady(mu);
+    await mu.getByRole('link', { name: /Matchups/ }).first().waitFor({ state: 'visible', ...T });
+    await see(mu, 'overall · 412 games');
+    await see(mu, 'updated every 6 hours');
+    const best = sec(mu, 'Best matchups'), worst = sec(mu, 'Worst matchups'), all = sec(mu, 'All matchups');
+    const names = async s => (await s.locator('li .mu-name b').allTextContents());
+    const b = await names(best), w = await names(worst);
+    if (b.join('|') !== "N's Zoroark|Raging Bolt|Ceruledge") throw new Error(`best: ${b}`);
+    if (w.join('|') !== 'Gardevoir|Charizard|Terapagos') throw new Error(`worst: ${w}`);
+    for (const s of [best, worst]) if (await s.getByText('few games').count() || (await names(s)).includes('Crustle') || (await names(s)).includes('Froslass')) throw new Error('few-games row in best/worst');
+    // all: first 8 only; few-games rows hidden until expanded
+    if (await all.locator('li').count() !== 8) throw new Error(`expected 8 rows in All, got ${await all.locator('li').count()}`);
+    const more = all.getByRole('button', { name: 'Show all 11' });
+    await more.waitFor({ state: 'visible', ...T });
+    await noOverflow(mu, 'deck 390');
+    await shotP(mu, 'mu-deck-phone.png');
+    await more.click(T);
+    await all.getByRole('button', { name: 'Show fewer' }).waitFor({ state: 'visible', ...T });
+    if (await all.locator('li').count() !== 11) throw new Error('expected 11 rows after Show all');
+    const crustle = all.locator('li.few', { hasText: 'Crustle' });
+    await crustle.waitFor({ state: 'visible', ...T });
+    if (!/few games/.test(await crustle.textContent())) throw new Error('Crustle row lacks "few games"');
+    await all.getByRole('button', { name: 'Show fewer' }).click(T);
+    await all.getByRole('button', { name: 'Show all 11' }).waitFor({ state: 'visible', ...T });
+    if (await all.locator('li').count() !== 8) throw new Error('expected 8 rows after Show fewer');
+    // search hides sections
+    await mu.getByLabel('Who are you facing?').fill('gard');
+    await mu.getByRole('heading', { name: 'Best matchups' }).waitFor({ state: 'detached', ...T });
+    for (const h of ['Worst matchups', 'All matchups']) if (await mu.getByRole('heading', { name: h }).count()) throw new Error(`${h} still shown while searching`);
+    const rowsFound = mu.locator('li.mu-item');
+    if (await rowsFound.count() !== 1) throw new Error(`expected 1 search row, got ${await rowsFound.count()}`);
+    await rowsFound.first().getByText('Gardevoir').waitFor({ state: 'visible', ...T });
+    await noOverflow(mu, 'deck search 390');
+    await shotP(mu, 'mu-deck-search.png');
+    await mu.getByLabel('Who are you facing?').fill('');
+    await mu.getByRole('heading', { name: 'Best matchups' }).waitFor({ state: 'visible', ...T });
+    // details
+    const det = mu.locator('footer.mu-about details');
+    if (await det.evaluate(d => d.open)) throw new Error('details open by default');
+    await det.locator('summary').click(T);
+    if (!(await det.evaluate(d => d.open))) throw new Error('details did not open on click');
+    await det.getByText('Mirror matches are left out').waitFor({ state: 'visible', ...T });
+    await noOverflow(mu, 'deck 390 details open');
   });
-  await scenario('13m. matchups deck page with large text (150%)', async () => {
-    const page = await newPage({ width: 390, height: 844 });
+  const sizes = [[320, 640], [390, 844]];
+  for (const [w, h] of sizes) for (const big of [false, true]) await scenario(`13m. matchups at ${w}x${h}${big ? ' with large text (24px)' : ''}`, async () => {
+    const page = await newPage({ width: w, height: h });
     await page.goto(BASE + '/matchups/dragapult-ex');
-    await see(page, 'Strong against');
-    await page.addStyleTag({ content: 'body{font-size:24px}' }); // 150% of the 16px base
+    await deckReady(page);
+    if (big) await page.addStyleTag({ content: BIG });
     await page.waitForTimeout(300);
-    const o = await overflowOf(page);
-    await page.screenshot({ path: '/home/claude/mu-deck-phone-bigtext.png', fullPage: true });
-    if (o > 1) throw new Error(`horizontal overflow of ${o}px at 150% text`);
+    await noOverflow(page, 'deck');
+    await sec(page, 'All matchups').getByRole('button', { name: /Show all/ }).click(T);
+    await page.getByLabel('Who are you facing?').waitFor({ state: 'visible', ...T });
+    await noOverflow(page, 'deck expanded');
+    await page.locator('footer.mu-about summary').click(T);
+    await noOverflow(page, 'deck details open');
+    if (w === 390 && big) await shotP(page, 'mu-deck-phone-bigtext.png');
+    if (w === 320 && !big) await shotP(page, 'mu-deck-320.png');
+    await page.getByLabel('Who are you facing?').fill('gard');
+    await page.locator('li.mu-item').first().waitFor({ state: 'visible', ...T });
+    await noOverflow(page, 'deck search');
     await page.goto(BASE + '/matchups');
-    await see(page, 'Crustle');
-    await page.addStyleTag({ content: 'body{font-size:24px}' });
-    const o2 = await overflowOf(page);
-    if (o2 > 1) throw new Error(`list page: horizontal overflow of ${o2}px at 150% text`);
+    await page.locator('a.mu-link').first().waitFor({ state: 'visible', ...T });
+    if (big) await page.addStyleTag({ content: BIG });
+    await noOverflow(page, 'list');
+    await page.goto(BASE + '/matchups?src=official&days=180');
+    await page.locator('a.mu-link').first().waitFor({ state: 'visible', ...T });
+    if (big) await page.addStyleTag({ content: BIG });
+    await noOverflow(page, 'list official');
+    await page.context().close();
+  });
+  await scenario('13m. matchups at 1280x800 desktop', async () => {
+    const page = await newPage({ width: 1280, height: 800 });
+    await page.goto(BASE + '/matchups');
+    await page.locator('a.mu-link').first().waitFor({ state: 'visible', ...T });
+    await noOverflow(page, 'list desktop');
+    await shotP(page, 'mu-list-desktop.png');
+    await page.goto(BASE + '/matchups/dragapult-ex');
+    await deckReady(page);
+    await noOverflow(page, 'deck desktop');
+    await shotP(page, 'mu-deck-desktop.png');
+    await page.context().close();
+  });
+  await scenario('13m. matchups light theme at 390', async () => {
+    const page = await newPage({ width: 390, height: 844 });
+    await page.addInitScript(() => { try { localStorage.setItem('bm:theme', 'light'); } catch {} });
+    await page.goto(BASE + '/matchups/dragapult-ex');
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+    await deckReady(page);
+    if (await page.evaluate(() => document.documentElement.dataset.theme) !== 'light') throw new Error('theme not light');
+    await noOverflow(page, 'deck light');
+    await shotP(page, 'mu-deck-light.png');
     await page.context().close();
   });
   await scenario('14. nav has Matchups link', async () => {

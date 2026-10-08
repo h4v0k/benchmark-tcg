@@ -39,6 +39,7 @@ const P: Record<string, string> = {
   bolt: 'M13 2 4 14h7l-1 8 9-12h-7z',
   chevron: 'M6 9l6 6 6-6',
   back: 'M15 18l-6-6 6-6',
+  forward: 'M9 6l6 6-6 6',
   external: 'M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5',
 };
 export function Icon({ name, size = 16, className = '' }: { name: keyof typeof P | string; size?: number; className?: string }) {

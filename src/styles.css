@@ -619,30 +619,54 @@ a.event-row:hover, a.st-row:hover { border-color: var(--accent); }
 
 /* Matchups */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.mu-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
-.mu-find { max-width: 420px; }
-.mu-find input { width: 100%; }
-.mu-decks, .mu-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
-.mu-deck-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); color: var(--text); text-decoration: none !important; }
-a.mu-deck-row:hover { border-color: var(--accent); }
-.mu-deck-main, .mu-opp { flex: 1; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
-.mu-pct { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 1.05em; white-space: nowrap; }
-.mu-pct.ok, .mu-verdict.ok { color: var(--ok); }
-.mu-pct.bad, .mu-verdict.bad { color: var(--bad); }
-.mu-pct.big { font-size: 2em; line-height: 1; }
-.mu-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin: -6px 0 14px; }
-.mu-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 14px; margin-bottom: 14px; }
-.mu-split .panel { margin: 0; }
+.mu-page { max-width: 760px; }
+.mu-head { align-items: baseline; margin-bottom: 10px; }
+.mu-head h1 { overflow-wrap: anywhere; }
+.mu-overall { display: flex; align-items: baseline; gap: 8px; margin: 0; flex-wrap: wrap; }
+.mu-overall .mu-pct { font-size: 1.6em; }
+.crumbs a { display: inline-flex; align-items: center; gap: 4px; }
+.mu-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+.mu-filters .select-inline select { min-height: 34px; font-size: 13px; padding: 4px 10px; }
+.mu-search { display: flex; min-width: 0; margin: 0 0 14px; }
+.mu-search input[type=search] { width: 100%; min-height: 44px; font-size: 16px; padding-left: 36px; } /* 16px stops iPhone zooming in */
+.mu-search .icon { left: 12px; }
+input[type=search] { background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--radius-sm); padding: 7px 10px; outline: none; color: var(--text); }
+input[type=search]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.mu-list { list-style: none; margin: 0; padding: 0; }
 .mu-row { display: flex; align-items: center; gap: 12px; }
-.mu-right { display: grid; justify-items: end; gap: 1px; }
-.mu-verdict { font-size: 12px; font-weight: 700; color: var(--muted); }
-.mu-list > li { padding: 8px 0; border-top: 1px solid var(--line); }
-.mu-list > li:first-child { border-top: 0; padding-top: 2px; }
-.mu-list .small-sample .mu-opp b, .mu-list .small-sample .mu-pct { color: var(--muted); }
-.mu-bar { position: relative; height: 6px; border-radius: 99px; background: var(--bg2); margin-top: 6px; overflow: hidden; }
+.mu-name { flex: 1; min-width: 0; display: grid; gap: 1px; overflow-wrap: anywhere; }
+.mu-pct { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 1.1em; white-space: nowrap; }
+.mu-pct.ok { color: var(--ok); } .mu-pct.bad { color: var(--bad); }
+.few .mu-name b, .few .mu-pct { color: var(--muted); }
+
+/* deck list: tappable cards */
+.mu-cards { display: grid; gap: 8px; }
+.mu-link { padding: 12px 14px; min-height: 56px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); color: var(--text); text-decoration: none !important; }
+a.mu-link:hover { border-color: var(--accent); }
+.mu-go { color: var(--faint); flex: none; }
+
+/* deck page sections: one quiet panel each, rows separated by hairlines */
+.mu-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; margin-bottom: 12px; }
+.mu-section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px; }
+.mu-split .mu-section { margin: 0; }
+.mu-h { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 15px; margin: 0 0 6px; }
+.mu-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+.mu-dot.ok { background: var(--ok); } .mu-dot.bad { background: var(--bad); }
+.mu-item { padding: 9px 0; border-top: 1px solid var(--line); }
+.mu-item:first-child { border-top: 0; padding-top: 4px; }
+.mu-bar { position: relative; height: 4px; border-radius: 99px; background: var(--bg2); margin-top: 7px; overflow: hidden; }
 .mu-bar span { display: block; height: 100%; background: var(--faint); border-radius: 99px; }
 .mu-bar.ok span { background: var(--ok); } .mu-bar.bad span { background: var(--bad); }
-.mu-bar i { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--line2); }
-.mu-coverage { margin-top: 16px; }
-.mu-coverage summary { cursor: pointer; }
-.mu-coverage ul { margin: 6px 0 0; padding-left: 18px; }
+.mu-bar i { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--line2); }
+.mu-more { margin-top: 8px; }
+/* the answer to "who are you facing?": bigger, with the verdict spelled out */
+.mu-item.big .mu-pct { font-size: 1.9em; line-height: 1; }
+.mu-item.big .mu-name b { font-size: 1.1em; }
+.mu-verdict { display: block; text-align: right; font-size: 12px; font-weight: 700; color: var(--muted); margin-top: 3px; }
+.mu-verdict.ok { color: var(--ok); } .mu-verdict.bad { color: var(--bad); }
+
+.mu-about { margin: 18px 0 28px; display: grid; gap: 6px; }
+.mu-about p { margin: 0; }
+.mu-about summary { cursor: pointer; color: var(--muted); width: fit-content; }
+.mu-about ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
