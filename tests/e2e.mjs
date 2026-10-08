@@ -677,7 +677,7 @@ try {
     page.on('request', r => { if (new URL(r.url()).pathname === '/rest/v1/rpc/deck_lists') { try { asked.push(r.postDataJSON()); } catch {} } });
     await page.goto(BASE + '/matchups/dragapult-ex/lists');
     await listsReady(page);
-    if (!asked.length || asked[0].p_days !== 60) throw new Error(`deck_lists days: ${JSON.stringify(asked[0])}`);
+    if (!asked.length || asked[0].p_days !== 60 || asked[0].p_majors !== true) throw new Error(`deck_lists days: ${JSON.stringify(asked[0])}`);
     const oth = otherLists(page);
     const row = oth.locator('li button.mu-pick', { hasText: 'Regional Recife' });
     await row.waitFor({ state: 'visible', ...T });

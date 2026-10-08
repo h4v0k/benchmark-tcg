@@ -79,11 +79,11 @@ insert into public.tournament_decks (tournament_id, place, player, archetype, ca
  (901, 32, 'Wil', 'Dragapult ex', '[]', 58),
  (900, 5, 'Nol', 'Dragapult ex', null, 59);
 select pg_temp.ok('deck_lists: majors first, ranked by weighted finish; small/unfinished/old/unlisted left out',
-  (select string_agg(key || '=' || score, ' ' order by ord) from (select *, row_number() over () ord from public.deck_lists('dragapult-ex', 60)) x)
+  (select string_agg(key || '=' || score, ' ' order by ord) from (select *, row_number() over () ord from public.deck_lists('dragapult-ex', 60, 25, true)) x)
   = 't900-1=11.55 t900-20=7.23 t901-32=6.97 o2=3.71 o1=3.32');
-select pg_temp.ok('deck_lists: period honored', (select count(*) from public.deck_lists('dragapult-ex', 30)) = 4);
+select pg_temp.ok('deck_lists: period honored', (select count(*) from public.deck_lists('dragapult-ex', 30, 25, true)) = 4);
 select pg_temp.ok('deck_lists: official rows have no record, online rows do',
-  (select bool_and((tier = 'online') = (wins is not null)) from public.deck_lists('dragapult-ex', 60)));
+  (select bool_and((tier = 'online') = (wins is not null)) from public.deck_lists('dragapult-ex', 60, 25, true)));
 select pg_temp.ok('deck_list: official returns stored cards, slug and list id',
   (select row(tier, deck, event_id, cards ->> 0 is not null, list is null, list_id)::text from public.deck_list('t900-1'))
   = row('regional', 'dragapult-ex', '900', true, true, 55)::text);
@@ -92,6 +92,7 @@ select pg_temp.ok('deck_list: bad keys and lists without cards return nothing',
   (select count(*) from public.deck_list('t900-5')) + (select count(*) from public.deck_list('x; drop'))
   + (select count(*) from public.deck_list('o99999999999999999999')) + (select count(*) from public.deck_list('o5')) = 0);
 set role anon;
-select pg_temp.ok('anon can call deck_lists/deck_list', (select count(*) from public.deck_lists('dragapult-ex', 60)) = 5 and (select count(*) from public.deck_list('t900-1')) = 1);
+select pg_temp.ok('anon can call deck_lists/deck_list', (select count(*) from public.deck_lists('dragapult-ex', 60, 25, true)) = 5 and (select count(*) from public.deck_list('t900-1')) = 1);
 reset role;
 select pg_temp.ok('deck_list(bigint) forwards for pages opened before the update', (select list from public.deck_list(1::bigint)) = '4 Dreepy SV6 128');
+select pg_temp.ok('deck_lists without p_majors (pages from before 019) stays online-only with ids', (select string_agg(id::text, ',' order by id) from public.deck_lists('dragapult-ex', 60)) = '1,2');

@@ -300,7 +300,7 @@ export const matchupCoverage = (source: MatchupSource, days: number) => sb.rpc<M
 export type ListTier = 'online' | 'regional' | 'international' | 'worlds';
 export type DeckListRow = { key: string; tier: ListTier; event_name: string; date: string; event_players: number | null; player: string; place: number | null; wins: number | null; losses: number | null; ties: number | null; score: number };
 export type DeckListFull = DeckListRow & { deck: string | null; event_id: string; list: string | null; cards: DeckEntry[] | null; missing: string[] | null; list_id: number | null };
-export const deckLists = (deck: string, days: number) => sb.rpc<DeckListRow[]>('deck_lists', { p_deck: deck, p_days: days });
+export const deckLists = (deck: string, days: number) => sb.rpc<DeckListRow[]>('deck_lists', { p_deck: deck, p_days: days, p_majors: true });
 export const deckList = async (key: string) => (await sb.rpc<DeckListFull[]>('deck_list', { p_key: key }))[0] || null;
 export async function archetypeName(slug: string): Promise<string | null> {
   const { rows } = await sb.select<{ name: string }>('archetypes', { select: 'name', slug: `eq.${slug}` });
