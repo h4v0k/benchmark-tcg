@@ -139,13 +139,15 @@ select t.eq('install: cron benchmark-matchups-read', (select schedule || '|' || 
 -- ================= A. first send run: lists =================
 select t.mark();
 select public.mu_tick() as r \gset
-select t.eq('A1 first run sends 2 online pages + official list', (:'r')::jsonb->>'sent', '3');
-select t.check('A2 list URLs', t.urls() like '%api/tournaments?game=PTCG&format=STANDARD&limit=200&page=1%' and t.urls() like '%limit=200&page=2%' and t.urls() like '%mew.limitlesstcg.com/labs/data/tcg/tournaments', t.urls());
+select t.eq('A1 first run sends 4 online backfill pages + official list', (:'r')::jsonb->>'sent', '5');
+select t.check('A2 list URLs', t.urls() like '%api/tournaments?game=PTCG&format=STANDARD&limit=200&page=1%' and t.urls() like '%limit=200&page=2%' and t.urls() like '%limit=200&page=4%' and t.urls() like '%mew.limitlesstcg.com/labs/data/tcg/tournaments', t.urls());
 select public.mu_tick() as r \gset
-select t.eq('A3 second run while unanswered returns waiting=3', (:'r')::jsonb->>'waiting', '3');
+select t.eq('A3 second run while unanswered returns waiting=5', (:'r')::jsonb->>'waiting', '5');
 select t.answer();
 select public.mu_tick(0, false) as r \gset
+select t.eq('A3b mu_fetch.round holds page number 1..4', (select string_agg(round::text, ',' order by round) from public.mu_fetch where kind = 'online_index'), '1,2,3,4');
 select t.eq('A4 read-only pass returns read=true', (:'r')::jsonb->>'read', 'true');
+select t.eq('A4b each backfill page read OK is noted (flag itself is set by the next send run)', (select count(*)::text from public.app_settings where key like 'mu_backfill_page_%'), '4');
 select t.eq('A5 online list filtering (>=32 players, STANDARD, <=60d, valid id)',
   (select string_agg(event_id, ',' order by event_id) from public.mu_events where source = 'online'),
   '6ac395ae85920e4d253644b0,ev2short0000000000000002,ev3recent000000000000003');
@@ -249,22 +251,22 @@ select t.eq('F3 events older than 180 days purged (results cascade)', (select co
 -- ================= G. failure handling =================
 -- G1-G6: 5xx / timeout -> +1 try each, NO pause, sending continues
 select t.reset(true);
-select t.seed_online('x1','new'), t.seed_online('x2','new');
+select t.seed_online('x1','new'), t.seed_online('x2','new'), t.seed_online('x3','new');
 select public.mu_tick() as r \gset
-select t.eq('G1 setup: 2 standings sent', (:'r')::jsonb->>'sent', '2');
+select t.eq('G1 setup: 3 standings sent', (:'r')::jsonb->>'sent', '3');
 insert into t.override (pattern, status, body) values ('%/x1/standings', 500, 'oops'), ('%/x2/standings', null, null);
 select t.answer();
 select t.mark();
 select public.mu_tick() as r \gset
-select t.eq('G3 tries +1 for 500 and for timeout (null status)', (select string_agg(event_id || '=' || tries, ',' order by event_id) from public.mu_events), 'x1=1,x2=1');
-select t.check('G2 500/timeout set NO mu_backoff_until and sending continues in the same run (retries both)', not exists (select 1 from public.app_settings where key = 'mu_backoff_until') and (:'r')::jsonb->>'sent' = '2' and t.n_new() = 2, 'r=' || :'r' || ' new=' || t.n_new());
+select t.eq('G3 with one good read in the run: tries +1 for 500 and for timeout (null status); good one advances', (select string_agg(event_id || '=' || tries || '/' || status, ',' order by event_id) from public.mu_events), 'x1=1/new,x2=1/new,x3=0/standings');
+select t.check('G2 500/timeout set NO mu_backoff_until and sending continues in the same run (retries both + x3 pairings not due yet)', not exists (select 1 from public.app_settings where key = 'mu_backoff_until') and (:'r')::jsonb->>'sent' = '3' and t.n_new() = 3, 'r=' || :'r' || ' new=' || t.n_new());
 -- 404 and unparsable / wrong-shape bodies are failures too
 select t.reset(true);
 select t.seed_online('x1','new'), t.seed_online('x2','new'), t.seed_online('x3','new');
 insert into t.override (pattern, status, body) values ('%/x1/standings', 404, 'nf'), ('%/x2/standings', 200, 'not json'), ('%/x3/standings', 200, '{"a":1}');
 select public.mu_tick(); select t.answer();
 select public.mu_tick(0, false);
-select t.eq('G4 404 / non-JSON 200 / wrong-shape 200 each +1 try, status unchanged', (select string_agg(event_id || '=' || tries || '/' || status, ',' order by event_id) from public.mu_events), 'x1=1/new,x2=1/new,x3=1/new');
+select t.eq('G4 (no good reads, only 404/bad body: NOT "down") 404 / non-JSON 200 / wrong-shape 200 each +1 try, status unchanged', (select string_agg(event_id || '=' || tries || '/' || status, ',' order by event_id) from public.mu_events), 'x1=1/new,x2=1/new,x3=1/new');
 
 -- G7: failed list fetch -> marker set to -infinity (not deleted), refetched next run
 select t.reset(false);
@@ -276,7 +278,14 @@ select t.eq('G7 failed list fetches set mu_*_index_at to -infinity (kept, not de
   (select string_agg(key || '=' || value, ',' order by key) from public.app_settings where key like 'mu_%_index_at'), 'mu_official_index_at=-infinity,mu_online_index_at=-infinity');
 select t.mark();
 select public.mu_tick() as r \gset
-select t.check('G7b lists are re-fetched next run; backfill already set so only 1 online page', t.n_urls_like('%tournaments') = 1 and t.n_urls_like('%page=1') = 1 and t.n_urls_like('%page=2') = 0 and (:'r')::jsonb->>'sent' = '2', t.urls());
+select t.check('G7b lists re-fetched next run; backfill never completed so 4 online pages again', t.n_urls_like('%tournaments') = 1 and t.n_urls_like('%page=_') = 4 and (:'r')::jsonb->>'sent' = '5', t.urls());
+-- G7c: once backfill flag set, failed list -> only 1 page next time
+select t.reset(false);
+insert into public.app_settings values ('mu_online_backfill', now()::text);
+select public.mu_tick(); 
+insert into t.override (pattern, status, body) values ('%', 500, 'down'); select t.answer(); select public.mu_tick(0, false);
+select t.mark(); select public.mu_tick();
+select t.eq('G7c after backfill flag: failed list refetched as 1 page', t.n_urls_like('%page=_')::text, '1');
 
 -- G8-G9: 429 -> no try, 12h backoff, streak 1, fetch handled, lists marked -infinity
 select t.reset(true);
@@ -376,17 +385,35 @@ select t.eq('G20 {"ok":true} (no message) / [] pairings are failures; ONE try pe
 
 -- G21: pairings not finished (missing winner key or JSON null) -> failed try, nothing counted, status stays standings
 select t.reset(true);
-select t.seed_online('x1','standings'), t.seed_online('x2','standings');
+select t.seed_online('x1','standings','30 hours'), t.seed_online('x2','standings','30 hours');
 insert into public.mu_players values ('x1','a','dragapult-ex'),('x1','b','n-zoroark'),('x1','c','dragapult-ex'),('x1','d','n-zoroark'),
                                      ('x2','a','dragapult-ex'),('x2','b','n-zoroark'),('x2','c','dragapult-ex'),('x2','d','n-zoroark');
 insert into t.override (pattern, status, body) values
   ('%/x1/pairings', 200, '[{"round":1,"table":1,"player1":"a","player2":"b","winner":"a"},{"round":2,"table":1,"player1":"c","player2":"d"}]'),
   ('%/x2/pairings', 200, '[{"round":1,"table":1,"player1":"a","player2":"b","winner":"a"},{"round":2,"table":1,"player1":"c","player2":"d","winner":null}]');
 select public.mu_tick(); select t.answer(); select public.mu_tick(0, false);
-select t.eq('G21 unfinished pairings (missing key / null winner): tries+1, status standings, no results, players kept',
+select t.eq('G21 unfinished pairings, event ~30h old (missing key / null winner): tries+1, status standings, no results, players kept',
   (select string_agg(event_id || '=' || status || '/' || tries, ',' order by event_id) from public.mu_events) || '|' || (select count(*) from public.mu_results) || '|' || (select count(*) from public.mu_players), 'x1=standings/1,x2=standings/1|0|8');
--- a bye (no player2, winner null) and double loss do NOT block
+-- G21b: same data but event started ~80h ago -> counted, unfinished matches skipped
+update public.mu_events set starts_at = now() - interval '80 hours', date = (now() - interval '80 hours')::date, tries = 0;
 delete from t.override;
+insert into t.override (pattern, status, body) values
+  ('%/x1/pairings', 200, '[{"round":1,"table":1,"player1":"a","player2":"b","winner":"a"},{"round":2,"table":1,"player1":"c","player2":"d"}]'),
+  ('%/x2/pairings', 200, '[{"round":1,"table":1,"player1":"a","player2":"b","winner":"a"},{"round":2,"table":1,"player1":"c","player2":"d","winner":null}]');
+select public.mu_tick(); select t.answer(); select public.mu_tick(0, false);
+select t.eq('G21b event ~80h old: counted, matches without result skipped, players cleaned', (select string_agg(event_id || '=' || status, ',' order by event_id) from public.mu_events) || '|' || t.res('x1') || '|' || t.res('x2') || '|' || (select count(*) from public.mu_players),
+  'x1=done,x2=done|dragapult-ex>n-zoroark:1-0-0 n-zoroark>dragapult-ex:0-1-0|dragapult-ex>n-zoroark:1-0-0 n-zoroark>dragapult-ex:0-1-0|0');
+-- boundary: ~71h still blocks
+select t.reset(true);
+select t.seed_online('x1','standings','71 hours');
+insert into public.mu_players values ('x1','a','dragapult-ex'),('x1','b','n-zoroark');
+insert into t.override (pattern, status, body) values ('%/x1/pairings', 200, '[{"round":1,"table":1,"player1":"a","player2":"b"}]');
+select public.mu_tick(); select t.answer(); select public.mu_tick(0, false);
+select t.eq('G21c event ~71h old still blocked', (select status || '/' || tries from public.mu_events), 'standings/1');
+-- G22 uses a fresh 30h event
+select t.reset(true);
+select t.seed_online('x1','standings','30 hours');
+insert into public.mu_players values ('x1','a','dragapult-ex'),('x1','b','n-zoroark'),('x1','c','dragapult-ex'),('x1','d','n-zoroark');
 insert into t.override (pattern, status, body) values ('%/x1/pairings', 200, '[{"round":1,"table":1,"player1":"a","player2":"b","winner":"a"},{"round":1,"table":null,"player1":"c","winner":null},{"round":1,"table":2,"player1":"c","player2":"d","winner":-1}]');
 select public.mu_tick(); select t.answer(); select public.mu_tick(0, false);
 select t.eq('G22 byes with null winner / double losses do not block finishing', (select status from public.mu_events where event_id = 'x1') || '|' || t.res('x1'), 'done|dragapult-ex>n-zoroark:1-0-0 n-zoroark>dragapult-ex:0-1-0');
@@ -396,9 +423,12 @@ select t.reset(true);
 select t.seed_online('x1','new');
 insert into public.mu_fetch (net_id, kind, event_id, created_at) values (9001, 'online_standings', 'x1', now() - interval '4 hours'), (9002, 'online_standings', 'x1', now() - interval '1 hour');
 insert into public.mu_fetch (net_id, kind, created_at) values (9003, 'online_index', now() - interval '4 hours');
+select t.seed_online('x2','new');
+insert into public.mu_fetch (net_id, kind, event_id) values (9004, 'online_standings', 'x2');
+insert into net._http_response (id, status_code, content) values (9004, 200, t.standings(true)::text);
 select public.mu_tick(0, false);
-select t.eq('G23 response gone >3h: handled + failed try for event (once per run); <3h left waiting; lost list marker -> -infinity',
-  (select string_agg(net_id || '=' || (handled_at is not null)::text, ',' order by net_id) from public.mu_fetch) || '|' || (select tries from public.mu_events) || '|' || (select value from public.app_settings where key = 'mu_online_index_at'),
+select t.eq('G23 (one good read in run) response gone >3h: handled + failed try for event (once per run); <3h left waiting; lost list marker -> -infinity',
+  (select string_agg(net_id || '=' || (handled_at is not null)::text, ',' order by net_id) from public.mu_fetch where net_id <> 9004) || '|' || (select tries from public.mu_events where event_id = 'x1') || '|' || (select value from public.app_settings where key = 'mu_online_index_at'),
   '9001=true,9002=false,9003=true|1|-infinity');
 
 -- G24: success after failures resets tries
@@ -434,7 +464,7 @@ select t.reset(false);
 select t.seed_official('0075','rounds',6), t.seed_online('x1','new'), t.seed_online('x2','new'), t.seed_online('x3','new');
 select t.mark();
 select public.mu_tick(3) as r \gset
-select t.check('H8 list fetches outside event budget (3 lists + 3 events = 6)', t.n_new() = 6 and (:'r')::jsonb->>'sent' = '6' and t.n_urls_like('%round=%') = 3, 'sent=' || t.n_new() || ' ' || t.urls());
+select t.check('H8 list fetches outside event budget (4 backfill pages + official list + 3 events = 8)', t.n_new() = 8 and (:'r')::jsonb->>'sent' = '8' and t.n_urls_like('%round=%') = 3, 'sent=' || t.n_new() || ' ' || t.urls());
 -- H9: site_cap limits Labs requests; online events still use the rest of the budget
 select t.reset(true);
 select t.seed_official('0075','rounds',6), t.seed_official('0076','new',null), t.seed_online('x1','new'), t.seed_online('x2','new'), t.seed_online('x3','new');
@@ -455,7 +485,7 @@ select t.check('H11 defaults (budget 20, site_cap 8): 12-round event sends only 
 -- H12: backfill key decides 1 vs 2 pages (not mu_online_index_at existence)
 select t.reset(false);
 select t.mark(); select public.mu_tick();
-select t.check('H12 first run: 2 online pages, mu_online_backfill set', t.n_urls_like('%page=_') = 2 and exists (select 1 from public.app_settings where key = 'mu_online_backfill'), t.urls());
+select t.check('H12 first run: 4 online pages, backfill flag NOT set until page 4 is read', t.n_urls_like('%page=_') = 4 and not exists (select 1 from public.app_settings where key = 'mu_online_backfill'), t.urls());
 select t.reset(false);
 insert into public.app_settings values ('mu_online_backfill', now()::text);
 select t.mark(); select public.mu_tick();
@@ -463,7 +493,7 @@ select t.check('H13 backfill key present, index_at absent: only 1 online page', 
 select t.reset(false);
 insert into public.app_settings values ('mu_online_index_at', (now() - interval '6 hours')::text);
 select t.mark(); select public.mu_tick();
-select t.check('H14 index_at present but backfill absent: still 2 pages', t.n_urls_like('%page=_') = 2, t.urls());
+select t.check('H14 index_at stale, backfill absent: 4 pages', t.n_urls_like('%page=_') = 4, t.urls());
 
 -- ================= J. slug / name / icon validation =================
 select t.reset(true);
@@ -497,6 +527,141 @@ insert into public.mu_events (source, event_id, name, date, status) values ('onl
 insert into public.mu_results values ('online','l1','a','b',1,0,0), ('online','l2','a','b',0,0,0);
 delete from public.mu_results where event_id = 'l2';
 select t.eq('L1 coverage event_names excludes done events with no results', (public.matchup_coverage('online', 30)->'event_names')::text || '|' || (public.matchup_coverage('online', 30)->>'events'), '["HasResults"]|1');
+
+
+-- ================= M. outage / 429 rules (revised) =================
+-- M1: all-5xx / timeout / vanished run, no good reads -> no tries
+select t.reset(true);
+select t.seed_online('x1','new'), t.seed_online('x2','new'), t.seed_official('0075','rounds',2);
+select public.mu_tick();
+insert into t.override (pattern, status, body) values ('%/x1/standings', 503, 'down'), ('%/x2/standings', null, null), ('%pairings?tournamentId%', 500, 'down');
+select t.answer(); select public.mu_tick(0, false);
+select t.eq('M1 all-5xx/timeout run counts no tries', (select string_agg(tries::text, ',' order by event_id) from public.mu_events), '0,0,0');
+-- M2: 6 all-5xx runs leave events unskipped
+do $$ declare i int; begin
+  for i in 1..6 loop perform public.mu_tick(); perform t.answer(); perform public.mu_tick(0, false); end loop;
+  perform t.check('M2 six all-5xx runs: nobody skipped, tries 0',
+    (select count(*) from public.mu_events where status = 'skip') = 0 and (select sum(tries) from public.mu_events) = 0, (select string_agg(event_id || '=' || status || '/' || tries, ',') from public.mu_events));
+end $$;
+-- M3: vanished response (no row, >3h) alone = outage, no try; with a 404 only (no outage signal) tries count
+select t.reset(true);
+select t.seed_online('x1','new');
+insert into public.mu_fetch (net_id, kind, event_id, created_at) values (9101, 'online_standings', 'x1', now() - interval '4 hours');
+select public.mu_tick(0, false);
+select t.eq('M3 only a vanished response: counted as outage, no try', (select tries::text from public.mu_events), '0');
+select t.reset(true);
+select t.seed_online('x1','new'), t.seed_online('x2','new');
+select public.mu_tick();
+insert into t.override (pattern, status, body) values ('%/x1/standings', 404, 'nf'), ('%/x2/standings', 500, 'down');
+select t.answer(); select public.mu_tick(0, false);
+select t.eq('M3b 404 + 500, no good reads: 500 makes it an outage -> no tries (any down signal)', (select string_agg(tries::text, ',' order by event_id) from public.mu_events), '0,0');
+select t.reset(true);
+select t.seed_online('x1','new');
+select public.mu_tick();
+insert into t.override (pattern, status, body) values ('%', 404, 'nf');
+select t.answer(); select public.mu_tick(0, false);
+select t.eq('M3c only 404s (not down): try counted', (select tries::text from public.mu_events), '1');
+
+-- M4: batch of several 429s in one run: streak 1, pause ~12h
+select t.reset(true);
+select t.seed_online('x1','new'), t.seed_online('x2','new'), t.seed_online('x3','new'), t.seed_official('0075','rounds',3);
+select public.mu_tick();
+insert into t.override (pattern, status, body) values ('%', 429, 'slow');
+select t.answer(); select public.mu_tick(0, false);
+select t.check('M4 6 x 429 in one run: streak 1, pause ~12h, no tries',
+  (select value from public.app_settings where key = 'mu_429_streak') = '1'
+  and (select abs(extract(epoch from value::timestamptz - now()) - 43200) < 120 from public.app_settings where key = 'mu_backoff_until')
+  and (select sum(tries) from public.mu_events) = 0, (select string_agg(key || '=' || value, ',') from public.app_settings where key like 'mu_%'));
+-- M5: 2-day Retry-After then plain 429 in same pass keeps 2-day pause (either order)
+select t.reset(true);
+select t.seed_online('x1','new'), t.seed_online('x2','new');
+select public.mu_tick();
+insert into t.override (pattern, status, body, hdrs) values ('%/x1/standings', 429, 's', '{"Retry-After":"172800"}'), ('%/x2/standings', 429, 's', null);
+select t.answer(); select public.mu_tick(0, false);
+select t.check('M5 Retry-After 2d on one 429 + plain 429: 2d pause, streak 1', (select abs(extract(epoch from value::timestamptz - now()) - 172800) < 120 from public.app_settings where key = 'mu_backoff_until') and (select value from public.app_settings where key = 'mu_429_streak') = '1', (select value from public.app_settings where key = 'mu_backoff_until'));
+select t.reset(true);
+select t.seed_online('x1','new'), t.seed_online('x2','new');
+select public.mu_tick();
+insert into t.override (pattern, status, body, hdrs) values ('%/x2/standings', 429, 's', '{"Retry-After":"172800"}'), ('%/x1/standings', 429, 's', null);
+select t.answer(); select public.mu_tick(0, false);
+select t.check('M5b same, other order', (select abs(extract(epoch from value::timestamptz - now()) - 172800) < 120 from public.app_settings where key = 'mu_backoff_until'), (select value from public.app_settings where key = 'mu_backoff_until'));
+-- M6: Retry-After beyond 4 days capped at 4 days
+select t.reset(true);
+select t.seed_online('x1','new');
+select public.mu_tick();
+insert into t.override (pattern, status, body, hdrs) values ('%', 429, 's', '{"Retry-After":"9000000"}');
+select t.answer(); select public.mu_tick(0, false);
+select t.check('M6 huge Retry-After capped to 4 days', (select abs(extract(epoch from value::timestamptz - now()) - 345600) < 120 from public.app_settings where key = 'mu_backoff_until'), (select value from public.app_settings where key = 'mu_backoff_until'));
+-- M7: backoff only extended, never shortened
+select t.reset(true);
+insert into public.app_settings values ('mu_backoff_until', (now() + interval '3 days')::text);
+select t.seed_online('x1','new');
+insert into public.mu_fetch (net_id, kind, event_id) values (9201, 'online_standings', 'x1');
+insert into net._http_response (id, status_code, content) values (9201, 429, 's');
+select public.mu_tick(0, false);
+select t.check('M7 existing 3d backoff not shortened by a 12h 429', (select abs(extract(epoch from value::timestamptz - now()) - 259200) < 120 from public.app_settings where key = 'mu_backoff_until'), (select value from public.app_settings where key = 'mu_backoff_until'));
+-- M8: streak only cleared when the run had a good read and no 429
+select t.reset(true);
+insert into public.app_settings values ('mu_429_streak', '2');
+select t.seed_online('x1','new'), t.seed_online('x2','new');
+insert into public.mu_fetch (net_id, kind, event_id) values (9301, 'online_standings', 'x1'), (9302, 'online_standings', 'x2');
+insert into net._http_response (id, status_code, content) values (9301, 429, 's'), (9302, 200, t.standings(true)::text);
+select public.mu_tick(0, false);
+select t.eq('M8 429 + good read in same run: streak goes 2 -> 3, not cleared', (select value from public.app_settings where key = 'mu_429_streak'), '3');
+select t.reset(true);
+insert into public.app_settings values ('mu_429_streak', '2');
+select t.seed_online('x1','new');
+insert into public.mu_fetch (net_id, kind, event_id) values (9401, 'online_standings', 'x1');
+insert into net._http_response (id, status_code, content) values (9401, 500, 'x');
+select public.mu_tick(0, false);
+select t.eq('M8b run with only a 500 (no good read, no 429) leaves streak alone', (select value from public.app_settings where key = 'mu_429_streak'), '2');
+
+-- M9: backfill: page 4 fails -> next run sends page 1 (always) + page 4 only; flag set once all 4 pages were read OK
+select t.reset(false);
+select public.mu_tick();
+insert into t.override (pattern, status, body) values ('%page=4', 500, 'x');
+select t.answer(); select public.mu_tick(0, false);
+select t.check('M9 page 4 failed: flag absent, index_at reset to -infinity', not exists (select 1 from public.app_settings where key = 'mu_online_backfill') and (select value from public.app_settings where key = 'mu_online_index_at') = '-infinity', (select string_agg(key||'='||value, ',') from public.app_settings));
+select t.mark(); select public.mu_tick();
+select t.eq('M9b next run re-sends only the missing page (plus page 1)', t.n_urls_like('%page=_')::text || ':' || (t.urls() like '%page=4%')::text || ':' || (t.urls() like '%page=2%')::text, '2:true:false');
+delete from t.override; select t.answer(); select public.mu_tick(0, false);
+select t.eq('M9c page 4 OK -> all 4 pages noted', (select count(*)::text from public.app_settings where key like 'mu_backfill_page_%'), '4');
+select t.mark(); update public.app_settings set value = (now() - interval '6 hours')::text where key = 'mu_online_index_at'; select public.mu_tick();
+select t.eq('M9d next send run sets the flag and sends 1 page', t.n_urls_like('%page=_')::text || ':' || exists (select 1 from public.app_settings where key = 'mu_online_backfill')::text, '1:true');
+-- M10: page 1 fails, 2-4 ok -> flag not set; page 1 is fetched every run anyway
+select t.reset(false);
+select public.mu_tick();
+insert into t.override (pattern, status, body) values ('%page=1', 500, 'x');
+select t.answer(); select public.mu_tick(0, false);
+select t.check('M10 page 1 failed: flag absent, pages 2-4 noted', not exists (select 1 from public.app_settings where key = 'mu_online_backfill') and (select count(*) from public.app_settings where key like 'mu_backfill_page_%') = 3, (select string_agg(key, ',') from public.app_settings where key like 'mu_backfill%'));
+select t.mark(); select public.mu_tick();
+select t.eq('M10b next run sends only page 1', t.n_urls_like('%page=_')::text || ':' || (t.urls() like '%page=1%')::text, '1:true');
+
+-- M11: site_cap counts the official list
+select t.reset(false);
+insert into public.app_settings values ('mu_online_backfill', now()::text), ('mu_online_index_at', now()::text);
+select t.seed_official('0075','rounds',6);
+select t.mark(); select public.mu_tick(20, true, 3);
+select t.check('M11 official list due + site_cap 3: list + only 2 Labs event requests', t.n_urls_like('%mew.limitlesstcg.com%') = 3 and t.n_urls_like('%round=%') = 2, t.urls());
+select t.reset(true);
+select t.seed_official('0075','rounds',6);
+select t.mark(); select public.mu_tick(20, true, 3);
+select t.check('M11b official list NOT due + site_cap 3: 3 Labs event requests', t.n_urls_like('%round=%') = 3, t.urls());
+select t.reset(false);
+insert into public.app_settings values ('mu_online_backfill', now()::text), ('mu_online_index_at', now()::text);
+select t.seed_official('0075','rounds',6), t.seed_online('x1','new'), t.seed_online('x2','new');
+select t.mark(); select public.mu_tick(20, true, 1);
+select t.check('M11c site_cap 1 used up by official list: no Labs events, online still go out', t.n_urls_like('%round=%') = 0 and t.n_urls_like('%/standings') = 2, t.urls());
+
+-- M12: archetype updated_at refreshed on every sighting, even if unchanged
+select t.reset(true);
+select public.mu_archetype('seen-deck', 'Seen', array['seen']);
+update public.archetypes set updated_at = now() - interval '40 days';
+select public.mu_archetype('seen-deck', 'Seen', array['seen']);
+select t.check('M12 unchanged archetype sighting refreshes updated_at', (select updated_at > now() - interval '1 minute' from public.archetypes where slug = 'seen-deck'), (select updated_at::text from public.archetypes));
+-- M13: mu_slug_ok with search_path='' works directly and via mu_add / mu_archetype
+select t.check('M13 mu_slug_ok direct', public.mu_slug_ok('dragapult-ex') and not public.mu_slug_ok('other') and not public.mu_slug_ok('Bad') and not public.mu_slug_ok(null) and not public.mu_slug_ok(''), '');
+select t.check('M13b mu_slug_ok proconfig is empty search_path', (select proconfig::text from pg_proc where proname = 'mu_slug_ok') in ('{"search_path=\"\""}', '{search_path=""}'), (select proconfig::text from pg_proc where proname = 'mu_slug_ok'));
 
 -- ================= I. privileges =================
 select t.check('I1 anon/authenticated cannot execute mu_tick/mu_read/mu_get/mu_add/mu_archetype',

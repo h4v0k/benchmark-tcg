@@ -85,7 +85,7 @@ end $$;
 
 -- Deck ids from Limitless look like 'dragapult-ex'; anything else is ignored.
 create or replace function public.mu_slug_ok(p text) returns boolean
-language sql immutable as $$ select coalesce(p, '') ~ '^[a-z0-9][a-z0-9-]{0,63}$' and p <> 'other' $$;
+language sql immutable set search_path = '' as $$ select coalesce(p, '') ~ '^[a-z0-9][a-z0-9-]{0,63}$' and p <> 'other' $$;
 
 create or replace function public.mu_archetype(p_slug text, p_name text, p_icons text[]) returns void
 language sql security definer set search_path = public as $$
@@ -93,8 +93,7 @@ language sql security definer set search_path = public as $$
   select p_slug, left(coalesce(nullif(btrim(p_name), ''), p_slug), 100),
          coalesce((select array_agg(left(x, 40)) from (select x from unnest(p_icons) x where x ~ '^[a-z0-9-]{1,40}$' limit 4) y), '{}')
   where public.mu_slug_ok(p_slug)
-  on conflict (slug) do update set name = excluded.name, icons = excluded.icons, updated_at = now()
-  where archetypes.name is distinct from excluded.name or archetypes.icons is distinct from excluded.icons
+  on conflict (slug) do update set name = excluded.name, icons = excluded.icons, updated_at = now()  -- touched on every sighting
 $$;
 
 -- Adds one match result in both directions. p_result: 'w' (deck won), 'l', 't'.
@@ -118,6 +117,10 @@ declare j jsonb := body::jsonb; e jsonb; ev public.mu_events; res text; w text;
 begin
   if f.kind = 'online_index' then
     if jsonb_typeof(j) is distinct from 'array' then raise exception 'online_index: not a list'; end if;
+    -- f.round holds the page number; each backfill page that reads OK is noted, so a failed one is fetched again
+    if f.round between 1 and 4 then
+      insert into public.app_settings (key, value) values ('mu_backfill_page_' || f.round, now()::text) on conflict (key) do nothing;
+    end if;
     for e in select * from jsonb_array_elements(j) loop
       begin  -- one odd entry shouldn't sink the whole page
         if coalesce(e->>'id', '') ~ '^[A-Za-z0-9_-]{1,64}$' and coalesce(e->>'players', '') ~ '^\d+$'
@@ -150,8 +153,10 @@ begin
 
   elsif f.kind = 'online_pairings' then
     if jsonb_typeof(j) is distinct from 'array' or jsonb_array_length(j) = 0 then raise exception 'online_pairings: no pairings yet'; end if;
-    -- a match with two players and no result means the event is still running: try again next run
-    if exists (select 1 from jsonb_array_elements(j) x where coalesce(x->>'player2', '') <> '' and (x->'winner' is null or x->'winner' = 'null'::jsonb)) then
+    -- a match with two players and no result means the event is still running: try again next run.
+    -- After 3 days, assume it was abandoned and count the matches that did finish.
+    if exists (select 1 from jsonb_array_elements(j) x where coalesce(x->>'player2', '') <> '' and (x->'winner' is null or x->'winner' = 'null'::jsonb))
+       and coalesce((select starts_at from public.mu_events where source = 'online' and event_id = f.event_id), now()) > now() - interval '72 hours' then
       raise exception 'online_pairings: event not finished';
     end if;
     delete from public.mu_results where source = 'online' and event_id = f.event_id;  -- safe to re-run
@@ -214,15 +219,16 @@ end $$;
 -- Two cron jobs call this (see bottom of file):
 --   every 6 hours: read anything still waiting, then send the next small batch (p_send = true)
 --   5 minutes later: only read the answers to that batch (p_send = false), before pg_net clears them
--- Each send run sends at most `budget` event requests (no more than `site_cap` to the Labs site), plus the
--- event lists (1-3 requests). If Limitless answers 429 (too many requests), sending stops for at least
--- 12 hours, doubling on each repeat (up to 4 days), or longer if Limitless says so (Retry-After).
+-- Each send run sends at most `budget` event requests plus the online event list (1 page; 4 for the one-time
+-- backfill). Of everything sent, no more than `site_cap` requests go to the Labs site (official list included);
+-- the Play API gets the rest of the budget. If Limitless answers 429 (too many requests), sending stops for at
+-- least 12 hours, doubling on each run that gets one (up to 4 days), or as long as Retry-After asks (up to 4 days).
 drop function if exists public.mu_tick(int, boolean);  -- older two-argument version
 create or replace function public.mu_tick(budget int default 20, p_send boolean default true, site_cap int default 8) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
 declare f public.mu_fetch; resp record; sent int := 0; ev_sent int := 0; labs_sent int := 0; ev public.mu_events;
   last_at timestamptz; pages int; ok boolean; rnd int; failed text[] := '{}'; worked text[] := '{}'; k text;
-  pause interval; retry_after int; streak int;
+  pause interval; retry_after int; streak int; saw429 boolean := false; max_retry int; n_ok int := 0; n_down int := 0;
 begin
   -- one run at a time (cron plus a manual call must not read the same response twice)
   if not pg_try_advisory_xact_lock(hashtext('benchmark_mu_tick')) then return jsonb_build_object('busy', true); end if;
@@ -233,6 +239,7 @@ begin
     if not found then
       -- pg_net already cleared it (or it never came back): counts as a failed try for the event
       if f.created_at < now() - interval '3 hours' then
+        n_down := n_down + 1;
         if f.event_id is not null then
           failed := failed || ((case when f.kind like 'online%' then 'online' else 'official' end) || ':' || f.event_id);
         elsif f.kind like '%index' then
@@ -244,17 +251,14 @@ begin
     end if;
 
     if resp.status_code = 429 then
-      -- rate limited: stop sending for 12h (skips the next run), doubling on repeats, at least Retry-After
-      streak := coalesce((select value::int from public.app_settings where key = 'mu_429_streak'), 0) + 1;
+      -- rate limited: noted here, acted on once after the loop; not the event's fault, so no try is counted
+      saw429 := true;
       retry_after := case when coalesce(resp.headers->>'Retry-After', resp.headers->>'retry-after', '') ~ '^\d{1,7}$'
                           then coalesce(resp.headers->>'Retry-After', resp.headers->>'retry-after')::int end;
-      pause := least(interval '12 hours' * power(2, least(streak - 1, 3)), interval '4 days');
-      if retry_after is not null and make_interval(secs => retry_after) > pause then pause := make_interval(secs => retry_after); end if;
-      insert into public.app_settings (key, value) values ('mu_backoff_until', (now() + pause)::text), ('mu_429_streak', streak::text)
-        on conflict (key) do update set value = excluded.value;
+      max_retry := greatest(max_retry, retry_after);
       if f.kind like '%index' then update public.app_settings set value = '-infinity' where key = 'mu_' || f.kind || '_at'; end if;
       update public.mu_fetch set handled_at = now() where net_id = f.net_id;
-      continue;  -- not the event's fault: no try counted
+      continue;
     end if;
 
     ok := false;
@@ -268,16 +272,33 @@ begin
       k := case when f.kind like 'online%' then 'online' else 'official' end || ':' || f.event_id;
       if ok then worked := worked || k; else failed := failed || k; end if;
     end if;
-    if ok then delete from public.app_settings where key = 'mu_429_streak'; end if;  -- a good answer ends a 429 streak
+    if ok then n_ok := n_ok + 1; elsif resp.status_code is null or resp.status_code >= 500 then n_down := n_down + 1; end if;
     if f.event_id is null and not ok and f.kind like '%index' then
       update public.app_settings set value = '-infinity' where key = 'mu_' || f.kind || '_at';  -- fetch the list again next run
     end if;
     update public.mu_fetch set handled_at = now() where net_id = f.net_id;
   end loop;
   delete from public.mu_fetch where handled_at < now() - interval '2 days';
-  -- at most one try per event per run (an official event sends many rounds at once); a clean run resets it
-  update public.mu_events set tries = tries + 1 where source || ':' || event_id = any(failed);
+  -- at most one try per event per run (an official event sends many rounds at once); a clean run resets it.
+  -- If nothing came back OK and the failures were server errors or no answer at all, Limitless itself is down:
+  -- that isn't any event's fault, so no tries are counted (an outage can't use up events' retries).
+  if not (n_ok = 0 and n_down > 0) then
+    update public.mu_events set tries = tries + 1 where source || ':' || event_id = any(failed);
+  end if;
   update public.mu_events set tries = 0 where source || ':' || event_id = any(worked) and not (source || ':' || event_id = any(failed));
+
+  -- 429s, once per run: pause 12h (skips the next send run), doubling on each run that gets one, up to 4 days,
+  -- or longer if Limitless asks (Retry-After, also capped at 4 days). A run with good answers and no 429 ends the streak.
+  if saw429 then
+    streak := coalesce((select value::int from public.app_settings where key = 'mu_429_streak'), 0) + 1;
+    pause := least(interval '12 hours' * power(2, least(streak - 1, 3)), interval '4 days');
+    if max_retry is not null then pause := least(greatest(pause, make_interval(secs => max_retry)), interval '4 days'); end if;
+    insert into public.app_settings (key, value) values ('mu_429_streak', streak::text) on conflict (key) do update set value = excluded.value;
+    insert into public.app_settings as a (key, value) values ('mu_backoff_until', (now() + pause)::text)
+      on conflict (key) do update set value = greatest(a.value::timestamptz, excluded.value::timestamptz)::text;
+  elsif n_ok > 0 then
+    delete from public.app_settings where key = 'mu_429_streak';
+  end if;
 
   if not p_send then return jsonb_build_object('read', true); end if;
   if exists (select 1 from public.mu_fetch where handled_at is null) then
@@ -304,22 +325,26 @@ begin
     return jsonb_build_object('backoff_until', (select value from public.app_settings where key = 'mu_backoff_until'));
   end if;
 
-  -- 2. event lists: online every run (two pages the very first time, to fill the last few weeks), official once a day
+  -- 2. event lists: online every run (four pages until the one-time backfill has been read, ~60 days), official once a day
   select value::timestamptz into last_at from public.app_settings where key = 'mu_online_index_at';
   if last_at is null or last_at < now() - interval '5 hours' then
-    pages := case when exists (select 1 from public.app_settings where key = 'mu_online_backfill') then 1 else 2 end;
+    if not exists (select 1 from public.app_settings where key = 'mu_online_backfill')
+       and (select count(*) from public.app_settings where key in ('mu_backfill_page_1', 'mu_backfill_page_2', 'mu_backfill_page_3', 'mu_backfill_page_4')) = 4 then
+      insert into public.app_settings (key, value) values ('mu_online_backfill', now()::text) on conflict (key) do nothing;
+    end if;
+    pages := case when exists (select 1 from public.app_settings where key = 'mu_online_backfill') then 1 else 4 end;
     for i in 1..pages loop
-      perform public.mu_get('online_index', 'https://play.limitlesstcg.com/api/tournaments?game=PTCG&format=STANDARD&limit=200&page=' || i);
+      -- page 1 always (new events); pages 2-4 only until each has been read once
+      continue when i > 1 and exists (select 1 from public.app_settings where key = 'mu_backfill_page_' || i);
+      perform public.mu_get('online_index', 'https://play.limitlesstcg.com/api/tournaments?game=PTCG&format=STANDARD&limit=200&page=' || i, null, i);
       sent := sent + 1;
     end loop;
-    insert into public.app_settings (key, value) values ('mu_online_index_at', now()::text), ('mu_online_backfill', now()::text)
-      on conflict (key) do update set value = excluded.value
-      where app_settings.key = 'mu_online_index_at';
+    insert into public.app_settings (key, value) values ('mu_online_index_at', now()::text) on conflict (key) do update set value = excluded.value;
   end if;
   select value::timestamptz into last_at from public.app_settings where key = 'mu_official_index_at';
   if last_at is null or last_at < now() - interval '23 hours' then
     perform public.mu_get('official_index', 'https://mew.limitlesstcg.com/labs/data/tcg/tournaments');
-    sent := sent + 1;
+    sent := sent + 1; labs_sent := labs_sent + 1;  -- counts toward the Labs cap
     insert into public.app_settings (key, value) values ('mu_official_index_at', now()::text) on conflict (key) do update set value = excluded.value;
   end if;
 
