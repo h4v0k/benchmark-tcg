@@ -136,7 +136,7 @@ export function Segmented<T extends string>({ value, options, onChange, label }:
         onChange(next.value);
         requestAnimationFrame(() => (group.querySelector(`[data-v="${CSS.escape(next.value)}"]`) as HTMLElement | null)?.focus());
       }}>
-      {options.map(o => <button key={o.value} type="button" role="radio" data-v={o.value} aria-checked={value === o.value} tabIndex={value === o.value ? 0 : -1}
+      {options.map(o => <button key={o.value} type="button" role="radio" data-v={o.value} aria-checked={value === o.value} tabIndex={value === o.value || (!options.some(x => x.value === value) && o === options[0]) ? 0 : -1}
         title={o.title} className={value === o.value ? 'on' : ''} onClick={() => onChange(o.value)}>{o.label}</button>)}
     </div>
   );

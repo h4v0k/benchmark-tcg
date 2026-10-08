@@ -89,7 +89,7 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 /* ---------- static server ---------- */
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png' };
 const server = http.createServer((req, res) => {
-  const p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  let p; try { p = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { p = '/'; }
   let f = path.join(DIST, p);
   if (!f.startsWith(DIST) || !fs.existsSync(f) || !fs.statSync(f).isFile()) f = path.join(DIST, 'index.html');
   res.writeHead(200, { 'content-type': MIME[path.extname(f)] || 'application/octet-stream' });

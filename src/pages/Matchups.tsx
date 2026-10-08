@@ -1,7 +1,7 @@
 // Matchups: pick an archetype, see what it beats and what beats it.
 // Two data sets, kept apart: online tournaments (Limitless Play) and official events (Limitless Labs).
 // Built for quick use at a tournament: on a deck's page, "Who are you facing?" comes first.
-import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useMemo, useState, type ReactElement } from 'react';
 import { Empty, ErrorBox, Icon, Segmented, Spinner, useAsync } from '../components/ui';
 import { Link, navigate, setQuery, useRoute } from '../router';
 import * as api from '../lib/api';
@@ -139,8 +139,10 @@ export function MatchupsPage({ deck }: { deck?: string }) {
 function DeckMatchups({ deck, source, days, decks, cover, controls }: { deck: string; source: api.MatchupSource; days: Days; decks?: api.MatchupDeck[]; cover?: api.MatchupCoverage; controls: ReactElement }) {
   const r = useAsync(() => api.matchups(deck, source, +days), [deck, source, days]);
   const [find, setFind] = useState('');
-  const [all, setAll] = useState(false);
-  useEffect(() => setAll(false), [source, days]);  // a new data set starts collapsed (the opponent search is kept)
+  // "Show all" belongs to one data set: changing source or period starts collapsed again (the search is kept)
+  const [openFor, setOpenFor] = useState('');
+  const all = openFor === `${source}|${days}`;
+  const setAll = (on: boolean) => setOpenFor(on ? `${source}|${days}` : '');
   const me = decks?.find(d => d.deck === deck);
   const name = me?.name || deck.replace(/-/g, ' ');
   const min = MIN_GAMES[source];
@@ -184,22 +186,22 @@ function DeckMatchups({ deck, source, days, decks, cover, controls }: { deck: st
             <>
               <div className="mu-split">
                 <section className="mu-section">
-                  <h2 className="mu-h"><span className="mu-dot ok" aria-hidden="true" />Best matchups</h2>
+                  <h2 className="mu-h"><span className="mu-dot ok" aria-hidden="true" />Best matchups <span className="muted small">top {TOP}</span></h2>
                   {best.length ? <ul className="mu-list">{best.map(m => <MuRow key={m.opp} m={m} min={min} />)}</ul>
                     : <p className="muted small">None at {GOOD}%+ yet.</p>}
                 </section>
                 <section className="mu-section">
-                  <h2 className="mu-h"><span className="mu-dot bad" aria-hidden="true" />Worst matchups</h2>
+                  <h2 className="mu-h"><span className="mu-dot bad" aria-hidden="true" />Worst matchups <span className="muted small">top {TOP}</span></h2>
                   {worst.length ? <ul className="mu-list">{worst.map(m => <MuRow key={m.opp} m={m} min={min} />)}</ul>
                     : <p className="muted small">None at {BAD}% or worse yet.</p>}
                 </section>
               </div>
               <section className="mu-section">
                 <h2 className="mu-h">{best.length || worst.length ? 'Other matchups' : 'All matchups'} <span className="muted small">most played first</span></h2>
-                {others.length ? <ul className="mu-list">{shown.map(m => <MuRow key={m.opp} m={m} min={min} />)}</ul>
+                {others.length ? <ul className="mu-list">{shown.map(m => <MuRow key={m.opp} m={m} min={min} note />)}</ul>
                   : <p className="muted small">Every matchup is listed above.</p>}
                 {others.length > FIRST && (
-                  <button className="btn block mu-more" onClick={() => setAll(a => !a)} aria-expanded={all}>
+                  <button className="btn block mu-more" onClick={() => setAll(!all)} aria-expanded={all}>
                     {all ? 'Show fewer' : `Show all ${others.length}`}
                   </button>
                 )}
@@ -213,14 +215,14 @@ function DeckMatchups({ deck, source, days, decks, cover, controls }: { deck: st
   );
 }
 
-function MuRow({ m, min, bar = false, big = false }: { m: api.Matchup; min: number; bar?: boolean; big?: boolean }) {
+function MuRow({ m, min, bar = false, big = false, note = false }: { m: api.Matchup; min: number; bar?: boolean; big?: boolean; note?: boolean }) {
   const few = m.games < min;
   const t = few ? '' : tone(m.win_pct);
   return (
     <li className={`mu-item${few ? ' few' : ''}${big ? ' big' : ''}`}>
       <div className="mu-row">
         <span className="mu-name"><b>{m.name}</b>
-          <span className="muted small">{games(m.games)} · {record(m)}{few ? ' · few games' : ''}</span></span>
+          <span className="muted small">{games(m.games)} · {record(m)}{few ? ' · few games' : note && t ? ` · ${verdict(m.win_pct)}` : ''}</span></span>
         {big ? (
           <span><span className={`mu-pct ${t}`}>{pct(m.win_pct)}</span>
             <span className={`mu-verdict ${t}`}>{few ? 'Few games' : verdict(m.win_pct).replace(/^./, c => c.toUpperCase())}</span></span>
