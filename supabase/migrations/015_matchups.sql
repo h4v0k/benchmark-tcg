@@ -216,11 +216,19 @@ begin
       continue;
     end if;
     ok := false;
+    if f.kind like '%index' and resp.status_code is distinct from 200 then
+      delete from public.app_settings where key = 'mu_' || f.kind || '_at';  -- the list failed: fetch it again after any pause
+    end if;
+    if resp.status_code is null or resp.status_code >= 500 then
+      -- Limitless is down or erroring: pause for 20 minutes (the failed try still counts, below), so a short
+      -- outage costs an event at most a couple of tries instead of a try every 5 minutes
+      insert into public.app_settings (key, value) values ('mu_backoff_until', (now() + interval '20 minutes')::text)
+        on conflict (key) do update set value = excluded.value;
+    end if;
     if resp.status_code = 429 then
       -- rate limited: pause everything for 30 minutes; this doesn't count against the event
       insert into public.app_settings (key, value) values ('mu_backoff_until', (now() + interval '30 minutes')::text)
         on conflict (key) do update set value = excluded.value;
-      if f.kind like '%index' then delete from public.app_settings where key = 'mu_' || f.kind || '_at'; end if;  -- retry the list
       update public.mu_fetch set handled_at = now() where net_id = f.net_id;
       continue;
     end if;
@@ -243,9 +251,10 @@ begin
     return jsonb_build_object('waiting', (select count(*) from public.mu_fetch where handled_at is null));
   end if;
 
-  -- give up on events that fail 3 times in a row, and drop anything partly counted from them
+  -- give up on events that fail 5 times in a row (with the pauses above, that's well over an hour of errors),
+  -- and drop anything partly counted from them
   with gone as (
-    update public.mu_events set status = 'skip', done_at = now() where status not in ('done', 'skip') and tries >= 3
+    update public.mu_events set status = 'skip', done_at = now() where status not in ('done', 'skip') and tries >= 5
     returning source, event_id)
   delete from public.mu_results r using gone g where r.source = g.source and r.event_id = g.event_id;
 
