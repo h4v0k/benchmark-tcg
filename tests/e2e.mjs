@@ -323,15 +323,14 @@ try {
     const page = await newPage({ width: 390, height: 844 });
     await page.goto(BASE + '/matchups/dragapult-ex');
     await see(page, 'Strong against');
-    await page.evaluate(() => { document.documentElement.style.fontSize = '150%'; });
-    await page.addStyleTag({ content: 'body{font-size:150%}' });
+    await page.addStyleTag({ content: 'body{font-size:24px}' }); // 150% of the 16px base
     await page.waitForTimeout(300);
     const o = await overflowOf(page);
     await page.screenshot({ path: '/home/claude/mu-deck-phone-bigtext.png', fullPage: true });
     if (o > 1) throw new Error(`horizontal overflow of ${o}px at 150% text`);
     await page.goto(BASE + '/matchups');
     await see(page, 'Crustle');
-    await page.evaluate(() => { document.documentElement.style.fontSize = '150%'; });
+    await page.addStyleTag({ content: 'body{font-size:24px}' });
     const o2 = await overflowOf(page);
     if (o2 > 1) throw new Error(`list page: horizontal overflow of ${o2}px at 150% text`);
     await page.context().close();

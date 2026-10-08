@@ -15,10 +15,12 @@ const SOURCES: { value: api.MatchupSource; label: string }[] = [
 const MIN_GAMES: Record<api.MatchupSource, number> = { online: 20, official: 8 };
 const GOOD = 55, BAD = 45;
 
-const pct = (n: number | null) => (n == null ? '–' : `${Math.round(n)}%`);
+// Everything is judged on the whole-number percentage people see, so "55%" is always "Favored".
+const whole = (n: number | null) => (n == null ? null : Math.round(n));
+const pct = (n: number | null) => (n == null ? '–' : `${whole(n)}%`);
 const record = (m: { wins: number; losses: number; ties: number }) => `${m.wins}-${m.losses}-${m.ties}`;
-const verdict = (p: number | null) => (p == null ? '' : p >= GOOD ? 'Favored' : p <= BAD ? 'Unfavored' : 'Even');
-const tone = (p: number | null): 'ok' | 'bad' | '' => (p == null ? '' : p >= GOOD ? 'ok' : p <= BAD ? 'bad' : '');
+const verdict = (n: number | null) => { const p = whole(n); return p == null ? '' : p >= GOOD ? 'Favored' : p <= BAD ? 'Unfavored' : 'Even'; };
+const tone = (n: number | null): 'ok' | 'bad' | '' => { const p = whole(n); return p == null ? '' : p >= GOOD ? 'ok' : p <= BAD ? 'bad' : ''; };
 
 function Credit({ source }: { source: api.MatchupSource }) {
   return (
@@ -42,7 +44,7 @@ export function MatchupsPage({ deck }: { deck?: string }) {
     const q = find.trim().toLowerCase();
     return (decks.data || []).filter(d => !q || d.name.toLowerCase().includes(q));
   }, [decks.data, find]);
-  const totalGames = (decks.data || []).reduce((s, d) => s + d.games, 0) / 2;
+  const min = MIN_GAMES[source];
 
   const controls = (
     <div className="mu-controls">
@@ -68,16 +70,16 @@ export function MatchupsPage({ deck }: { deck?: string }) {
         </Empty>
       ) : !list.length ? <p className="muted">No deck matches “{find}”.</p> : (
         <>
-          <p className="muted small">{list.length} decks · {Math.round(totalGames).toLocaleString()} games{cover.data?.events ? ` from ${cover.data.events} events` : ''}</p>
+          <p className="muted small">{list.length} decks{cover.data?.events ? ` · from ${cover.data.events} events` : ''}</p>
           <ul className="mu-decks">
             {list.map(d => (
               <li key={d.deck}>
                 <Link to={`/matchups/${encodeURIComponent(d.deck)}${location.search}`} className="mu-deck-row">
                   <span className="grow mu-deck-main">
                     <b>{d.name}</b>
-                    <span className="muted small">{d.games.toLocaleString()} games · {record(d)}</span>
+                    <span className="muted small">{d.games.toLocaleString()} games · {record(d)}{d.games < min ? ' · small sample' : ''}</span>
                   </span>
-                  <span className={`mu-pct ${tone(d.win_pct)}`}>{pct(d.win_pct)}<span className="sr-only"> win rate</span></span>
+                  <span className={`mu-pct ${d.games < min ? '' : tone(d.win_pct)}`}>{pct(d.win_pct)}<span className="sr-only"> win rate</span></span>
                   <Icon name="chevron" size={14} />
                 </Link>
               </li>
@@ -93,14 +95,15 @@ export function MatchupsPage({ deck }: { deck?: string }) {
 
 function DeckMatchups({ deck, source, days, decks, controls }: { deck: string; source: api.MatchupSource; days: Days; decks?: api.MatchupDeck[]; controls: ReactElement }) {
   const r = useAsync(() => api.matchups(deck, source, +days), [deck, source, days]);
+  const cover = useAsync(() => api.matchupCoverage(source, +days), [source, days]);
   const [find, setFind] = useState('');
   const me = decks?.find(d => d.deck === deck);
   const name = me?.name || deck.replace(/-/g, ' ');
   const min = MIN_GAMES[source];
   const rows = r.data || [];
   const solid = rows.filter(m => m.games >= min);
-  const strong = solid.filter(m => (m.win_pct ?? 50) >= GOOD).sort((a, b) => (b.win_pct ?? 0) - (a.win_pct ?? 0));
-  const weak = solid.filter(m => (m.win_pct ?? 50) <= BAD).sort((a, b) => (a.win_pct ?? 0) - (b.win_pct ?? 0));
+  const strong = solid.filter(m => tone(m.win_pct) === 'ok').sort((a, b) => (b.win_pct ?? 0) - (a.win_pct ?? 0));
+  const weak = solid.filter(m => tone(m.win_pct) === 'bad').sort((a, b) => (a.win_pct ?? 0) - (b.win_pct ?? 0));
   const q = find.trim().toLowerCase();
   const all = rows.filter(m => !q || m.name.toLowerCase().includes(q));
 
@@ -110,8 +113,8 @@ function DeckMatchups({ deck, source, days, decks, controls }: { deck: string; s
       <div className="page-head"><h1>{name}</h1></div>
       {me && (
         <p className="mu-summary">
-          <span className={`mu-pct big ${tone(me.win_pct)}`}>{pct(me.win_pct)}</span>
-          <span className="muted">overall win rate · {me.games.toLocaleString()} games ({record(me)}) across {me.events} events</span>
+          <span className={`mu-pct big ${me.games < min ? '' : tone(me.win_pct)}`}>{pct(me.win_pct)}</span>
+          <span className="muted">overall win rate · {me.games.toLocaleString()} games ({record(me)}) across {me.events} events{me.games < min ? ' · small sample' : ''}</span>
         </p>
       )}
       {controls}
@@ -134,12 +137,13 @@ function DeckMatchups({ deck, source, days, decks, controls }: { deck: string; s
           <section className="panel">
             <div className="panel-head"><h2>Every matchup</h2><span className="muted small">most played first</span></div>
             <label className="field mu-find"><span>Find an opponent</span>
-              <input type="search" value={find} onChange={e => setFind(e.target.value)} placeholder="Who are you playing?" autoComplete="off" />
+              <input type="search" value={find} onChange={e => setFind(e.target.value)} placeholder="Opponent's deck" autoComplete="off" />
             </label>
             {!all.length ? <p className="muted">No opponent matches “{find}”.</p> : <MuList rows={all} min={min} showBar />}
           </section>
         </>
       )}
+      <Coverage cover={cover.data} />
       <Credit source={source} />
     </div>
   );

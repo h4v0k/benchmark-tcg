@@ -3,8 +3,8 @@
 
 ----------------------------------------------------------------------------
 -- 1. Matchup data
---    online:   Limitless Play API (play.limitlesstcg.com/api), Standard events with 32+ players
---    official: Limitless Labs (Regionals, Internationals, Worlds), Masters division
+--    online:   Limitless Play API (play.limitlesstcg.com/api), Standard events with 32+ players, last 60 days
+--    official: Limitless Labs (Regionals, Internationals, Worlds), Masters division, last 180 days
 --    Both use the same deck ids (e.g. 'dragapult-ex'), so the two sets line up.
 ----------------------------------------------------------------------------
 create table if not exists public.archetypes (
@@ -33,6 +33,7 @@ create table if not exists public.mu_events (
   primary key (source, event_id)
 );
 create index if not exists mu_events_todo on public.mu_events (status, date desc) where status not in ('done', 'skip');
+create index if not exists mu_events_source_date on public.mu_events (source, date desc) where status = 'done';
 
 -- online only: who played what, kept until the event's pairings are counted
 create table if not exists public.mu_players (
@@ -108,16 +109,23 @@ language plpgsql security definer set search_path = public as $$
 declare j jsonb := body::jsonb; e jsonb; ev public.mu_events; res text; w text;
 begin
   if f.kind = 'online_index' then
+    if jsonb_typeof(j) <> 'array' then raise exception 'online_index: not a list'; end if;
     for e in select * from jsonb_array_elements(j) loop
-      if coalesce((e->>'players')::int, 0) >= 32 and upper(coalesce(e->>'format', '')) = 'STANDARD'
-         and (e->>'date')::timestamptz between now() - interval '120 days' and now() - interval '6 hours' then
-        insert into public.mu_events (source, event_id, name, date, players)
-        values ('online', e->>'id', left(coalesce(e->>'name', ''), 200), (e->>'date')::timestamptz::date, (e->>'players')::int)
-        on conflict do nothing;
-      end if;
+      begin  -- one odd entry shouldn't sink the whole page
+        -- wait a day after the start so the event (Swiss + top cut) has finished
+        if coalesce(e->>'id', '') ~ '^[A-Za-z0-9_-]{1,64}$' and coalesce(e->>'players', '') ~ '^\d+$'
+           and (e->>'players')::int >= 32 and upper(coalesce(e->>'format', '')) = 'STANDARD'
+           and (e->>'date')::timestamptz between now() - interval '60 days' and now() - interval '24 hours' then
+          insert into public.mu_events (source, event_id, name, date, players)
+          values ('online', e->>'id', left(coalesce(e->>'name', ''), 200), (e->>'date')::timestamptz::date, (e->>'players')::int)
+          on conflict do nothing;
+        end if;
+      exception when others then continue;
+      end;
     end loop;
 
   elsif f.kind = 'online_standings' then
+    if jsonb_typeof(j) <> 'array' then raise exception 'online_standings: not a list'; end if;
     delete from public.mu_players where event_id = f.event_id;
     for e in select * from jsonb_array_elements(j) loop
       if e->'deck'->>'id' is not null then
@@ -134,6 +142,7 @@ begin
     end if;
 
   elsif f.kind = 'online_pairings' then
+    if jsonb_typeof(j) <> 'array' or jsonb_array_length(j) = 0 then raise exception 'online_pairings: no pairings yet'; end if;
     delete from public.mu_results where source = 'online' and event_id = f.event_id;  -- safe to re-run
     for e in select * from jsonb_array_elements(j) loop
       continue when coalesce(e->>'player2', '') = '' or e->>'winner' = '-1';
@@ -148,19 +157,25 @@ begin
     update public.mu_events set status = 'done', done_at = now() where source = 'online' and event_id = f.event_id;
 
   elsif f.kind = 'official_index' then
+    if j->>'ok' is distinct from 'true' or jsonb_typeof(j->'message') <> 'array' then raise exception 'official_index: bad response'; end if;
     for e in select * from jsonb_array_elements(j->'message') loop
-      if coalesce((e->>'completed')::int, 0) = 1 and e->>'type' in ('regional', 'international', 'worlds', 'special')
-         and (e->>'utc_start')::timestamp >= now() - interval '180 days' then
-        insert into public.mu_events (source, event_id, name, date)
-        values ('official', lpad(e->>'id', 4, '0'),
-          initcap(case e->>'type' when 'worlds' then 'World Championship' when 'international' then 'International Championship'
-                    when 'special' then 'Special Event' else 'Regional Championship' end) || ' ' || coalesce(e->>'city', ''),
-          (e->>'utc_start')::timestamp::date)
-        on conflict do nothing;
-      end if;
+      begin
+        if coalesce(e->>'id', '') ~ '^\d{1,6}$' and e->>'completed' in ('1', 'true')
+           and e->>'type' in ('regional', 'international', 'worlds')
+           and (e->>'utc_start')::timestamp >= now() - interval '180 days' then
+          insert into public.mu_events (source, event_id, name, date)
+          values ('official', lpad(e->>'id', 4, '0'),
+            case e->>'type' when 'worlds' then 'World Championship' when 'international' then 'International Championship'
+                 else 'Regional Championship' end || ' ' || coalesce(e->>'city', ''),
+            (e->>'utc_start')::timestamp::date)
+          on conflict do nothing;
+        end if;
+      exception when others then continue;
+      end;
     end loop;
 
   elsif f.kind = 'official_info' then
+    if j->>'ok' is distinct from 'true' or jsonb_typeof(j->'message') <> 'object' then raise exception 'official_info: bad response'; end if;
     update public.mu_events set players = (j->'message'->>'players')::int, rounds = (j->'message'->>'round')::int,
       status = case when coalesce((j->'message'->>'round')::int, 0) > 0 then 'rounds' else 'skip' end
     where source = 'official' and event_id = f.event_id;
@@ -168,6 +183,7 @@ begin
   elsif f.kind = 'official_round' then
     select * into ev from public.mu_events where source = 'official' and event_id = f.event_id;
     if ev.next_round <> f.round then return; end if;  -- already counted
+    if j->>'ok' is distinct from 'true' or jsonb_typeof(j->'message') <> 'array' then raise exception 'official_round: bad response'; end if;
     for e in select * from jsonb_array_elements(j->'message') loop
       continue when e->>'player2' is null or coalesce((e->>'completed')::int, 1) <> 1;
       perform public.mu_archetype(e->>'p1_deck', e->>'p1_deck_name', string_to_array(nullif(e->>'p1_icons', ''), ' '));
@@ -187,8 +203,11 @@ end $$;
 -- Runs every 5 minutes. Sends at most a few requests per run so Limitless is never hammered.
 create or replace function public.mu_tick(budget int default 6) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
-declare f public.mu_fetch; resp record; sent int := 0; ev public.mu_events; last_at timestamptz; pages int;
+declare f public.mu_fetch; resp record; sent int := 0; ev public.mu_events; last_at timestamptz; pages int; ok boolean;
 begin
+  -- one run at a time (cron plus a manual call must not read the same response twice)
+  if not pg_try_advisory_xact_lock(hashtext('benchmark_mu_tick')) then return jsonb_build_object('busy', true); end if;
+
   -- 1. read finished responses
   for f in select * from public.mu_fetch where handled_at is null order by created_at loop
     select status_code, content into resp from net._http_response where id = f.net_id;
@@ -196,19 +215,25 @@ begin
       if f.created_at < now() - interval '1 hour' then update public.mu_fetch set handled_at = now() where net_id = f.net_id; end if;
       continue;
     end if;
+    ok := false;
+    if resp.status_code = 429 or resp.status_code >= 500 or resp.status_code is null then
+      -- Limitless is busy or down: pause everything for 30 minutes; this doesn't count against the event
+      insert into public.app_settings (key, value) values ('mu_backoff_until', (now() + interval '30 minutes')::text)
+        on conflict (key) do update set value = excluded.value;
+      if f.kind like '%index' then delete from public.app_settings where key = 'mu_' || f.kind || '_at'; end if;  -- retry the list
+      update public.mu_fetch set handled_at = now() where net_id = f.net_id;
+      continue;
+    end if;
     begin
-      if resp.status_code = 200 and resp.content is not null then perform public.mu_read(f, resp.content);
-      elsif f.event_id is not null then
-        update public.mu_events set tries = tries + 1 where event_id = f.event_id
-          and source = case when f.kind like 'online%' then 'online' else 'official' end;
-      end if;
+      if resp.status_code = 200 and resp.content is not null then perform public.mu_read(f, resp.content); ok := true; end if;
     exception when others then
       raise warning 'mu_read % % failed: %', f.kind, f.event_id, sqlerrm;
-      if f.event_id is not null then
-        update public.mu_events set tries = tries + 1 where event_id = f.event_id
-          and source = case when f.kind like 'online%' then 'online' else 'official' end;
-      end if;
     end;
+    if f.event_id is not null then
+      -- a success resets the error count; tries only adds up for errors in a row
+      update public.mu_events set tries = case when ok then 0 else tries + 1 end where event_id = f.event_id
+        and source = case when f.kind like 'online%' then 'online' else 'official' end;
+    end if;
     update public.mu_fetch set handled_at = now() where net_id = f.net_id;
   end loop;
   delete from public.mu_fetch where handled_at < now() - interval '2 days';
@@ -217,14 +242,21 @@ begin
     return jsonb_build_object('waiting', (select count(*) from public.mu_fetch where handled_at is null));
   end if;
 
-  -- give up on events that keep failing
-  update public.mu_events set status = 'skip', done_at = now() where status not in ('done', 'skip') and tries >= 3;
+  -- give up on events that fail 3 times in a row, and drop anything partly counted from them
+  with gone as (
+    update public.mu_events set status = 'skip', done_at = now() where status not in ('done', 'skip') and tries >= 3
+    returning source, event_id)
+  delete from public.mu_results r using gone g where r.source = g.source and r.event_id = g.event_id;
+
+  if coalesce((select value::timestamptz from public.app_settings where key = 'mu_backoff_until'), '-infinity') > now() then
+    return jsonb_build_object('backoff_until', (select value from public.app_settings where key = 'mu_backoff_until'));
+  end if;
   delete from public.mu_players p where not exists (select 1 from public.mu_events e where e.source = 'online' and e.event_id = p.event_id and e.status = 'standings');
 
-  -- 2. event lists: online every 6 hours (three pages the first time, to fill the last few weeks), official once a day
+  -- 2. event lists: online every 6 hours (two pages the first time, to fill the last few weeks), official once a day
   select value::timestamptz into last_at from public.app_settings where key = 'mu_online_index_at';
   if last_at is null or last_at < now() - interval '6 hours' then
-    pages := case when last_at is null then 3 else 1 end;
+    pages := case when last_at is null then 2 else 1 end;
     for i in 1..pages loop
       perform public.mu_get('online_index', 'https://play.limitlesstcg.com/api/tournaments?game=PTCG&format=STANDARD&limit=200&page=' || i);
       sent := sent + 1;
@@ -290,10 +322,10 @@ language sql stable security definer set search_path = public as $$
   from public.mu_results r
   join public.mu_events e on e.source = r.source and e.event_id = r.event_id
   left join public.archetypes a on a.slug = r.deck
-  where r.source = p_source and r.deck <> r.opp and e.date >= current_date - least(greatest(p_days, 7), 180)
+  where r.source = p_source and e.status = 'done' and r.deck <> r.opp and e.date >= current_date - least(greatest(p_days, 7), 180)
   group by r.deck, a.name, a.icons
   having sum(r.wins + r.losses + r.ties) >= 10
-  order by 5 desc
+  order by 4 desc
 $$;
 grant execute on function public.matchup_decks(text, int) to anon, authenticated;
 
@@ -309,7 +341,7 @@ begin
   from public.mu_results r
   join public.mu_events e on e.source = r.source and e.event_id = r.event_id
   left join public.archetypes a on a.slug = r.opp
-  where r.source = p_source and r.deck = p_deck and r.opp <> r.deck
+  where r.source = p_source and e.status = 'done' and r.deck = p_deck and r.opp <> r.deck
     and e.date >= current_date - least(greatest(p_days, 7), 180)
   group by r.opp, a.name, a.icons
   order by sum(r.wins + r.losses + r.ties) desc;
