@@ -54,6 +54,26 @@ const DECK = {
   cover: '', price: 12.5, card_count: 20, like_count: 3, view_count: 10, comment_count: 0, featured: false, tags: ['test'], folder_id: null,
   archetype: 'Dragapult', created_at: '2026-10-01T00:00:00Z', updated_at: NOW, owner_profile: { username: 'tester', avatar_card: '' },
 };
+const muDeck = (deck, name, games, wins, losses, ties, events) => ({ deck, name, icons: [], games, wins, losses, ties, win_pct: Math.round(1000 * (wins + ties / 3) / games) / 10, events });
+const MU_DECKS_ONLINE = [
+  muDeck('dragapult-ex', 'Dragapult', 412, 210, 190, 12, 31),
+  muDeck('n-zoroark', "N's Zoroark", 268, 130, 132, 6, 28),
+  muDeck('gardevoir-ex', 'Gardevoir', 231, 118, 108, 5, 25),
+  muDeck('basic-box-m', 'Basic Box', 140, 66, 70, 4, 19),
+  muDeck('crustle-dri', 'Crustle', 96, 55, 38, 3, 14),
+];
+const MU_DECKS_OFFICIAL = [
+  muDeck('gardevoir-ex', 'Gardevoir', 64, 33, 29, 2, 6),
+  muDeck('raging-bolt-ex', 'Raging Bolt', 41, 20, 20, 1, 5),
+  muDeck('dragapult-ex', 'Dragapult', 38, 17, 20, 1, 6),
+];
+const muOpp = (opp, name, games, wins, losses, ties) => ({ opp, name, icons: [], games, wins, losses, ties, win_pct: Math.round(1000 * (wins + ties / 3) / games) / 10 });
+const MU_DRAGAPULT = [
+  muOpp('n-zoroark', "N's Zoroark", 60, 36, 22, 2),
+  muOpp('gardevoir-ex', 'Gardevoir', 55, 22, 31, 2),
+  muOpp('basic-box-m', 'Basic Box', 40, 20, 20, 0),
+  muOpp('crustle-dri', 'Crustle', 9, 7, 2, 0),
+];
 const RULES = {"standard_min_mark":"H","formats":[{"format":"standard","min_mark":"H","min_release":null,"season":"2026-27","notes":"","source":"","checked_at":"2026-10-05T12:00:00Z","updated_at":"2026-10-05T12:00:00Z"},{"format":"expanded","min_mark":null,"min_release":"2011-04-25","season":"","notes":"","source":"","checked_at":"2026-10-05T12:00:00Z","updated_at":"2026-10-05T12:00:00Z"}],"next_rotation":null,"bans":[{"format":"expanded","card_name":"Red Card","printings":[{"set":"XY","num":"124/146"}],"card_ids":["xy1-124"],"effective_date":null,"source":""}],"upcoming_sets":[],"last_checked":"2026-10-05T12:00:00Z","last_catalog_sync":"2026-10-05T12:00:00Z","card_count":20000};
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
@@ -99,6 +119,9 @@ async function handleSupabase(route) {
     if (u.searchParams.get('place')) return json(route, [mk(1, 'Ogerpon Meganium')]);
     return json(route, Array.from({ length: 32 }, (_, i) => { const d = mk(i + 1, i % 2 ? 'Dragapult' : "N's Zoroark Lucario"); delete d.cards; if (i > 29) { d.card_count = null; d.list_id = null; } return d; }));
   }
+  if (p === '/rest/v1/rpc/matchup_decks') return json(route, body.p_source === 'official' ? MU_DECKS_OFFICIAL : MU_DECKS_ONLINE);
+  if (p === '/rest/v1/rpc/matchups') return json(route, body.p_deck === 'dragapult-ex' && body.p_source !== 'official' ? MU_DRAGAPULT : []);
+  if (p === '/rest/v1/rpc/matchup_coverage') return json(route, { events: body.p_source === 'official' ? 6 : 38, pending: 2, from: '2026-09-07', to: '2026-10-05', event_names: ['Regional Recife', 'Online Series #12'] });
   if (p === '/rest/v1/rpc/record_view') return route.fulfill({ status: 204, headers: cors });
   if (p === '/rest/v1/cards') {
     const idq = u.searchParams.get('id'); const nameq = u.searchParams.get('name');
@@ -251,6 +274,73 @@ try {
       if (w === 260) await page.screenshot({ path: path.join(OUT, `events${url.replace(/\//g, '_')}-${w}.png`), fullPage: false });
     }
     await page.context().close();
+  });
+  const mu = await newPage({ width: 390, height: 844 });
+  const overflowOf = p => p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  await scenario('10m. matchups deck list + Find a deck filter', async () => {
+    await mu.goto(BASE + '/matchups');
+    await see(mu, 'Dragapult');
+    for (const n of ['Dragapult', "N's Zoroark", 'Gardevoir', 'Basic Box', 'Crustle']) await mu.locator('.mu-decks').getByText(n, { exact: true }).waitFor({ state: 'visible', ...T });
+    await mu.screenshot({ path: '/home/claude/mu-list-phone.png', fullPage: true });
+    await mu.getByLabel('Find a deck').fill('zor');
+    await mu.locator('.mu-decks li').first().waitFor({ state: 'visible', ...T });
+    const n = await mu.locator('.mu-decks li').count();
+    if (n !== 1) throw new Error(`expected 1 deck after filtering, got ${n}`);
+    await mu.locator('.mu-decks').getByText("N's Zoroark", { exact: true }).waitFor({ state: 'visible', ...T });
+  });
+  await scenario('11m. matchups Official events toggle', async () => {
+    await mu.goto(BASE + '/matchups');
+    await see(mu, 'Crustle');
+    await mu.getByRole('button', { name: 'Official events' }).or(mu.getByRole('radio', { name: 'Official events' })).or(mu.getByText('Official events', { exact: true })).first().click(T);
+    await mu.waitForURL(u => new URL(u).searchParams.get('src') === 'official', T);
+    await see(mu, 'Raging Bolt');
+    if (await mu.locator('.mu-decks').getByText('Crustle', { exact: true }).count()) throw new Error('Crustle still listed for official');
+    const n = await mu.locator('.mu-decks li').count();
+    if (n !== 3) throw new Error(`expected 3 official decks, got ${n}`);
+    await mu.getByText('30 days', { exact: true }).or(mu.getByText('90 days', { exact: true })).first().click(T);
+    await mu.waitForURL(u => new URL(u).searchParams.get('days') !== null, T);
+  });
+  await scenario('12m. matchups deck page sections + opponent filter', async () => {
+    await mu.goto(BASE + '/matchups/dragapult-ex');
+    await see(mu, 'Strong against');
+    const sec = t => mu.locator('section.panel', { has: mu.getByRole('heading', { name: t }) });
+    const strong = sec('Strong against'), weak = sec('Weak against'), every = sec('Every matchup');
+    await strong.getByText("N's Zoroark").first().waitFor({ state: 'visible', ...T });
+    await weak.getByText('Gardevoir').first().waitFor({ state: 'visible', ...T });
+    if (await strong.getByText('Crustle').count() || await weak.getByText('Crustle').count()) throw new Error('small-sample opponent listed in strong/weak');
+    await every.getByText('Crustle').first().waitFor({ state: 'visible', ...T });
+    await every.getByText('small sample').first().waitFor({ state: 'visible', ...T });
+    if (await every.locator('li').count() !== 4) throw new Error('expected 4 rows in Every matchup');
+    await every.getByLabel('Find an opponent').fill('gard');
+    await every.locator('li').first().waitFor({ state: 'visible', ...T });
+    const n = await every.locator('li').count();
+    if (n !== 1) throw new Error(`expected 1 row after opponent filter, got ${n}`);
+    await mu.screenshot({ path: '/home/claude/mu-deck-phone.png', fullPage: true });
+    const o = await overflowOf(mu);
+    if (o > 1) throw new Error(`horizontal overflow of ${o}px`);
+  });
+  await scenario('13m. matchups deck page with large text (150%)', async () => {
+    const page = await newPage({ width: 390, height: 844 });
+    await page.goto(BASE + '/matchups/dragapult-ex');
+    await see(page, 'Strong against');
+    await page.evaluate(() => { document.documentElement.style.fontSize = '150%'; });
+    await page.addStyleTag({ content: 'body{font-size:150%}' });
+    await page.waitForTimeout(300);
+    const o = await overflowOf(page);
+    await page.screenshot({ path: '/home/claude/mu-deck-phone-bigtext.png', fullPage: true });
+    if (o > 1) throw new Error(`horizontal overflow of ${o}px at 150% text`);
+    await page.goto(BASE + '/matchups');
+    await see(page, 'Crustle');
+    await page.evaluate(() => { document.documentElement.style.fontSize = '150%'; });
+    const o2 = await overflowOf(page);
+    if (o2 > 1) throw new Error(`list page: horizontal overflow of ${o2}px at 150% text`);
+    await page.context().close();
+  });
+  await scenario('14. nav has Matchups link', async () => {
+    await desk.goto(BASE + '/');
+    await desk.locator('a[href="/matchups"]').first().waitFor({ state: 'attached', ...T });
+    const t = await desk.locator('a[href="/matchups"]').first().textContent();
+    if (!/Matchups/.test(t)) throw new Error(`nav link text: ${t}`);
   });
 } finally {
   await browser.close();

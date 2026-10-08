@@ -26,7 +26,7 @@ export function EventsPage() {
   return (
     <div className="wrap page">
       <div className="page-head"><h1>Tournaments</h1></div>
-      <p className="muted lede">Top 32 from Regionals, Internationals and Worlds. Open any list to test it, check prices, or copy it to your decks.</p>
+      <p className="muted lede">Top 32 from Regionals, Internationals and Worlds. Open any list to test it, check prices, or copy it to your decks. To see what each deck beats and loses to, open <Link to="/matchups">Matchups</Link>.</p>
 
       <section className="panel meta-panel">
         <div className="panel-head"><h2>What’s winning</h2>

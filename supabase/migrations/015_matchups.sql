@@ -1,123 +1,8 @@
--- Benchmark Pro ($5/month): matchup statistics + AI coach.
--- Payments aren't wired up yet: admins grant Pro by hand from the Admin page
--- (pro_members.source = 'manual'). A payment webhook can later write source = 'stripe'.
+-- Matchup statistics: how each archetype does against every other archetype.
+-- Free for everyone. Data from Limitless (credited on the page).
 
 ----------------------------------------------------------------------------
--- 1. Pro membership
-----------------------------------------------------------------------------
-create table if not exists public.pro_members (
-  user_id uuid primary key references auth.users(id) on delete cascade,
-  until timestamptz,                       -- null = no end date
-  source text not null default 'manual' check (source in ('manual', 'comp', 'stripe')),
-  note text not null default '',
-  updated_at timestamptz not null default now()
-);
-alter table public.pro_members enable row level security;
-drop policy if exists "See your own membership" on public.pro_members;
-create policy "See your own membership" on public.pro_members for select using (user_id = auth.uid() or public.is_admin());
-revoke all on public.pro_members from anon, authenticated;
-grant select on public.pro_members to authenticated;
-
--- Internal check, any user (not callable by clients).
-create or replace function public.user_is_pro(uid uuid) returns boolean
-language sql stable security definer set search_path = public as $$
-  select uid is not null and (
-    exists (select 1 from public.profiles p where p.id = uid and p.is_admin)
-    or exists (select 1 from public.pro_members m where m.user_id = uid and (m.until is null or m.until > now())));
-$$;
-revoke execute on function public.user_is_pro(uuid) from public, anon, authenticated;
-
-create or replace function public.is_pro() returns boolean
-language sql stable security definer set search_path = public as $$ select public.user_is_pro(auth.uid()) $$;
-revoke execute on function public.is_pro() from public, anon;
-grant execute on function public.is_pro() to authenticated;
-
--- AI usage, counted per calendar month (UTC).
-create table if not exists public.ai_usage (
-  user_id uuid not null references auth.users(id) on delete cascade,
-  month date not null,
-  used int not null default 0,
-  primary key (user_id, month)
-);
-alter table public.ai_usage enable row level security;
-drop policy if exists "See your own AI usage" on public.ai_usage;
-create policy "See your own AI usage" on public.ai_usage for select using (user_id = auth.uid());
-revoke all on public.ai_usage from anon, authenticated;
-grant select on public.ai_usage to authenticated;
-
-insert into public.app_settings (key, value) values ('ai_monthly_limit', '100') on conflict (key) do nothing;
-insert into public.app_settings (key, value) values ('ai_model', 'claude-sonnet-5-5') on conflict (key) do nothing;
-
-create or replace function public.ai_limit() returns int
-language sql stable security definer set search_path = public as $$
-  select coalesce((select value::int from public.app_settings where key = 'ai_monthly_limit'), 100)
-$$;
-revoke execute on function public.ai_limit() from public, anon, authenticated;
-
--- What the signed-in person has: Pro status and AI requests left this month.
-create or replace function public.my_plan() returns jsonb
-language sql stable security definer set search_path = public as $$
-  select jsonb_build_object(
-    'pro', public.user_is_pro(auth.uid()),
-    'admin', coalesce((select is_admin from public.profiles where id = auth.uid()), false),
-    'until', (select until from public.pro_members where user_id = auth.uid()),
-    'source', (select source from public.pro_members where user_id = auth.uid()),
-    'ai_used', coalesce((select used from public.ai_usage where user_id = auth.uid() and month = date_trunc('month', now())::date), 0),
-    'ai_limit', public.ai_limit())
-$$;
-revoke execute on function public.my_plan() from public, anon;
-grant execute on function public.my_plan() to authenticated;
-
--- Called by the coach function (service role) before each AI request.
--- Returns requests left after this one, or raises if not Pro / out of requests.
-create or replace function public.ai_take(p_user uuid) returns int
-language plpgsql security definer set search_path = public as $$
-declare lim int := public.ai_limit(); n int;
-begin
-  if not public.user_is_pro(p_user) then raise exception 'pro_required'; end if;
-  insert into public.ai_usage as u (user_id, month, used) values (p_user, date_trunc('month', now())::date, 1)
-    on conflict (user_id, month) do update set used = u.used + 1 where u.used < lim
-    returning used into n;
-  if n is null then raise exception 'ai_limit_reached'; end if;
-  return lim - n;
-end $$;
--- Gives a request back when the AI call itself failed.
-create or replace function public.ai_refund(p_user uuid) returns void
-language sql security definer set search_path = public as $$
-  update public.ai_usage set used = greatest(used - 1, 0) where user_id = p_user and month = date_trunc('month', now())::date
-$$;
-revoke execute on function public.ai_take(uuid) from public, anon, authenticated;
-revoke execute on function public.ai_refund(uuid) from public, anon, authenticated;
-grant execute on function public.ai_take(uuid), public.ai_refund(uuid) to service_role;
-
--- Admin: grant or remove Pro by hand.
-create or replace function public.admin_set_pro(p_user uuid, p_on boolean, p_until timestamptz default null, p_note text default '')
-returns void language plpgsql security definer set search_path = public as $$
-begin
-  if not public.is_admin() then raise exception 'Admins only'; end if;
-  if p_on then
-    insert into public.pro_members (user_id, until, source, note, updated_at) values (p_user, p_until, 'manual', coalesce(p_note, ''), now())
-      on conflict (user_id) do update set until = excluded.until, source = 'manual', note = excluded.note, updated_at = now();
-  else
-    delete from public.pro_members where user_id = p_user;
-  end if;
-end $$;
-revoke execute on function public.admin_set_pro(uuid, boolean, timestamptz, text) from public, anon;
-grant execute on function public.admin_set_pro(uuid, boolean, timestamptz, text) to authenticated;
-
-create or replace function public.admin_pro_list() returns table (user_id uuid, until timestamptz, source text, ai_used int)
-language plpgsql stable security definer set search_path = public as $$
-begin
-  if not public.is_admin() then raise exception 'Admins only'; end if;
-  return query select m.user_id, m.until, m.source,
-    coalesce((select u.used from public.ai_usage u where u.user_id = m.user_id and u.month = date_trunc('month', now())::date), 0)
-  from public.pro_members m;
-end $$;
-revoke execute on function public.admin_pro_list() from public, anon;
-grant execute on function public.admin_pro_list() to authenticated;
-
-----------------------------------------------------------------------------
--- 2. Matchup data
+-- 1. Matchup data
 --    online:   Limitless Play API (play.limitlesstcg.com/api), Standard events with 32+ players
 --    official: Limitless Labs (Regionals, Internationals, Worlds), Masters division
 --    Both use the same deck ids (e.g. 'dragapult-ex'), so the two sets line up.
@@ -336,7 +221,7 @@ begin
   update public.mu_events set status = 'skip', done_at = now() where status not in ('done', 'skip') and tries >= 3;
   delete from public.mu_players p where not exists (select 1 from public.mu_events e where e.source = 'online' and e.event_id = p.event_id and e.status = 'standings');
 
-  -- 2. event lists: online every 6 hours (two pages the first time, to fill the last few weeks), official once a day
+  -- 2. event lists: online every 6 hours (three pages the first time, to fill the last few weeks), official once a day
   select value::timestamptz into last_at from public.app_settings where key = 'mu_online_index_at';
   if last_at is null or last_at < now() - interval '6 hours' then
     pages := case when last_at is null then 3 else 1 end;
@@ -390,11 +275,11 @@ do $$ begin
 end $$;
 
 ----------------------------------------------------------------------------
--- 3. Reading the stats
+-- 2. Reading the stats
 --    Win rate counts a tie as a third of a win, like tournament points (win 3, tie 1).
 ----------------------------------------------------------------------------
 
--- Free: every archetype with its games and overall win rate (mirrors left out). Powers the picker.
+-- Every archetype with its games and overall win rate (mirrors left out). Powers the picker.
 create or replace function public.matchup_decks(p_source text default 'online', p_days int default 30)
 returns table (deck text, name text, icons text[], games bigint, wins bigint, losses bigint, ties bigint, win_pct numeric, events bigint)
 language sql stable security definer set search_path = public as $$
@@ -412,12 +297,11 @@ language sql stable security definer set search_path = public as $$
 $$;
 grant execute on function public.matchup_decks(text, int) to anon, authenticated;
 
--- Pro: one archetype against every opponent archetype.
+-- One archetype against every opponent archetype.
 create or replace function public.matchups(p_deck text, p_source text default 'online', p_days int default 30)
 returns table (opp text, name text, icons text[], games bigint, wins bigint, losses bigint, ties bigint, win_pct numeric)
 language plpgsql stable security definer set search_path = public as $$
 begin
-  if not public.user_is_pro(auth.uid()) then raise exception 'pro_required'; end if;
   return query
   select r.opp, coalesce(a.name, r.opp), coalesce(a.icons, '{}'::text[]),
     sum(r.wins + r.losses + r.ties)::bigint, sum(r.wins)::bigint, sum(r.losses)::bigint, sum(r.ties)::bigint,
@@ -430,8 +314,7 @@ begin
   group by r.opp, a.name, a.icons
   order by sum(r.wins + r.losses + r.ties) desc;
 end $$;
-revoke execute on function public.matchups(text, text, int) from public, anon;
-grant execute on function public.matchups(text, text, int) to authenticated;
+grant execute on function public.matchups(text, text, int) to anon, authenticated;
 
 -- What the stats are built from, for the page footer.
 create or replace function public.matchup_coverage(p_source text default 'online', p_days int default 30)

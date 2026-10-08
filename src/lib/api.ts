@@ -274,3 +274,12 @@ export async function tournamentDeck(id: number, place: number): Promise<{ t: To
   return ts[0] && ds[0] ? { t: ts[0], d: ds[0] } : null;
 }
 export const tourneyMeta = (days = 60) => sb.rpc<MetaRow[]>('tourney_meta', { days });
+
+/* ---------------- Matchups (how archetypes do against each other; from Limitless) ---------------- */
+export type MatchupSource = 'online' | 'official';
+export type MatchupDeck = { deck: string; name: string; icons: string[]; games: number; wins: number; losses: number; ties: number; win_pct: number | null; events: number };
+export type Matchup = { opp: string; name: string; icons: string[]; games: number; wins: number; losses: number; ties: number; win_pct: number | null };
+export type MatchupCoverage = { events: number; pending: number; from: string | null; to: string | null; event_names: string[] | null };
+export const matchupDecks = (source: MatchupSource, days: number) => sb.rpc<MatchupDeck[]>('matchup_decks', { p_source: source, p_days: days });
+export const matchups = (deck: string, source: MatchupSource, days: number) => sb.rpc<Matchup[]>('matchups', { p_deck: deck, p_source: source, p_days: days });
+export const matchupCoverage = (source: MatchupSource, days: number) => sb.rpc<MatchupCoverage>('matchup_coverage', { p_source: source, p_days: days });
