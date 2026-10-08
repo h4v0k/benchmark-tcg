@@ -87,6 +87,15 @@ end $$;
 create or replace function public.mu_slug_ok(p text) returns boolean
 language sql immutable set search_path = '' as $$ select coalesce(p, '') ~ '^[a-z0-9][a-z0-9-]{0,63}$' and p <> 'other' $$;
 
+-- Reads a stored setting as a time; anything unreadable counts as "never" instead of breaking the collector.
+create or replace function public.mu_ts(v text) returns timestamptz
+language plpgsql stable set search_path = '' as $$
+begin
+  return coalesce(v::timestamptz, '-infinity');
+exception when others then
+  return '-infinity';
+end $$;
+
 create or replace function public.mu_archetype(p_slug text, p_name text, p_icons text[]) returns void
 language sql security definer set search_path = public as $$
   insert into public.archetypes (slug, name, icons)
@@ -156,8 +165,8 @@ begin
     -- a match with two players and no result means the event is still running: try again next run.
     -- After 3 days, assume it was abandoned and count the matches that did finish.
     if exists (select 1 from jsonb_array_elements(j) x where coalesce(x->>'player2', '') <> '' and (x->'winner' is null or x->'winner' = 'null'::jsonb))
-       and coalesce((select starts_at from public.mu_events where source = 'online' and event_id = f.event_id), now()) > now() - interval '72 hours' then
-      raise exception 'online_pairings: event not finished';
+       and coalesce((select coalesce(starts_at, date::timestamptz) from public.mu_events where source = 'online' and event_id = f.event_id), now()) > now() - interval '72 hours' then
+      raise exception 'online_pairings: event not finished' using errcode = 'MU001';  -- not a failure: try again next run
     end if;
     delete from public.mu_results where source = 'online' and event_id = f.event_id;  -- safe to re-run
     for e in select * from jsonb_array_elements(j) loop
@@ -219,7 +228,7 @@ end $$;
 -- Two cron jobs call this (see bottom of file):
 --   every 6 hours: read anything still waiting, then send the next small batch (p_send = true)
 --   5 minutes later: only read the answers to that batch (p_send = false), before pg_net clears them
--- Each send run sends at most `budget` event requests plus the online event list (1 page; 4 for the one-time
+-- Each send run sends at most `budget` event requests plus the online event list (page 1, plus pages 2-4 of the one-time
 -- backfill). Of everything sent, no more than `site_cap` requests go to the Labs site (official list included);
 -- the Play API gets the rest of the budget. If Limitless answers 429 (too many requests), sending stops for at
 -- least 12 hours, doubling on each run that gets one (up to 4 days), or as long as Retry-After asks (up to 4 days).
@@ -228,7 +237,8 @@ create or replace function public.mu_tick(budget int default 20, p_send boolean 
 language plpgsql security definer set search_path = public, extensions as $$
 declare f public.mu_fetch; resp record; sent int := 0; ev_sent int := 0; labs_sent int := 0; ev public.mu_events;
   last_at timestamptz; pages int; ok boolean; rnd int; failed text[] := '{}'; worked text[] := '{}'; k text;
-  pause interval; retry_after int; streak int; saw429 boolean := false; max_retry int; n_ok int := 0; n_down int := 0;
+  pause interval; retry_after int; streak int; saw429 boolean := false; max_retry int; src text; not_yet boolean;
+  ok_src text[] := '{}'; down_src text[] := '{}';   -- which sites ('online' = Play API, 'official' = Labs) answered well / were down this run
 begin
   -- one run at a time (cron plus a manual call must not read the same response twice)
   if not pg_try_advisory_xact_lock(hashtext('benchmark_mu_tick')) then return jsonb_build_object('busy', true); end if;
@@ -239,7 +249,7 @@ begin
     if not found then
       -- pg_net already cleared it (or it never came back): counts as a failed try for the event
       if f.created_at < now() - interval '3 hours' then
-        n_down := n_down + 1;
+        down_src := down_src || (case when f.kind like 'online%' then 'online' else 'official' end);
         if f.event_id is not null then
           failed := failed || ((case when f.kind like 'online%' then 'online' else 'official' end) || ':' || f.event_id);
         elsif f.kind like '%index' then
@@ -261,30 +271,42 @@ begin
       continue;
     end if;
 
-    ok := false;
+    ok := false; not_yet := false;
+    src := case when f.kind like 'online%' then 'online' else 'official' end;
     begin
       -- anything that isn't a usable 200 (5xx, timeout, 404, a body in the wrong shape) is a failed try
       if resp.status_code = 200 and resp.content is not null then perform public.mu_read(f, resp.content); ok := true; end if;
-    exception when others then
-      raise warning 'mu_read % % failed: %', f.kind, f.event_id, sqlerrm;
+    exception
+      when sqlstate 'MU001' then not_yet := true;  -- event still running: neither a success nor a failure
+      when others then raise warning 'mu_read % % failed: %', f.kind, f.event_id, sqlerrm;
     end;
-    if f.event_id is not null then
-      k := case when f.kind like 'online%' then 'online' else 'official' end || ':' || f.event_id;
+    if f.event_id is not null and not not_yet then
+      k := src || ':' || f.event_id;
       if ok then worked := worked || k; else failed := failed || k; end if;
     end if;
-    if ok then n_ok := n_ok + 1; elsif resp.status_code is null or resp.status_code >= 500 then n_down := n_down + 1; end if;
+    if ok or not_yet then ok_src := ok_src || src;
+    elsif resp.status_code is null or resp.status_code >= 500 then down_src := down_src || src; end if;
     if f.event_id is null and not ok and f.kind like '%index' then
       update public.app_settings set value = '-infinity' where key = 'mu_' || f.kind || '_at';  -- fetch the list again next run
     end if;
     update public.mu_fetch set handled_at = now() where net_id = f.net_id;
   end loop;
   delete from public.mu_fetch where handled_at < now() - interval '2 days';
-  -- at most one try per event per run (an official event sends many rounds at once); a clean run resets it.
-  -- If nothing came back OK and the failures were server errors or no answer at all, Limitless itself is down:
-  -- that isn't any event's fault, so no tries are counted (an outage can't use up events' retries).
-  if not (n_ok = 0 and n_down > 0) then
-    update public.mu_events set tries = tries + 1 where source || ':' || event_id = any(failed);
-  end if;
+  -- At most one try per event per run (an official event sends many rounds at once); a clean run resets it.
+  -- If a site gave no good answer this run and some of its requests got server errors or no answer, that site is
+  -- down: its events don't lose a try (an outage can't use up retries). After 4 days down, tries count again, so
+  -- something broken for good is still given up on eventually.
+  foreach src in array array['online', 'official'] loop
+    if not (src = any(ok_src)) and src = any(down_src) then
+      insert into public.app_settings (key, value) values ('mu_down_since_' || src, now()::text) on conflict (key) do nothing;
+    elsif src = any(ok_src) then
+      delete from public.app_settings where key = 'mu_down_since_' || src;
+    end if;
+    if public.mu_ts((select value from public.app_settings where key = 'mu_down_since_' || src)) < now() - interval '4 days'
+       or not exists (select 1 from public.app_settings where key = 'mu_down_since_' || src) then
+      update public.mu_events set tries = tries + 1 where source = src and source || ':' || event_id = any(failed);
+    end if;
+  end loop;
   update public.mu_events set tries = 0 where source || ':' || event_id = any(worked) and not (source || ':' || event_id = any(failed));
 
   -- 429s, once per run: pause 12h (skips the next send run), doubling on each run that gets one, up to 4 days,
@@ -295,8 +317,8 @@ begin
     if max_retry is not null then pause := least(greatest(pause, make_interval(secs => max_retry)), interval '4 days'); end if;
     insert into public.app_settings (key, value) values ('mu_429_streak', streak::text) on conflict (key) do update set value = excluded.value;
     insert into public.app_settings as a (key, value) values ('mu_backoff_until', (now() + pause)::text)
-      on conflict (key) do update set value = greatest(a.value::timestamptz, excluded.value::timestamptz)::text;
-  elsif n_ok > 0 then
+      on conflict (key) do update set value = greatest(public.mu_ts(a.value), excluded.value::timestamptz)::text;
+  elsif cardinality(ok_src) > 0 then
     delete from public.app_settings where key = 'mu_429_streak';
   end if;
 
@@ -321,19 +343,14 @@ begin
   delete from public.archetypes a where updated_at < now() - interval '30 days'
     and not exists (select 1 from public.mu_results r where r.deck = a.slug);
 
-  if coalesce((select value::timestamptz from public.app_settings where key = 'mu_backoff_until'), '-infinity') > now() then
+  if public.mu_ts((select value from public.app_settings where key = 'mu_backoff_until')) > now() then
     return jsonb_build_object('backoff_until', (select value from public.app_settings where key = 'mu_backoff_until'));
   end if;
 
-  -- 2. event lists: online every run (four pages until the one-time backfill has been read, ~60 days), official once a day
-  select value::timestamptz into last_at from public.app_settings where key = 'mu_online_index_at';
-  if last_at is null or last_at < now() - interval '5 hours' then
-    if not exists (select 1 from public.app_settings where key = 'mu_online_backfill')
-       and (select count(*) from public.app_settings where key in ('mu_backfill_page_1', 'mu_backfill_page_2', 'mu_backfill_page_3', 'mu_backfill_page_4')) = 4 then
-      insert into public.app_settings (key, value) values ('mu_online_backfill', now()::text) on conflict (key) do nothing;
-    end if;
-    pages := case when exists (select 1 from public.app_settings where key = 'mu_online_backfill') then 1 else 4 end;
-    for i in 1..pages loop
+  -- 2. event lists: online page 1 every run, plus pages 2-4 (~60 days back) until each has been read once; official once a day
+  last_at := public.mu_ts((select value from public.app_settings where key = 'mu_online_index_at'));
+  if last_at < now() - interval '5 hours' then
+    for i in 1..4 loop
       -- page 1 always (new events); pages 2-4 only until each has been read once
       continue when i > 1 and exists (select 1 from public.app_settings where key = 'mu_backfill_page_' || i);
       perform public.mu_get('online_index', 'https://play.limitlesstcg.com/api/tournaments?game=PTCG&format=STANDARD&limit=200&page=' || i, null, i);
@@ -341,8 +358,8 @@ begin
     end loop;
     insert into public.app_settings (key, value) values ('mu_online_index_at', now()::text) on conflict (key) do update set value = excluded.value;
   end if;
-  select value::timestamptz into last_at from public.app_settings where key = 'mu_official_index_at';
-  if last_at is null or last_at < now() - interval '23 hours' then
+  last_at := public.mu_ts((select value from public.app_settings where key = 'mu_official_index_at'));
+  if last_at < now() - interval '23 hours' then
     perform public.mu_get('official_index', 'https://mew.limitlesstcg.com/labs/data/tcg/tournaments');
     sent := sent + 1; labs_sent := labs_sent + 1;  -- counts toward the Labs cap
     insert into public.app_settings (key, value) values ('mu_official_index_at', now()::text) on conflict (key) do update set value = excluded.value;
@@ -351,7 +368,7 @@ begin
   -- 3. work through events, newest first (both sources), so recent weeks fill in before the backfill
   -- online events wait a day after their start so Swiss and top cut are finished
   for ev in select * from public.mu_events where status not in ('done', 'skip')
-              and (source = 'official' or starts_at <= now() - interval '24 hours')
+              and (source = 'official' or coalesce(starts_at, date::timestamptz) <= now() - interval '24 hours')
             order by date desc, (source = 'official') desc loop
     exit when ev_sent >= budget;
     if ev.source = 'online' then
@@ -385,6 +402,7 @@ end $$;
 revoke execute on function public.mu_get(text, text, text, int) from public, anon, authenticated;
 revoke execute on function public.mu_archetype(text, text, text[]) from public, anon, authenticated;
 revoke execute on function public.mu_slug_ok(text) from public, anon, authenticated;
+revoke execute on function public.mu_ts(text) from public, anon, authenticated;
 revoke execute on function public.mu_add(text, text, text, text, text) from public, anon, authenticated;
 revoke execute on function public.mu_read(public.mu_fetch, text) from public, anon, authenticated;
 revoke execute on function public.mu_tick(int, boolean, int) from public, anon, authenticated;
