@@ -791,6 +791,54 @@ do $$ declare a boolean; b boolean; c boolean; begin
   perform t.check('I4 real anon session: mu_tick denied, mu_results denied, read RPCs work', a and b and c, a::text || b::text || c::text);
 end $$;
 
+-- ================= P. round-4 review fixes =================
+-- P1: a garbage 429 streak doesn't break the run; it restarts at 1
+select t.reset(true);
+insert into public.app_settings values ('mu_429_streak', 'abc');
+select t.seed_online('p1', 'new');
+select public.mu_tick();
+insert into t.override (pattern, status, body) values ('%', 429, 'slow down');
+select t.answer(); select public.mu_tick(0, false);
+select t.eq('P1 garbage mu_429_streak: no error, streak restarts at 1', (select value from public.app_settings where key = 'mu_429_streak'), '1');
+
+-- P2: a site that answers at all (404 here) is no longer marked down
+select t.reset(true);
+insert into public.app_settings values ('mu_down_since_official', (now() - interval '1 day')::text);
+select t.seed_official('9101', 'rounds', 2);
+select public.mu_tick();
+insert into t.override (pattern, status, body) values ('%labs/data/tcg/pairings%', 404, 'nope');
+select t.answer(); select public.mu_tick(0, false);
+select t.check('P2 Labs answered 404 (no 5xx): mu_down_since_official cleared',
+  not exists (select 1 from public.app_settings where key = 'mu_down_since_official'),
+  (select string_agg(key || '=' || value, ',') from public.app_settings));
+
+-- P3: a skipped official event is revived once when the official list shows it again; a second skip sticks
+select t.reset(false);
+insert into public.app_settings values ('mu_online_index_at', now()::text);
+insert into public.mu_events (source, event_id, name, date, rounds, rounds_done, status, tries)
+values ('official', '0075', 'Regional Championship Recife', current_date - 10, 3, '{1}', 'skip', 5);
+select public.mu_read(row(1, 'official_index', null, null, now(), null)::public.mu_fetch,
+  json_build_object('ok', true, 'message', json_build_array(json_build_object('id', 75, 'type', 'regional', 'city', 'Recife',
+    'utc_start', to_char(now() - interval '10 days', 'YYYY-MM-DD HH24:MI:SS'), 'completed', 1)))::text);
+select t.eq('P3 skipped official event revived once (status/tries/rounds_done/revived)',
+  (select status || '/' || tries || '/' || rounds_done::text || '/' || revived from public.mu_events where event_id = '0075'), 'new/0/{}/true');
+update public.mu_events set status = 'skip', tries = 5 where event_id = '0075';
+select public.mu_read(row(2, 'official_index', null, null, now(), null)::public.mu_fetch,
+  json_build_object('ok', true, 'message', json_build_array(json_build_object('id', 75, 'type', 'regional', 'city', 'Recife',
+    'utc_start', to_char(now() - interval '10 days', 'YYYY-MM-DD HH24:MI:SS'), 'completed', 1)))::text);
+select t.eq('P3b a second skip is final', (select status from public.mu_events where event_id = '0075'), 'skip');
+-- P4: same for online
+select t.reset(false);
+insert into public.mu_events (source, event_id, name, date, starts_at, players, status, tries) values ('online', 'onl1', 'X', current_date - 3, now() - interval '3 days', 40, 'skip', 5);
+select public.mu_read(row(3, 'online_index', null, 1, now(), null)::public.mu_fetch,
+  json_build_array(json_build_object('id', 'onl1', 'format', 'STANDARD', 'name', 'X', 'date', to_char(now() - interval '3 days', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), 'players', 40))::text);
+select t.eq('P4 skipped online event revived once', (select status || '/' || revived from public.mu_events where event_id = 'onl1'), 'new/true');
+-- P5: done events are never reset by the list
+update public.mu_events set status = 'done' where event_id = 'onl1';
+select public.mu_read(row(4, 'online_index', null, 1, now(), null)::public.mu_fetch,
+  json_build_array(json_build_object('id', 'onl1', 'format', 'STANDARD', 'name', 'X', 'date', to_char(now() - interval '3 days', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), 'players', 40))::text);
+select t.eq('P5 done event untouched by a later list', (select status from public.mu_events where event_id = 'onl1'), 'done');
+
 -- ================= summary =================
 \o
 select count(*) filter (where ok) as pass, count(*) filter (where not ok) as fail from t.results \gset

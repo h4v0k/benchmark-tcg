@@ -29,6 +29,7 @@ create table if not exists public.mu_events (
   rounds_done int[] not null default '{}',   -- official: rounds already counted
   status text not null default 'new' check (status in ('new', 'standings', 'rounds', 'done', 'skip')),
   tries int not null default 0,
+  revived boolean not null default false,    -- a skipped event gets one more chance when it shows up in the list again
   first_seen timestamptz not null default now(),
   done_at timestamptz,
   primary key (source, event_id)
@@ -137,7 +138,8 @@ begin
            and (e->>'date')::timestamptz between now() - interval '60 days' and now() then
           insert into public.mu_events (source, event_id, name, date, starts_at, players)
           values ('online', e->>'id', left(coalesce(e->>'name', ''), 200), (e->>'date')::timestamptz::date, (e->>'date')::timestamptz, (e->>'players')::int)
-          on conflict do nothing;
+          on conflict (source, event_id) do update set status = 'new', tries = 0, done_at = null, revived = true
+            where mu_events.status = 'skip' and not mu_events.revived;
         end if;
       exception when others then continue;
       end;
@@ -193,7 +195,8 @@ begin
             case e->>'type' when 'worlds' then 'World Championship' when 'international' then 'International Championship'
                  else 'Regional Championship' end || ' ' || coalesce(e->>'city', ''),
             (e->>'utc_start')::timestamp::date)
-          on conflict do nothing;
+          on conflict (source, event_id) do update set status = 'new', tries = 0, done_at = null, rounds_done = '{}', revived = true
+            where mu_events.status = 'skip' and not mu_events.revived;
         end if;
       exception when others then continue;
       end;
@@ -238,7 +241,7 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare f public.mu_fetch; resp record; sent int := 0; ev_sent int := 0; labs_sent int := 0; ev public.mu_events;
   last_at timestamptz; pages int; ok boolean; rnd int; failed text[] := '{}'; worked text[] := '{}'; k text;
   pause interval; retry_after int; streak int; saw429 boolean := false; max_retry int; src text; not_yet boolean;
-  ok_src text[] := '{}'; down_src text[] := '{}';   -- which sites ('online' = Play API, 'official' = Labs) answered well / were down this run
+  ok_src text[] := '{}'; down_src text[] := '{}'; heard_src text[] := '{}';   -- which sites ('online' = Play API, 'official' = Labs) answered well / were down this run
 begin
   -- one run at a time (cron plus a manual call must not read the same response twice)
   if not pg_try_advisory_xact_lock(hashtext('benchmark_mu_tick')) then return jsonb_build_object('busy', true); end if;
@@ -260,6 +263,9 @@ begin
       continue;
     end if;
 
+    if resp.status_code is not null and resp.status_code < 500 then
+      heard_src := heard_src || (case when f.kind like 'online%' then 'online' else 'official' end);  -- the site is up
+    end if;
     if resp.status_code = 429 then
       -- rate limited: noted here, acted on once after the loop; not the event's fault, so no try is counted
       saw429 := true;
@@ -299,8 +305,8 @@ begin
   foreach src in array array['online', 'official'] loop
     if not (src = any(ok_src)) and src = any(down_src) then
       insert into public.app_settings (key, value) values ('mu_down_since_' || src, now()::text) on conflict (key) do nothing;
-    elsif src = any(ok_src) then
-      delete from public.app_settings where key = 'mu_down_since_' || src;
+    elsif src = any(heard_src) then
+      delete from public.app_settings where key = 'mu_down_since_' || src;  -- answered at all (even 4xx/429): not down
     end if;
     if public.mu_ts((select value from public.app_settings where key = 'mu_down_since_' || src)) < now() - interval '4 days'
        or not exists (select 1 from public.app_settings where key = 'mu_down_since_' || src) then
@@ -312,7 +318,7 @@ begin
   -- 429s, once per run: pause 12h (skips the next send run), doubling on each run that gets one, up to 4 days,
   -- or longer if Limitless asks (Retry-After, also capped at 4 days). A run with good answers and no 429 ends the streak.
   if saw429 then
-    streak := coalesce((select value::int from public.app_settings where key = 'mu_429_streak'), 0) + 1;
+    streak := coalesce((select case when value ~ '^\d{1,3}$' then value::int end from public.app_settings where key = 'mu_429_streak'), 0) + 1;
     pause := least(interval '12 hours' * power(2, least(streak - 1, 3)), interval '4 days');
     if max_retry is not null then pause := least(greatest(pause, make_interval(secs => max_retry)), interval '4 days'); end if;
     insert into public.app_settings (key, value) values ('mu_429_streak', streak::text) on conflict (key) do update set value = excluded.value;
