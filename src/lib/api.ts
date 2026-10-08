@@ -293,3 +293,14 @@ export async function archetypeName(slug: string): Promise<string | null> {
   const { rows } = await sb.select<{ name: string }>('archetypes', { select: 'name', slug: `eq.${slug}` });
   return rows[0]?.name || null;
 }
+
+/** Every top-32 finish of one archetype across Regionals, Internationals and Worlds, best placement first. */
+export type ArchetypeFinish = TourneyDeck & { tournaments: Pick<Tournament, 'id' | 'name' | 'date' | 'kind' | 'players'> };
+export async function archetypeFinishes(archetype: string, days: number): Promise<ArchetypeFinish[]> {
+  const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+  const { rows } = await sb.select<ArchetypeFinish>('tournament_decks', {
+    select: 'tournament_id,place,player,country,archetype,list_id,card_count,price,tournaments!inner(id,name,date,kind,players)',
+    archetype: `eq.${archetype}`, 'tournaments.date': `gte.${since}`, order: 'place.asc', limit: 300,
+  });
+  return rows.sort((a, b) => a.place - b.place || b.tournaments.date.localeCompare(a.tournaments.date));
+}

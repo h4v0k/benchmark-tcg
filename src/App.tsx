@@ -17,6 +17,7 @@ import { RulesPage } from './pages/Rules';
 import { EventsPage, EventPage, EventDeckPage } from './pages/Events';
 import { MatchupsPage } from './pages/Matchups';
 import { DeckListsPage } from './pages/DeckLists';
+import { ArchetypePage } from './pages/Archetype';
 import { LoginPage } from './pages/Login';
 import { SettingsPage } from './pages/Settings';
 import { AdminPage } from './pages/Admin';
@@ -47,6 +48,7 @@ const ROUTES: [string, (p: Record<string, string>) => ReactElement][] = [
   ['/matchups', () => <MatchupsPage />],
   ['/matchups/:deck', p => <MatchupsPage deck={p.deck} />],
   ['/matchups/:deck/lists', p => <DeckListsPage deck={p.deck} />],
+  ['/archetype/:name', p => <ArchetypePage name={p.name} />],
   ['/login', () => <LoginPage mode="signin" />],
   ['/signup', () => <LoginPage mode="signup" />],
   ['/settings', () => <SettingsPage />],

@@ -90,6 +90,15 @@ const DECK_LISTS = [
   { id: 104, event_id: 'ev-9004', event_name: 'Online Series #11', date: '2026-09-25', event_players: 36, player: 'Di', place: 9, wins: 5, losses: 3, ties: 0, win_pct: 62.5 },
 ];
 const LIST_TEXT = '4 Dreepy TWM 128\n3 Drakloak TWM 129\n2 Dragapult ex TWM 130\n4 Ultra Ball TWM 196\n1 Mystery Card XYZ 1';
+const archRow = (tid, name, date, kind, players, place, player, cc, lid, price) => ({ tournament_id: tid, place, player, country: 'US', archetype: 'Dragapult', list_id: lid, card_count: cc, price, tournaments: { id: tid, name, date, kind, players } });
+const ARCH_ROWS = [ // deliberately not in display order
+  archRow(580, 'Regional Recife', '2026-10-03', 'regional', 1074, 2, 'Bea', 60, 30002, 41.5),
+  archRow(560, 'Regional Lille', '2026-09-10', 'regional', 800, 25, 'Eli', 60, 30025, 38.2),
+  archRow(570, 'World Championships', '2026-08-22', 'worlds', 4000, 1, 'Wes', 60, 29001, 45.9),
+  archRow(570, 'World Championships', '2026-08-22', 'worlds', 4000, 9, 'Gus', 60, 29009, 43.0),
+  archRow(560, 'Regional Lille', '2026-09-10', 'regional', 800, 14, 'Fay', null, 30014, null),
+  archRow(580, 'Regional Recife', '2026-10-03', 'regional', 1074, 1, 'Ana', 60, 30001, 44.1),
+];
 const RULES = {"standard_min_mark":"H","formats":[{"format":"standard","min_mark":"H","min_release":null,"season":"2026-27","notes":"","source":"","checked_at":"2026-10-05T12:00:00Z","updated_at":"2026-10-05T12:00:00Z"},{"format":"expanded","min_mark":null,"min_release":"2011-04-25","season":"","notes":"","source":"","checked_at":"2026-10-05T12:00:00Z","updated_at":"2026-10-05T12:00:00Z"}],"next_rotation":null,"bans":[{"format":"expanded","card_name":"Red Card","printings":[{"set":"XY","num":"124/146"}],"card_ids":["xy1-124"],"effective_date":null,"source":""}],"upcoming_sets":[],"last_checked":"2026-10-05T12:00:00Z","last_catalog_sync":"2026-10-05T12:00:00Z","card_count":20000};
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
@@ -130,9 +139,10 @@ async function handleSupabase(route) {
   }
   if (p === '/rest/v1/rpc/tourney_meta') return json(route, [{ archetype: 'Dragapult', top32: 41, top8: 10, wins: 1, events: 4, best_tournament: 580, best_place: 2 }, { archetype: "N's Zoroark", top32: 8, top8: 1, wins: 0, events: 3, best_tournament: 580, best_place: 4 }]);
   if (p === '/rest/v1/tournaments') return json(route, [{ id: 580, name: 'Regional Recife', date: '2026-10-03', country: 'BR', players: 1074, kind: 'regional', status: 'lists', tournament_decks: [{ count: 32 }] }]);
+  if (p === '/rest/v1/tournament_decks' && (u.searchParams.get('select') || '').includes('tournaments!inner')) return json(route, u.searchParams.get('archetype') === 'eq.Dragapult' ? ARCH_ROWS : []);
   if (p === '/rest/v1/tournament_decks') {
     const mk = (place, arch) => ({ tournament_id: 580, place, player: 'Victor Carreira Rodrigues', country: 'BR', archetype: arch, list_id: 30000 + place, card_count: 60, price: 44.14, cards: DECK.cards, missing: [] });
-    if (u.searchParams.get('place')) return json(route, [mk(1, 'Ogerpon Meganium')]);
+    if (u.searchParams.get('place')) return json(route, [mk(Number(u.searchParams.get('place').slice(3)), u.searchParams.get('place') === 'eq.1' ? 'Ogerpon Meganium' : 'Dragapult')]);
     return json(route, Array.from({ length: 32 }, (_, i) => { const d = mk(i + 1, i % 2 ? 'Dragapult' : "N's Zoroark Lucario"); delete d.cards; if (i > 29) { d.card_count = null; d.list_id = null; } return d; }));
   }
   if (p === '/rest/v1/rpc/matchup_decks') return json(route, body.p_source === 'official' ? MU_DECKS_OFFICIAL : MU_DECKS_ONLINE);
@@ -632,6 +642,92 @@ try {
     await listsReady(page);
     await noOverflow(page, 'lists light');
     await shotP(page, 'lists-light.png');
+    await page.context().close();
+  });
+  const ordn = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+  const archSorted = [...ARCH_ROWS].sort((a, b) => a.place - b.place || b.tournaments.date.localeCompare(a.tournaments.date));
+  const archSummary = (() => { const w = ARCH_ROWS.filter(r => r.place === 1).length, t8 = ARCH_ROWS.filter(r => r.place <= 8).length, ev = new Set(ARCH_ROWS.map(r => r.tournament_id)).size;
+    return `${ARCH_ROWS.length} top 32 finishes · ${t8} top 8 · ${w} wins · ${ev} events`; })();
+  const archReady = async p => { await p.getByRole('heading', { name: 'Dragapult', level: 1 }).waitFor({ state: 'visible', ...T }); await p.locator('.mu-list li').first().waitFor({ state: 'visible', ...T }); };
+  await scenario('19. archetype page: link from What\'s winning, summary, order, row links, period', async () => {
+    const page = await newPage({ width: 390, height: 844 });
+    const dates = [];
+    page.on('request', r => { const u = new URL(r.url()); if (u.pathname === '/rest/v1/tournament_decks' && (u.searchParams.get('select') || '').includes('tournaments!inner')) dates.push(u.searchParams.get('tournaments.date')); });
+    await page.goto(BASE + '/events');
+    const link = page.locator('a.mu-deck-link', { hasText: /^Dragapult$/ }).first();
+    await link.waitFor({ state: 'visible', ...T });
+    if (await link.getAttribute('href') !== '/archetype/Dragapult') throw new Error(`href: ${await link.getAttribute('href')}`);
+    await link.click(T);
+    await page.waitForURL(u => new URL(u).pathname === '/archetype/Dragapult', T);
+    await archReady(page);
+    await page.getByText(archSummary, { exact: true }).waitFor({ state: 'visible', ...T });
+    const items = page.locator('.mu-list li');
+    if (await items.count() !== archSorted.length) throw new Error(`expected ${archSorted.length} rows, got ${await items.count()}`);
+    const placeTxt = await items.locator('.mu-place').allTextContents();
+    if (placeTxt.join('|') !== archSorted.map(r => ordn(r.place)).join('|')) throw new Error(`order: ${placeTxt}`);
+    const evNames = await items.locator('.mu-name b').allTextContents();
+    if (evNames.join('|') !== archSorted.map(r => r.tournaments.name).join('|')) throw new Error(`event order (newer first within a place): ${evNames}`);
+    for (let i = 0; i < archSorted.length; i++) {
+      const r = archSorted[i], li = items.nth(i);
+      if (r.card_count != null) {
+        const href = await li.locator('a.mu-link').getAttribute('href');
+        if (href !== `/events/${r.tournament_id}/${r.place}`) throw new Error(`row ${i} href: ${href}`);
+      } else {
+        if (await li.locator('a').count()) throw new Error(`row ${i} (no card_count) is a link`);
+        await li.getByText('Loading list').waitFor({ state: 'visible', ...T });
+      }
+    }
+    // period
+    const period = page.getByLabel('Period');
+    if (await period.inputValue() !== '60') throw new Error('default period should be 60');
+    if ((await period.locator('option').allTextContents()).join('|') !== 'Last 30 days|Last 60 days|Last 120 days') throw new Error('period options');
+    const since = d => new Date(Date.now() - d * 864e5).toISOString().slice(0, 10);
+    if (dates[dates.length - 1] !== `gte.${since(60)}`) throw new Error(`default date filter: ${dates[dates.length - 1]}`);
+    await period.selectOption('120');
+    await page.waitForURL(u => new URL(u).searchParams.get('days') === '120', T);
+    await page.waitForFunction(() => true);
+    await page.waitForTimeout(300);
+    if (dates[dates.length - 1] !== `gte.${since(120)}`) throw new Error(`120-day date filter: ${dates[dates.length - 1]}`);
+    await period.selectOption('60');
+    await page.waitForURL(u => new URL(u).searchParams.get('days') === null, T);
+    // /events link carries ?days when not 60
+    await page.context().close();
+  });
+  await scenario('20. archetype page: empty state, and "More lists" link from an event list page', async () => {
+    const page = await newPage({ width: 390, height: 844 });
+    await page.goto(BASE + '/archetype/Nothing%20Here');
+    await page.getByRole('heading', { name: 'Nothing Here', level: 1 }).waitFor({ state: 'visible', ...T });
+    await see(page, 'No top 32 finishes in this period');
+    await page.getByRole('link', { name: 'All tournaments' }).waitFor({ state: 'visible', ...T });
+    await page.goto(BASE + '/events/580/2');
+    const more = page.getByRole('link', { name: /More Dragapult lists/ });
+    await more.waitFor({ state: 'visible', ...T });
+    await more.click(T);
+    await page.waitForURL(u => new URL(u).pathname === '/archetype/Dragapult', T);
+    await archReady(page);
+    await page.context().close();
+  });
+  for (const [w, h] of sizes) for (const big of [false, true]) await scenario(`21. archetype page at ${w}x${h}${big ? ' with large text (24px)' : ''}`, async () => {
+    const page = await newPage({ width: w, height: h });
+    await page.goto(BASE + '/archetype/Dragapult');
+    await archReady(page);
+    if (big) await page.addStyleTag({ content: BIG });
+    await page.waitForTimeout(300);
+    await noOverflow(page, 'archetype');
+    if (w === 390) await shotP(page, big ? 'archetype-bigtext.png' : 'archetype-phone.png');
+    await page.goto(BASE + '/archetype/Nothing%20Here');
+    await see(page, 'No top 32 finishes');
+    if (big) await page.addStyleTag({ content: BIG });
+    await noOverflow(page, 'archetype empty');
+    await page.context().close();
+  });
+  await scenario('21. archetype page light theme at 390', async () => {
+    const page = await newPage({ width: 390, height: 844 });
+    await page.addInitScript(() => { try { localStorage.setItem('bm:theme', 'light'); } catch {} });
+    await page.goto(BASE + '/archetype/Dragapult');
+    await page.evaluate(() => { document.documentElement.dataset.theme = 'light'; });
+    await archReady(page);
+    await noOverflow(page, 'archetype light');
     await page.context().close();
   });
   await scenario('14. nav has Matchups link', async () => {

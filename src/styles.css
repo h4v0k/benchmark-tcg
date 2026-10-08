@@ -683,3 +683,7 @@ a.mu-link:hover { border-color: var(--accent); }
 .mu-record .mu-pct { font-size: 1.8em; line-height: 1; }
 .mu-listview .deck-actions { margin: 0 0 12px; }
 .mu-deck-link b { text-decoration: underline dotted; text-decoration-color: var(--faint); text-underline-offset: 4px; }
+/* Archetype finishes */
+.mu-place { flex: none; min-width: 3.2em; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mu-side { display: grid; justify-items: end; gap: 3px; flex: none; }
+.mu-link.off { opacity: .7; }

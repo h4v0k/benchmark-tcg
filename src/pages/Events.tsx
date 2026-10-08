@@ -37,7 +37,7 @@ export function EventsPage() {
             {meta.data.slice(0, 12).map(m => (
               <li key={m.archetype}>
                 <div className="meta-row">
-                  <b className="meta-name">{m.archetype}</b>
+                  <Link className="meta-name mu-deck-link" to={`/archetype/${encodeURIComponent(m.archetype)}${days !== '60' ? `?days=${days}` : ''}`}><b>{m.archetype}</b></Link>
                   <span className="meta-stats">{m.top32} in top 32 · {m.top8} top 8{m.wins ? ` · ${m.wins} win${m.wins > 1 ? 's' : ''}` : ''}</span>
                 </div>
                 <div className="meta-bar" aria-hidden="true"><span style={{ width: `${Math.max(3, (m.top32 / maxTop32) * 100)}%` }} /></div>
@@ -141,6 +141,7 @@ export function EventDeckPage({ id, place }: { id: number; place: number }) {
         <p className="crumbs"><Link to="/events">Tournaments</Link> › <Link to={`/events/${t.id}`}>{t.name}</Link></p>
         <div className="row-gap"><Tag tone="accent">{ord(d.place)} place</Tag><Tag tone={KIND_TONE[t.kind]}>{KIND[t.kind]}</Tag></div>
         <h1 className="deck-title">{d.archetype || 'Deck'}</h1>
+        {d.archetype && <p className="small"><Link to={`/archetype/${encodeURIComponent(d.archetype)}`}>More {d.archetype} lists<Icon name="forward" size={12} /></Link></p>}
         <p className="muted">{d.player}{d.country ? ` (${d.country})` : ''} · {t.name} · {fmtDate(t.date)}</p>
         <div className="deck-actions">
           <button className="btn primary" onClick={copy} disabled={busy}><Icon name="copy" />{busy ? 'Copying…' : 'Copy to my decks'}</button>
