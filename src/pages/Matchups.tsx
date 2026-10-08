@@ -54,7 +54,7 @@ export function MatchupsPage({ deck }: { deck?: string }) {
     </div>
   );
 
-  if (deck) return <DeckMatchups deck={deck} source={source} days={days} decks={decks.data} controls={controls} />;
+  if (deck) return <DeckMatchups deck={deck} source={source} days={days} decks={decks.data} cover={cover.data} controls={controls} />;
 
   return (
     <div className="wrap page narrow-wide">
@@ -93,9 +93,8 @@ export function MatchupsPage({ deck }: { deck?: string }) {
   );
 }
 
-function DeckMatchups({ deck, source, days, decks, controls }: { deck: string; source: api.MatchupSource; days: Days; decks?: api.MatchupDeck[]; controls: ReactElement }) {
+function DeckMatchups({ deck, source, days, decks, cover, controls }: { deck: string; source: api.MatchupSource; days: Days; decks?: api.MatchupDeck[]; cover?: api.MatchupCoverage; controls: ReactElement }) {
   const r = useAsync(() => api.matchups(deck, source, +days), [deck, source, days]);
-  const cover = useAsync(() => api.matchupCoverage(source, +days), [source, days]);
   const [find, setFind] = useState('');
   const me = decks?.find(d => d.deck === deck);
   const name = me?.name || deck.replace(/-/g, ' ');
@@ -143,7 +142,7 @@ function DeckMatchups({ deck, source, days, decks, controls }: { deck: string; s
           </section>
         </>
       )}
-      <Coverage cover={cover.data} />
+      <Coverage cover={cover} />
       <Credit source={source} />
     </div>
   );

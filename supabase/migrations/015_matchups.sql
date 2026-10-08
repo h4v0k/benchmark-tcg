@@ -23,6 +23,7 @@ create table if not exists public.mu_events (
   event_id text not null,
   name text not null default '',
   date date not null,
+  starts_at timestamptz,                   -- online: start time (pairings are read a day later)
   players int,
   rounds int,
   next_round int not null default 1,
@@ -109,15 +110,14 @@ language plpgsql security definer set search_path = public as $$
 declare j jsonb := body::jsonb; e jsonb; ev public.mu_events; res text; w text;
 begin
   if f.kind = 'online_index' then
-    if jsonb_typeof(j) <> 'array' then raise exception 'online_index: not a list'; end if;
+    if jsonb_typeof(j) is distinct from 'array' then raise exception 'online_index: not a list'; end if;
     for e in select * from jsonb_array_elements(j) loop
       begin  -- one odd entry shouldn't sink the whole page
-        -- wait a day after the start so the event (Swiss + top cut) has finished
         if coalesce(e->>'id', '') ~ '^[A-Za-z0-9_-]{1,64}$' and coalesce(e->>'players', '') ~ '^\d+$'
            and (e->>'players')::int >= 32 and upper(coalesce(e->>'format', '')) = 'STANDARD'
-           and (e->>'date')::timestamptz between now() - interval '60 days' and now() - interval '24 hours' then
-          insert into public.mu_events (source, event_id, name, date, players)
-          values ('online', e->>'id', left(coalesce(e->>'name', ''), 200), (e->>'date')::timestamptz::date, (e->>'players')::int)
+           and (e->>'date')::timestamptz between now() - interval '60 days' and now() then
+          insert into public.mu_events (source, event_id, name, date, starts_at, players)
+          values ('online', e->>'id', left(coalesce(e->>'name', ''), 200), (e->>'date')::timestamptz::date, (e->>'date')::timestamptz, (e->>'players')::int)
           on conflict do nothing;
         end if;
       exception when others then continue;
@@ -125,10 +125,10 @@ begin
     end loop;
 
   elsif f.kind = 'online_standings' then
-    if jsonb_typeof(j) <> 'array' then raise exception 'online_standings: not a list'; end if;
+    if jsonb_typeof(j) is distinct from 'array' then raise exception 'online_standings: not a list'; end if;
     delete from public.mu_players where event_id = f.event_id;
     for e in select * from jsonb_array_elements(j) loop
-      if e->'deck'->>'id' is not null then
+      if e->'deck'->>'id' is not null and e->>'player' is not null then
         insert into public.mu_players (event_id, player, deck) values (f.event_id, e->>'player', e->'deck'->>'id') on conflict do nothing;
         perform public.mu_archetype(e->'deck'->>'id', e->'deck'->>'name',
           array(select jsonb_array_elements_text(coalesce(e->'deck'->'icons', '[]'::jsonb))));
@@ -142,7 +142,7 @@ begin
     end if;
 
   elsif f.kind = 'online_pairings' then
-    if jsonb_typeof(j) <> 'array' or jsonb_array_length(j) = 0 then raise exception 'online_pairings: no pairings yet'; end if;
+    if jsonb_typeof(j) is distinct from 'array' or jsonb_array_length(j) = 0 then raise exception 'online_pairings: no pairings yet'; end if;
     delete from public.mu_results where source = 'online' and event_id = f.event_id;  -- safe to re-run
     for e in select * from jsonb_array_elements(j) loop
       continue when coalesce(e->>'player2', '') = '' or e->>'winner' = '-1';
@@ -157,7 +157,7 @@ begin
     update public.mu_events set status = 'done', done_at = now() where source = 'online' and event_id = f.event_id;
 
   elsif f.kind = 'official_index' then
-    if j->>'ok' is distinct from 'true' or jsonb_typeof(j->'message') <> 'array' then raise exception 'official_index: bad response'; end if;
+    if j->>'ok' is distinct from 'true' or jsonb_typeof(j->'message') is distinct from 'array' then raise exception 'official_index: bad response'; end if;
     for e in select * from jsonb_array_elements(j->'message') loop
       begin
         if coalesce(e->>'id', '') ~ '^\d{1,6}$' and e->>'completed' in ('1', 'true')
@@ -175,7 +175,7 @@ begin
     end loop;
 
   elsif f.kind = 'official_info' then
-    if j->>'ok' is distinct from 'true' or jsonb_typeof(j->'message') <> 'object' then raise exception 'official_info: bad response'; end if;
+    if j->>'ok' is distinct from 'true' or jsonb_typeof(j->'message') is distinct from 'object' then raise exception 'official_info: bad response'; end if;
     update public.mu_events set players = (j->'message'->>'players')::int, rounds = (j->'message'->>'round')::int,
       status = case when coalesce((j->'message'->>'round')::int, 0) > 0 then 'rounds' else 'skip' end
     where source = 'official' and event_id = f.event_id;
@@ -183,7 +183,7 @@ begin
   elsif f.kind = 'official_round' then
     select * into ev from public.mu_events where source = 'official' and event_id = f.event_id;
     if ev.next_round <> f.round then return; end if;  -- already counted
-    if j->>'ok' is distinct from 'true' or jsonb_typeof(j->'message') <> 'array' then raise exception 'official_round: bad response'; end if;
+    if j->>'ok' is distinct from 'true' or jsonb_typeof(j->'message') is distinct from 'array' then raise exception 'official_round: bad response'; end if;
     for e in select * from jsonb_array_elements(j->'message') loop
       continue when e->>'player2' is null or coalesce((e->>'completed')::int, 1) <> 1;
       perform public.mu_archetype(e->>'p1_deck', e->>'p1_deck_name', string_to_array(nullif(e->>'p1_icons', ''), ' '));
@@ -216,8 +216,8 @@ begin
       continue;
     end if;
     ok := false;
-    if resp.status_code = 429 or resp.status_code >= 500 or resp.status_code is null then
-      -- Limitless is busy or down: pause everything for 30 minutes; this doesn't count against the event
+    if resp.status_code = 429 then
+      -- rate limited: pause everything for 30 minutes; this doesn't count against the event
       insert into public.app_settings (key, value) values ('mu_backoff_until', (now() + interval '30 minutes')::text)
         on conflict (key) do update set value = excluded.value;
       if f.kind like '%index' then delete from public.app_settings where key = 'mu_' || f.kind || '_at'; end if;  -- retry the list
@@ -225,6 +225,7 @@ begin
       continue;
     end if;
     begin
+      -- anything else that isn't a 200 (5xx, timeout, 404) counts as a failed try for the event
       if resp.status_code = 200 and resp.content is not null then perform public.mu_read(f, resp.content); ok := true; end if;
     exception when others then
       raise warning 'mu_read % % failed: %', f.kind, f.event_id, sqlerrm;
@@ -271,7 +272,9 @@ begin
   end if;
 
   -- 3. work through events, newest first; official first since there are few and they matter most
+  -- online events wait a day after their start so Swiss and top cut are finished
   for ev in select * from public.mu_events where status not in ('done', 'skip')
+              and (source = 'official' or starts_at <= now() - interval '24 hours')
             order by (source = 'official') desc, date desc limit greatest(0, budget - sent) loop
     if ev.source = 'online' then
       if ev.status = 'new' then
@@ -354,7 +357,8 @@ returns jsonb language sql stable security definer set search_path = public as $
   select jsonb_build_object(
     'events', count(*) filter (where status = 'done' and exists (select 1 from public.mu_results r where r.source = e.source and r.event_id = e.event_id)),
     'pending', count(*) filter (where status not in ('done', 'skip')),
-    'from', min(date) filter (where status = 'done'), 'to', max(date) filter (where status = 'done'),
+    'from', min(date) filter (where status = 'done' and exists (select 1 from public.mu_results r where r.source = e.source and r.event_id = e.event_id)),
+    'to', max(date) filter (where status = 'done' and exists (select 1 from public.mu_results r where r.source = e.source and r.event_id = e.event_id)),
     'event_names', (select jsonb_agg(x.name order by x.date desc) from (select e2.name, e2.date from public.mu_events e2
         where e2.source = p_source and e2.status = 'done' and e2.date >= current_date - least(greatest(p_days, 7), 180)
         order by e2.date desc limit 8) x))
