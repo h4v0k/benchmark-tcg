@@ -85,7 +85,8 @@ end $$;
 
 create or replace function public.mu_archetype(p_slug text, p_name text, p_icons text[]) returns void
 language sql security definer set search_path = public as $$
-  insert into public.archetypes (slug, name, icons) values (p_slug, coalesce(nullif(p_name, ''), p_slug), coalesce(p_icons, '{}'))
+  insert into public.archetypes (slug, name, icons)
+  select p_slug, coalesce(nullif(p_name, ''), p_slug), coalesce(p_icons, '{}') where coalesce(p_slug, '') not in ('', 'other')
   on conflict (slug) do update set name = excluded.name, icons = excluded.icons, updated_at = now()
   where archetypes.name is distinct from excluded.name or archetypes.icons is distinct from excluded.icons
 $$;
@@ -203,10 +204,11 @@ end $$;
 -- Two cron jobs call this (see bottom of file):
 --   every 6 hours: read anything still waiting, then send the next small batch (p_send = true)
 --   5 minutes later: only read the answers to that batch (p_send = false), before pg_net clears them
--- At most `budget` event requests (plus the event lists) go to Limitless per 6-hour run.
+-- At most `budget` event requests go to Limitless per 6-hour run, plus the event lists (1-3 requests).
 create or replace function public.mu_tick(budget int default 30, p_send boolean default true) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
-declare f public.mu_fetch; resp record; sent int := 0; ev public.mu_events; last_at timestamptz; pages int; ok boolean; rnd int;
+declare f public.mu_fetch; resp record; sent int := 0; ev_sent int := 0; ev public.mu_events; last_at timestamptz; pages int; ok boolean; rnd int;
+  failed text[] := '{}'; worked text[] := '{}'; k text;
 begin
   -- one run at a time (cron plus a manual call must not read the same response twice)
   if not pg_try_advisory_xact_lock(hashtext('benchmark_mu_tick')) then return jsonb_build_object('busy', true); end if;
@@ -242,13 +244,15 @@ begin
       raise warning 'mu_read % % failed: %', f.kind, f.event_id, sqlerrm;
     end;
     if f.event_id is not null then
-      -- a success resets the error count; tries only adds up for errors in a row
-      update public.mu_events set tries = case when ok then 0 else tries + 1 end where event_id = f.event_id
-        and source = case when f.kind like 'online%' then 'online' else 'official' end;
+      k := case when f.kind like 'online%' then 'online' else 'official' end || ':' || f.event_id;
+      if ok then worked := worked || k; else failed := failed || k; end if;
     end if;
     update public.mu_fetch set handled_at = now() where net_id = f.net_id;
   end loop;
   delete from public.mu_fetch where handled_at < now() - interval '2 days';
+  -- at most one try per event per run (an official event sends many rounds at once); a clean run resets it
+  update public.mu_events set tries = tries + 1 where source || ':' || event_id = any(failed);
+  update public.mu_events set tries = 0 where source || ':' || event_id = any(worked) and not (source || ':' || event_id = any(failed));
 
   if not p_send then return jsonb_build_object('read', true); end if;
   if exists (select 1 from public.mu_fetch where handled_at is null) then
@@ -289,7 +293,7 @@ begin
   for ev in select * from public.mu_events where status not in ('done', 'skip')
               and (source = 'official' or starts_at <= now() - interval '24 hours')
             order by date desc, (source = 'official') desc loop
-    exit when sent >= budget;
+    exit when ev_sent >= budget;
     if ev.source = 'online' then
       if ev.status = 'new' then
         perform public.mu_get('online_standings', 'https://play.limitlesstcg.com/api/tournaments/' || ev.event_id || '/standings', ev.event_id);
@@ -302,15 +306,16 @@ begin
       -- every round not counted yet, as far as the budget allows
       for rnd in 1..coalesce(ev.rounds, 0) loop
         continue when rnd = any(ev.rounds_done);
-        exit when sent >= budget;
+        exit when ev_sent >= budget;
         perform public.mu_get('official_round', 'https://mew.limitlesstcg.com/labs/data/tcg/pairings?tournamentId=' || ev.event_id
           || '&division=MA&round=' || rnd, ev.event_id, rnd);
-        sent := sent + 1;
+        ev_sent := ev_sent + 1;
       end loop;
       continue;
     end if;
-    sent := sent + 1;
+    ev_sent := ev_sent + 1;
   end loop;
+  sent := sent + ev_sent;
 
   -- 4. forget events older than 180 days
   delete from public.mu_events where date < current_date - 180;
