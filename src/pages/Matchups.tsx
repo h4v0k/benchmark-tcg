@@ -66,7 +66,7 @@ export function MatchupsPage({ deck }: { deck?: string }) {
       </label>
       {decks.loading ? <Spinner /> : decks.error ? <ErrorBox error={decks.error} onRetry={decks.reload} /> : !decks.data?.length ? (
         <Empty title="Collecting results" icon="list">
-          <p>Match results are being gathered{cover.data?.pending ? ` (${cover.data.pending} events in the queue)` : ''}. Check back in a little while.</p>
+          <p>Match results are being gathered{cover.data?.pending ? ` (${cover.data.pending} events in the queue)` : ''}. New results are added every 6 hours.</p>
         </Empty>
       ) : !list.length ? <p className="muted">No deck matches “{find}”.</p> : (
         <>

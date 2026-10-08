@@ -26,7 +26,7 @@ create table if not exists public.mu_events (
   starts_at timestamptz,                   -- online: start time (pairings are read a day later)
   players int,
   rounds int,
-  next_round int not null default 1,
+  rounds_done int[] not null default '{}',   -- official: rounds already counted
   status text not null default 'new' check (status in ('new', 'standings', 'rounds', 'done', 'skip')),
   tries int not null default 0,
   first_seen timestamptz not null default now(),
@@ -182,7 +182,7 @@ begin
 
   elsif f.kind = 'official_round' then
     select * into ev from public.mu_events where source = 'official' and event_id = f.event_id;
-    if ev.next_round <> f.round then return; end if;  -- already counted
+    if ev.status <> 'rounds' or f.round = any(ev.rounds_done) then return; end if;  -- already counted
     if j->>'ok' is distinct from 'true' or jsonb_typeof(j->'message') is distinct from 'array' then raise exception 'official_round: bad response'; end if;
     for e in select * from jsonb_array_elements(j->'message') loop
       continue when e->>'player2' is null or coalesce((e->>'completed')::int, 1) <> 1;
@@ -193,17 +193,20 @@ begin
       continue when res is null;
       perform public.mu_add('official', f.event_id, e->>'p1_deck', e->>'p2_deck', res);
     end loop;
-    update public.mu_events set next_round = next_round + 1,
-      status = case when next_round + 1 > coalesce(rounds, 0) then 'done' else status end,
-      done_at = case when next_round + 1 > coalesce(rounds, 0) then now() end
+    update public.mu_events set rounds_done = rounds_done || f.round,
+      status = case when cardinality(rounds_done) + 1 >= coalesce(rounds, 0) then 'done' else status end,
+      done_at = case when cardinality(rounds_done) + 1 >= coalesce(rounds, 0) then now() end
     where source = 'official' and event_id = f.event_id;
   end if;
 end $$;
 
--- Runs every 5 minutes. Sends at most a few requests per run so Limitless is never hammered.
-create or replace function public.mu_tick(budget int default 6) returns jsonb
+-- Two cron jobs call this (see bottom of file):
+--   every 6 hours: read anything still waiting, then send the next small batch (p_send = true)
+--   5 minutes later: only read the answers to that batch (p_send = false), before pg_net clears them
+-- At most `budget` event requests (plus the event lists) go to Limitless per 6-hour run.
+create or replace function public.mu_tick(budget int default 30, p_send boolean default true) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
-declare f public.mu_fetch; resp record; sent int := 0; ev public.mu_events; last_at timestamptz; pages int; ok boolean;
+declare f public.mu_fetch; resp record; sent int := 0; ev public.mu_events; last_at timestamptz; pages int; ok boolean; rnd int;
 begin
   -- one run at a time (cron plus a manual call must not read the same response twice)
   if not pg_try_advisory_xact_lock(hashtext('benchmark_mu_tick')) then return jsonb_build_object('busy', true); end if;
@@ -212,7 +215,7 @@ begin
   for f in select * from public.mu_fetch where handled_at is null order by created_at loop
     select status_code, content into resp from net._http_response where id = f.net_id;
     if not found then
-      if f.created_at < now() - interval '1 hour' then update public.mu_fetch set handled_at = now() where net_id = f.net_id; end if;
+      if f.created_at < now() - interval '3 hours' then update public.mu_fetch set handled_at = now() where net_id = f.net_id; end if;
       continue;
     end if;
     ok := false;
@@ -247,6 +250,7 @@ begin
   end loop;
   delete from public.mu_fetch where handled_at < now() - interval '2 days';
 
+  if not p_send then return jsonb_build_object('read', true); end if;
   if exists (select 1 from public.mu_fetch where handled_at is null) then
     return jsonb_build_object('waiting', (select count(*) from public.mu_fetch where handled_at is null));
   end if;
@@ -263,9 +267,9 @@ begin
   end if;
   delete from public.mu_players p where not exists (select 1 from public.mu_events e where e.source = 'online' and e.event_id = p.event_id and e.status = 'standings');
 
-  -- 2. event lists: online every 6 hours (two pages the first time, to fill the last few weeks), official once a day
+  -- 2. event lists: online every run (two pages the first time, to fill the last few weeks), official once a day
   select value::timestamptz into last_at from public.app_settings where key = 'mu_online_index_at';
-  if last_at is null or last_at < now() - interval '6 hours' then
+  if last_at is null or last_at < now() - interval '5 hours' then
     pages := case when last_at is null then 2 else 1 end;
     for i in 1..pages loop
       perform public.mu_get('online_index', 'https://play.limitlesstcg.com/api/tournaments?game=PTCG&format=STANDARD&limit=200&page=' || i);
@@ -280,11 +284,12 @@ begin
     insert into public.app_settings (key, value) values ('mu_official_index_at', now()::text) on conflict (key) do update set value = excluded.value;
   end if;
 
-  -- 3. work through events, newest first; official first since there are few and they matter most
+  -- 3. work through events, newest first (both sources), so recent weeks fill in before the backfill
   -- online events wait a day after their start so Swiss and top cut are finished
   for ev in select * from public.mu_events where status not in ('done', 'skip')
               and (source = 'official' or starts_at <= now() - interval '24 hours')
-            order by (source = 'official') desc, date desc limit greatest(0, budget - sent) loop
+            order by date desc, (source = 'official') desc loop
+    exit when sent >= budget;
     if ev.source = 'online' then
       if ev.status = 'new' then
         perform public.mu_get('online_standings', 'https://play.limitlesstcg.com/api/tournaments/' || ev.event_id || '/standings', ev.event_id);
@@ -294,8 +299,15 @@ begin
     elsif ev.status = 'new' then
       perform public.mu_get('official_info', 'https://mew.limitlesstcg.com/labs/data/tcg/tournament?id=' || ev.event_id || '&division=MA', ev.event_id);
     else
-      perform public.mu_get('official_round', 'https://mew.limitlesstcg.com/labs/data/tcg/pairings?tournamentId=' || ev.event_id
-        || '&division=MA&round=' || ev.next_round, ev.event_id, ev.next_round);
+      -- every round not counted yet, as far as the budget allows
+      for rnd in 1..coalesce(ev.rounds, 0) loop
+        continue when rnd = any(ev.rounds_done);
+        exit when sent >= budget;
+        perform public.mu_get('official_round', 'https://mew.limitlesstcg.com/labs/data/tcg/pairings?tournamentId=' || ev.event_id
+          || '&division=MA&round=' || rnd, ev.event_id, rnd);
+        sent := sent + 1;
+      end loop;
+      continue;
     end if;
     sent := sent + 1;
   end loop;
@@ -310,13 +322,12 @@ revoke execute on function public.mu_get(text, text, text, int) from public, ano
 revoke execute on function public.mu_archetype(text, text, text[]) from public, anon, authenticated;
 revoke execute on function public.mu_add(text, text, text, text, text) from public, anon, authenticated;
 revoke execute on function public.mu_read(public.mu_fetch, text) from public, anon, authenticated;
-revoke execute on function public.mu_tick(int) from public, anon, authenticated;
+revoke execute on function public.mu_tick(int, boolean) from public, anon, authenticated;
 
-do $$ begin
-  if not exists (select 1 from cron.job where jobname = 'benchmark-matchups') then
-    perform cron.schedule('benchmark-matchups', '*/5 * * * *', 'select public.mu_tick()');
-  end if;
-end $$;
+-- Every 6 hours at :17 (off the top of the hour), plus a read-only pass 5 minutes later.
+-- cron.schedule with an existing name updates that job, so re-running this is safe.
+select cron.schedule('benchmark-matchups', '17 */6 * * *', 'select public.mu_tick()');
+select cron.schedule('benchmark-matchups-read', '22 */6 * * *', 'select public.mu_tick(0, false)');
 
 ----------------------------------------------------------------------------
 -- 2. Reading the stats
