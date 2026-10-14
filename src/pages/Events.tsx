@@ -9,6 +9,7 @@ import { Link, navigate } from '../router';
 import { useAuth, toast } from '../state';
 import * as api from '../lib/api';
 import { fmtDate, money, type Line } from '../lib/cards';
+import { RegionSwitch } from './Japan';
 import type { Card, Rules } from '../lib/types';
 
 const KIND: Record<string, string> = { regional: 'Regional', international: 'International', worlds: 'Worlds' };
@@ -25,7 +26,7 @@ export function EventsPage() {
   const maxTop32 = Math.max(1, ...(meta.data || []).map(m => m.top32));
   return (
     <div className="wrap page">
-      <div className="page-head"><h1>Tournaments</h1></div>
+      <div className="page-head"><h1>Tournaments</h1><RegionSwitch value="world" /></div>
       <p className="muted lede">Top 32 from Regionals, Internationals and Worlds. Open any list to test it, check prices, or copy it to your decks. To see what each deck beats and loses to, open <Link to="/matchups">Matchups</Link>.</p>
 
       <section className="panel meta-panel">

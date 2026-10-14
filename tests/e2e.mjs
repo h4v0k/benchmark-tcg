@@ -121,6 +121,31 @@ const server = http.createServer((req, res) => {
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const BASE = `http://127.0.0.1:${server.address().port}`;
 
+
+/* Japan preview fixtures */
+const JP_INFO = { name: 'Delta Reign', code: 'ME06', jp_name: 'Storm Emeralda', jp_codes: ['M6'], us_release: '2026-11-06', us_legal: null, updated: '2026-10-14T12:00:00Z' };
+const JP_CARDS = [
+  { name: 'Mega Rayquaza ex', code: 'M6', num: '58', lists: 42, share: 18.4, avg_copies: 2.6, wins: 5, top_decks: ['Mega Rayquaza Talonflame', 'Mega Kangaskhan Mega Rayquaza'], best_tournament: 'c5063', best_place: 2 },
+  { name: 'Adventuring Lantern', code: 'M6', num: '64', lists: 30, share: 13.1, avg_copies: 1.8, wins: 2, top_decks: ['Mega Rayquaza Talonflame'], best_tournament: 'c5063', best_place: 2 },
+];
+const JP_META = [
+  { archetype: 'Dragapult Dusknoir', icons: ['dragapult', 'dusknoir'], top8: 61, top4: 30, wins: 9, events: 40, lists: 30, preview_lists: 0, best_tournament: 'c5063', best_place: 1 },
+  { archetype: 'Mega Rayquaza Talonflame', icons: ['rayquaza-mega', 'talonflame'], top8: 22, top4: 12, wins: 4, events: 18, lists: 12, preview_lists: 12, best_tournament: 'c5063', best_place: 2 },
+];
+const JP_EVENTS = [
+  { id: 'c5063', kind: 'city_league', name: 'City League Kanagawa', date: '2026-10-13', city: 'Kanagawa', shop: '【CARDBOX】青馬堂矢向店', players: null, status: 'done', lists: 4, preview_lists: 2, winner: "N's Zoroark", winner_icons: ['zoroark'] },
+  { id: 'm29', kind: 'major', name: 'Champions League Yokohama', date: '2026-10-05', city: 'JP', shop: '', players: 4000, status: 'lists', lists: 12, preview_lists: 7, winner: 'Mega Rayquaza', winner_icons: ['rayquaza-mega'] },
+];
+const JP_T = { id: 'c5063', src_id: 5063, kind: 'city_league', name: 'City League Kanagawa', date: '2026-10-13', city: 'Kanagawa', shop: '【CARDBOX】青馬堂矢向店', players: null, status: 'done' };
+const JP_LINE = (i, qty, name, code, num, sec, preview) => ({ i, qty, name, code, num, sec, preview, cid: null, cat: null });
+const JP_DECKS = [
+  { tournament_id: 'c5063', place: 1, player: 'セリヌンティウス', archetype: "N's Zoroark", icons: ['zoroark'], list_ref: 'jp/75534', card_count: 60, price: 112.4, has_preview: false, preview_qty: 0, missing: [] },
+  { tournament_id: 'c5063', place: 2, player: 'ゆうさく', archetype: 'Mega Rayquaza Talonflame', icons: ['rayquaza-mega', 'talonflame'], list_ref: 'jp/75535', card_count: 60, price: 61.2, has_preview: true, preview_qty: 8, missing: [],
+    cards: [JP_LINE(0, 3, 'Mega Rayquaza ex', 'M6', '58', 'pokemon', true), JP_LINE(1, 2, 'Talonflame ex', 'M6', '62', 'pokemon', true), JP_LINE(2, 2, "Ethan's Ho-Oh ex", 'DRI', '39', 'pokemon', false),
+      JP_LINE(3, 4, 'Ultra Ball', 'MEG', '131', 'trainer', false), JP_LINE(4, 3, 'Adventuring Lantern', 'M6', '64', 'trainer', true), JP_LINE(5, 10, 'Fire Energy', 'MEE', '10', 'energy', false)] },
+  { tournament_id: 'c5063', place: 5, player: 'ふなむし', archetype: 'Mega Kangaskhan Slowking', icons: ['kangaskhan-mega', 'slowking'], list_ref: 'jp/75538', card_count: null, price: null, has_preview: false, preview_qty: 0, missing: [] },
+];
+
 /* ---------- mock backend ---------- */
 const unexpected = [];
 const deckDelay = {}; // deck id -> ms to hold the decks response
@@ -148,6 +173,12 @@ async function handleSupabase(route) {
     return json(route, (body.lines || []).map(l => { const c = byName(l.name); return { i: l.i, card_id: c ? c.id : null, how: c ? 'name' : 'none' }; }));
   }
   if (p === '/rest/v1/rpc/tourney_meta') return json(route, [{ archetype: 'Dragapult', top32: 41, top8: 10, wins: 1, events: 4, best_tournament: 580, best_place: 2 }, { archetype: "N's Zoroark", top32: 8, top8: 1, wins: 0, events: 3, best_tournament: 580, best_place: 4 }]);
+  if (p === '/rest/v1/rpc/jp_preview_info') return json(route, JP_INFO);
+  if (p === '/rest/v1/rpc/jp_preview_cards') return json(route, JP_CARDS);
+  if (p === '/rest/v1/rpc/jp_meta') return json(route, body.p_preview_only ? JP_META.filter(m => m.preview_lists > 0) : JP_META);
+  if (p === '/rest/v1/rpc/jp_events') return json(route, JP_EVENTS);
+  if (p === '/rest/v1/jp_tournaments') return json(route, [JP_T]);
+  if (p === '/rest/v1/jp_decks') return json(route, u.searchParams.get('place') ? [JP_DECKS[1]] : JP_DECKS);
   if (p === '/rest/v1/tournaments') return json(route, [{ id: 580, name: 'Regional Recife', date: '2026-10-03', country: 'BR', players: 1074, kind: 'regional', status: 'lists', tournament_decks: [{ count: 32 }] }]);
   if (p === '/rest/v1/tournament_decks' && (u.searchParams.get('select') || '').includes('tournaments!inner')) return json(route, u.searchParams.get('archetype') === 'eq.Dragapult' ? ARCH_ROWS : []);
   if (p === '/rest/v1/tournament_decks') {
@@ -324,6 +355,30 @@ try {
       if (over > 1) throw new Error(`${url}: ${over}px sideways overflow`);
       if (w === 260) await page.screenshot({ path: path.join(OUT, `events${url.replace(/\//g, '_')}-${w}.png`), fullPage: false });
     }
+    await page.context().close();
+  });
+  for (const w of [260, 390, 1280]) await scenario(`9j. Japan preview pages at ${w}px`, async () => {
+    const page = await newPage({ width: w, height: 900 });
+    await page.goto(BASE + '/events');
+    await page.getByRole('radio', { name: /Japan/ }).click();
+    await page.waitForURL(/\/events\/japan$/, { timeout: 8000 });
+    await page.locator('.meta-list li').first().waitFor({ timeout: 8000 });
+    if (!(await page.getByText('Mega Rayquaza ex').first().isVisible())) throw new Error('preview card list missing');
+    if (!(await page.locator('.dr-notice').first().isVisible())) throw new Error('preview notice missing');
+    await page.getByRole('button', { name: /Only decks with Delta Reign/ }).click();
+    await page.waitForURL(/only=dr/, { timeout: 8000 });
+    await page.waitForFunction(() => !document.body.textContent.includes('Dragapult Dusknoir'), null, { timeout: 8000 });
+    for (const [url, sel] of [['/events/japan', '.meta-list li'], ['/events/japan/c5063', '.standings li'], ['/events/japan/c5063/2', '.row.dr']]) {
+      await page.goto(BASE + url);
+      await page.locator(sel).first().waitFor({ timeout: 8000 });
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      if (over > 1) throw new Error(`${url}: ${over}px sideways overflow`);
+      await page.screenshot({ path: path.join(OUT, `japan${url.replace(/\//g, '_')}-${w}.png`), fullPage: true });
+    }
+    const dr = await page.locator('.row.dr').count();
+    if (dr !== 3) throw new Error(`expected 3 highlighted Delta Reign rows, got ${dr}`);
+    if (await page.locator('.deck-side, .legality').count()) throw new Error('Japan deck page must not show a legality panel');
+    if (await page.getByRole('button', { name: /Copy to my decks/ }).count()) throw new Error('Japan deck page must not offer Copy to my decks');
     await page.context().close();
   });
   const overflowOf = p => p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

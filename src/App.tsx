@@ -19,6 +19,9 @@ const RulesPage = lazy(() => import('./pages/Rules').then(m => ({ default: m.Rul
 const EventsPage = lazy(() => import('./pages/Events').then(m => ({ default: m.EventsPage })));
 const EventPage = lazy(() => import('./pages/Events').then(m => ({ default: m.EventPage })));
 const EventDeckPage = lazy(() => import('./pages/Events').then(m => ({ default: m.EventDeckPage })));
+const JapanPage = lazy(() => import('./pages/Japan').then(m => ({ default: m.JapanPage })));
+const JapanEventPage = lazy(() => import('./pages/Japan').then(m => ({ default: m.JapanEventPage })));
+const JapanDeckPage = lazy(() => import('./pages/Japan').then(m => ({ default: m.JapanDeckPage })));
 const MatchupsPage = lazy(() => import('./pages/Matchups').then(m => ({ default: m.MatchupsPage })));
 const DeckListsPage = lazy(() => import('./pages/DeckLists').then(m => ({ default: m.DeckListsPage })));
 const ArchetypePage = lazy(() => import('./pages/Archetype').then(m => ({ default: m.ArchetypePage })));
@@ -28,6 +31,7 @@ const AdminPage = lazy(() => import('./pages/Admin').then(m => ({ default: m.Adm
 const UsersPage = lazy(() => import('./pages/Users').then(m => ({ default: m.UsersPage })));
 
 const isId = (v: string) => /^[1-9]\d{0,14}$/.test(v);
+const isJpId = (v: string) => /^[cm][1-9]\d{0,9}$/.test(v);
 
 // A stale tab after a deploy can't fetch old chunk files; show a reload prompt instead of a blank page.
 class PageBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -67,6 +71,9 @@ const ROUTES: [string, (p: Record<string, string>) => ReactElement][] = [
   ['/cards/:id', p => <CardPage id={p.id} />],
   ['/rules', () => <RulesPage />],
   ['/events', () => <EventsPage />],
+  ['/events/japan', () => <JapanPage />],
+  ['/events/japan/:id', p => isJpId(p.id) ? <JapanEventPage id={p.id} /> : <NotFound />],
+  ['/events/japan/:id/:place', p => isJpId(p.id) && isId(p.place) ? <JapanDeckPage id={p.id} place={+p.place} /> : <NotFound />],
   ['/events/:id', p => isId(p.id) ? <EventPage id={+p.id} /> : <NotFound />],
   ['/events/:id/:place', p => isId(p.id) && isId(p.place) ? <EventDeckPage id={+p.id} place={+p.place} /> : <NotFound />],
   ['/matchups', () => <MatchupsPage />],

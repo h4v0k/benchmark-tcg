@@ -688,3 +688,28 @@ a.mu-link:hover { border-color: var(--accent); }
 .mu-place { flex: none; min-width: 3.2em; font-weight: 800; font-variant-numeric: tabular-nums; }
 .mu-side { display: grid; justify-items: end; gap: 3px; flex: none; }
 .mu-link.off { opacity: .7; }
+
+/* Japan preview: cards from the set Japan plays before the US (e.g. Delta Reign). Never shown as Standard legal. */
+:root, [data-theme="dark"] { --dr: #2fd08f; --dr-soft: rgba(47, 208, 143, .13); }
+[data-theme="light"] { --dr: #0b7a50; --dr-soft: rgba(11, 122, 80, .1); }
+.tag.dr { background: var(--dr-soft); color: var(--dr); border-color: color-mix(in srgb, var(--dr) 35%, transparent); }
+.dr-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--dr); vertical-align: middle; flex: none; }
+.dr-text { color: var(--dr); font-weight: 600; }
+.dr-notice { background: var(--dr-soft); color: var(--text); border: 1px solid color-mix(in srgb, var(--dr) 30%, transparent); }
+.dr-notice > .icon { color: var(--dr); }
+.dr-notice .tag { vertical-align: middle; }
+.jp-filters { margin-top: 4px; }
+.chip.dr-toggle { border-color: var(--line2); background: var(--panel2); color: var(--muted); min-height: 34px; height: auto; padding: 4px 12px; text-align: left; }
+.chip.dr-toggle.on { border-color: var(--dr); background: var(--dr-soft); color: var(--text); }
+.chip.dr-toggle:not(.on) .dr-dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--dr); }
+.meta-bar.dr span { background: var(--dr); }
+.st-row.dr-row { border-left: 3px solid var(--dr); }
+.page-head .segmented { flex: none; }
+.dr-summary { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin: 12px 0; }
+.jp-list { margin: 12px 0 14px; }
+.row.dr { background: var(--dr-soft); box-shadow: inset 3px 0 0 var(--dr); }
+.row.dr .name { font-weight: 650; }
+.row.dr .set-code { color: var(--dr); }
+a.row-main, a.row-main:hover { text-decoration: none; }
+.jp-list .row .name { white-space: normal; overflow-wrap: anywhere; } /* readable with larger text sizes */
+@media (pointer: coarse) { .chip.dr-toggle { min-height: 42px; } }
