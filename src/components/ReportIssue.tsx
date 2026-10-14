@@ -4,6 +4,27 @@ import { Icon, Modal } from './ui';
 import { toast, useAuth } from '../state';
 import * as api from '../lib/api';
 
+const PAYPAL = 'https://www.paypal.com/qrcodes/p2pqrc/LJCBQSLCFHZRJ';
+
+export function SupportButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" className="link-btn foot-report" onClick={() => setOpen(true)}><Icon name="heart" size={14} />Support Benchmark</button>
+      {open && (
+        <Modal title="Support Benchmark" onClose={() => setOpen(false)}>
+          <p>Benchmark is free and run by one person. Donations help cover hosting and card and tournament data, and keep new features coming.</p>
+          <div className="support-pay">
+            <a className="btn primary big" href={PAYPAL} target="_blank" rel="noopener noreferrer"><Icon name="external" />Donate with PayPal</a>
+            <figure className="support-qr"><img src="/brand/paypal-qr.png" alt="PayPal QR code" width={180} height={180} /><figcaption className="muted small">Or scan with your phone</figcaption></figure>
+          </div>
+          <p className="muted small">Thank you! Every bit helps.</p>
+        </Modal>
+      )}
+    </>
+  );
+}
+
 export function ReportIssueButton() {
   const [open, setOpen] = useState(false);
   return (

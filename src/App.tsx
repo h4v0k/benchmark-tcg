@@ -4,7 +4,7 @@ import { Link, match, navigate, useRoute } from './router';
 import { Avatar, HoverPreview, Icon, Menu, MenuItem, Modal, Spinner } from './components/ui';
 import { NewDeckButton } from './components/NewDeck';
 import { GlobalSearch } from './components/GlobalSearch';
-import { ReportIssueButton } from './components/ReportIssue';
+import { ReportIssueButton, SupportButton } from './components/ReportIssue';
 import * as api from './lib/api';
 import * as sb from './lib/supabase';
 import { Home } from './pages/Home';
@@ -165,7 +165,7 @@ function Footer() {
   return (
     <footer className="foot">
       <div className="wrap foot-inner">
-        <div className="foot-top"><div><strong>Benchmark</strong> · build, price and share Pokémon TCG decks.</div><ReportIssueButton /></div>
+        <div className="foot-top"><div><strong>Benchmark</strong> · build, price and share Pokémon TCG decks.</div><div className="foot-links"><SupportButton /><ReportIssueButton /></div></div>
         <div className="muted">Card data from <a href="https://tcgdex.dev" target="_blank" rel="noopener noreferrer">TCGdex</a>, prices from TCGplayer via <a href="https://tcgcsv.com" target="_blank" rel="noopener noreferrer">TCGCSV</a>, bans from <a href="https://www.pokemon.com/us/play-pokemon/about/pokemon-tcg-banned-card-list" target="_blank" rel="noopener noreferrer">Play! Pokémon</a>. Not affiliated with The Pokémon Company, Nintendo, Creatures or Game Freak.</div>
       </div>
     </footer>
