@@ -9,13 +9,11 @@ Your Supabase project **benchmark** is already set up:
 - The `tcgplayer` Edge Function is deployed. It matches each printing to its exact TCGplayer product using TCGCSV's daily copy of the TCGplayer catalog.
 - `config.js` already points at the project.
 
-## Go live (about 5 minutes)
+## Go live
 
-1. **Deploy the site.** Drag this whole folder onto https://app.netlify.com/drop. Rename the site under **Site configuration → Change site name** if you like (for example `benchmark-tcg`).
-2. **Tell Supabase your site address.** In Supabase, open the **benchmark** project, go to **Authentication → URL Configuration**, and set **Site URL** to your Netlify address, like `https://benchmark-tcg.netlify.app`. Confirmation emails link back there.
-3. **Optional:** let people sign up without confirming their email first by turning off **Authentication → Sign In / Providers → Email → Confirm email**.
+The site runs on Cloudflare Workers at **https://benchmarktcg.us** (also `www.benchmarktcg.us`), deployed from this repo.
 
-To update the site later, drag the folder onto your site's **Deploys** tab in Netlify.
+In Supabase, **Authentication → URL Configuration** should have **Site URL** set to `https://benchmarktcg.us`, with `https://benchmarktcg.us/**` and `https://www.benchmarktcg.us/**` in **Redirect URLs**. Confirmation and password-reset emails link back there.
 
 ## Files
 

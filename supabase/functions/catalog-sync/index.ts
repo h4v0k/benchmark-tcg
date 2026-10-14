@@ -10,7 +10,7 @@ import { db, upsert, rpc, logRun, isAuthorized, json, CORS, normName } from "./d
 
 const TCGDEX = "https://api.tcgdex.net/v2/en";
 const TCGCSV = "https://tcgcsv.com/tcgplayer/3";
-const UA = "Benchmark-DeckBuilder/2.0 (+https://benchmark-tcg.netlify.app)";
+const UA = "Benchmark-DeckBuilder/2.0 (+https://benchmarktcg.us)";
 const BUDGET_MS = 100_000;
 const DAY = 864e5;
 

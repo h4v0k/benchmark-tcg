@@ -7,7 +7,7 @@
 //   3. Recompute legality.
 import { db, upsert, rpc, logRun, isAuthorized, json, CORS, normName } from "./db.ts";
 
-const UA = "Mozilla/5.0 (compatible; Benchmark-DeckBuilder/2.0; +https://benchmark-tcg.netlify.app)";
+const UA = "Mozilla/5.0 (compatible; Benchmark-DeckBuilder/2.0; +https://benchmarktcg.us)";
 const BAN_URL = "https://www.pokemon.com/us/play-pokemon/about/pokemon-tcg-banned-card-list";
 const WIKI = "https://bulbapedia.bulbagarden.net/w/api.php?action=parse&prop=wikitext&format=json&redirects=1&page=";
 
