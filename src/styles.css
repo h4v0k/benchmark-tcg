@@ -480,6 +480,15 @@ td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: mid
 /* footer */
 .foot { border-top: 1px solid var(--line); background: var(--bg2); margin-top: auto; }
 .foot-inner { padding: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.foot-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px; }
+.foot-report.link-btn { margin: 0; font-weight: 600; font-size: 13px; min-height: 32px; }
+.error-text { color: var(--bad); font-size: 13px; margin: 0; }
+.hp-field { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.report-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.report-list li { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; }
+.report-list li.done { opacity: .55; }
+.report-msg { white-space: pre-wrap; margin: 4px 0 6px; overflow-wrap: anywhere; }
+.report-meta { overflow-wrap: anywhere; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 1100px) {
