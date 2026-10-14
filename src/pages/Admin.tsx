@@ -36,6 +36,7 @@ export function AdminPage() {
   return (
     <div className="wrap page">
       <div className="page-head"><h1>Admin</h1></div>
+      <ReportsPanel />
       <UsersPanel />
       <div className="rules-grid">
         <section className="panel">
@@ -135,6 +136,38 @@ function UsersPanel() {
             ))}
           </ul>
         </>
+      )}
+    </section>
+  );
+}
+
+function ReportsPanel() {
+  const r = useAsync(() => api.adminReports(), []);
+  const [showDone, setShowDone] = useState(false);
+  const toggle = async (id: number, resolved: boolean) => {
+    try { await api.resolveReport(id, resolved); r.reload(); } catch (e: any) { toast(e.message, 'bad'); }
+  };
+  const list = (r.data || []).filter(x => showDone || !x.resolved);
+  const open = (r.data || []).filter(x => !x.resolved).length;
+  return (
+    <section className="panel">
+      <div className="panel-head"><h2>Issue reports {r.data && <span className="muted">({open} open)</span>}</h2>
+        <div className="row-gap">
+          <button className="btn small" onClick={() => setShowDone(v => !v)}>{showDone ? 'Hide resolved' : 'Show resolved'}</button>
+          <button className="btn small" onClick={r.reload}><Icon name="refresh" size={14} />Refresh</button>
+        </div></div>
+      {r.loading ? <Spinner /> : r.error ? <ErrorBox error={r.error} onRetry={r.reload} /> : !list.length ? <p className="muted">No {showDone ? '' : 'open '}reports.</p> : (
+        <ul className="report-list">
+          {list.map(x => (
+            <li key={x.id} className={x.resolved ? 'done' : ''}>
+              <div className="muted small">#{x.id} · {ago(x.created_at)} · {x.contact_email ? <a href={`mailto:${x.contact_email}`}>{x.contact_email}</a> : 'no email'}
+                {' · '}{x.emailed_at ? <Tag tone="ok">Emailed</Tag> : <Tag tone="warn" >{x.email_error === 'email not set up yet' ? 'Not emailed: email not set up' : 'Email failed'}</Tag>}</div>
+              <p className="report-msg">{x.message}</p>
+              <div className="muted small report-meta">{x.page_url}{x.user_agent ? ` · ${x.user_agent}` : ''}</div>
+              <button className="btn small" style={{ marginTop: 8 }} onClick={() => toggle(x.id, !x.resolved)}><Icon name="check" size={14} />{x.resolved ? 'Reopen' : 'Mark resolved'}</button>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );

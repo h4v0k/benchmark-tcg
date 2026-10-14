@@ -254,6 +254,10 @@ export async function adminData() {
   ]);
   return { runs: runs.rows, rotations: rotations.rows, bans: bans.rows };
 }
+export type IssueReport = { id: number; created_at: string; message: string; contact_email: string | null; page_url: string | null; user_agent: string | null; emailed_at: string | null; email_error: string | null; resolved: boolean };
+export const reportIssue = (body: { message: string; email: string; page: string; website: string }) => sb.invoke('report-issue', body);
+export const adminReports = () => sb.select<IssueReport>('issue_reports', { select: '*', order: 'created_at.desc', limit: 50 }).then(r => r.rows);
+export const resolveReport = (id: number, resolved: boolean) => sb.update('issue_reports', { id: `eq.${id}` }, { resolved });
 export const runSync = (fn: 'catalog-sync' | 'rules-sync', body: object = {}) => sb.invoke(fn, body);
 export const saveRotation = (id: number | null, row: object) => id ? sb.update('rotations', { id: `eq.${id}` }, row) : sb.insert('rotations', row);
 export const saveBan = (row: object) => sb.insert('bans', row);
