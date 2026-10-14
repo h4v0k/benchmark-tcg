@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, navigate, useRoute } from '../router';
 import { useAuth, toast } from '../state';
 import * as sb from '../lib/supabase';
+import { GoogleButton } from '../components/GoogleButton';
 
 const GoogleMark = () => (
   <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
@@ -44,6 +45,7 @@ export function LoginPage({ mode }: { mode: 'signin' | 'signup' }) {
     if (mode === 'signin') { await sb.auth.signIn(email, pw); toast('Signed in', 'ok'); navigate(next); }
     else { const ready = await sb.auth.signUp(email, pw); if (ready) navigate(next); else setSent('confirm'); }
   });
+  const google = (idToken: string, nonce: string) => run(async () => { await sb.auth.googleIdToken(idToken, nonce); toast('Signed in', 'ok'); navigate(next); });
   const passkey = () => run(async () => { await sb.auth.passkeySignIn(); toast('Signed in', 'ok'); navigate(next); });
   const reset = () => validEmail() && run(async () => { await sb.auth.resetPassword(email); setSent('reset'); });
 
@@ -64,7 +66,8 @@ export function LoginPage({ mode }: { mode: 'signin' | 'signup' }) {
         <p className="muted">{mode === 'signin' ? 'Welcome back.' : 'Save decks, share them, like and comment, and follow other players.'}</p>
 
         <div className="auth-quick">
-          <button className="btn block auth-google" onClick={() => sb.auth.oauth('google', next)} disabled={busy}><GoogleMark />Continue with Google</button>
+          <GoogleButton onToken={google} onRedirect={() => sb.auth.oauth('google', next)} text={mode === 'signup' ? 'signup_with' : 'continue_with'}
+            fallback={<button className="btn block auth-google" onClick={() => sb.auth.oauth('google', next)} disabled={busy}><GoogleMark />Continue with Google</button>} />
           {sb.auth.passkeysSupported() && mode === 'signin' && (
             <button className="btn block" onClick={passkey} disabled={busy}>Sign in with a passkey</button>
           )}

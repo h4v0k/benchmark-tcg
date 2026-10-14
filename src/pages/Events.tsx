@@ -9,7 +9,7 @@ import { Link, navigate } from '../router';
 import { useAuth, toast } from '../state';
 import * as api from '../lib/api';
 import { fmtDate, money, type Line } from '../lib/cards';
-import { RegionSwitch } from './Japan';
+import { RegionSwitch, SyncNote } from './Japan';
 import type { Card, Rules } from '../lib/types';
 
 const KIND: Record<string, string> = { regional: 'Regional', international: 'International', worlds: 'Worlds' };
@@ -19,6 +19,7 @@ const LimitlessCredit = () => <p className="muted small credit">Results and list
 
 export function EventsPage() {
   const ev = useAsync(() => api.tournaments(), []);
+  const jp = useAsync(() => api.jpInfo(), []);
   const [days, setDays] = useState<'30' | '60' | '120'>('60');
   const meta = useAsync(() => api.tourneyMeta(+days), [days]);
   const [kind, setKind] = useState<'all' | 'regional' | 'international' | 'worlds'>('all');
@@ -27,6 +28,7 @@ export function EventsPage() {
   return (
     <div className="wrap page">
       <div className="page-head"><h1>Tournaments</h1><RegionSwitch value="world" /></div>
+      <SyncNote info={jp.data} compact />
       <p className="muted lede">Top 32 from Regionals, Internationals and Worlds. Open any list to test it, check prices, or copy it to your decks. To see what each deck beats and loses to, open <Link to="/matchups">Matchups</Link>.</p>
 
       <section className="panel meta-panel">

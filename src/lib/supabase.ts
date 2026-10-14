@@ -229,6 +229,12 @@ export const auth = {
     save({ access_token: at, refresh_token: rt, expires_at: parseInt(h.get('expires_at') || '0', 10) || Math.floor(Date.now() / 1000) + parseInt(h.get('expires_in') || '3600', 10), user });
     return { type };
   },
+  /** Google Identity Services hands the page an ID token; Supabase turns it into a session. `nonce` is the raw value. */
+  async googleIdToken(idToken: string, nonce: string) {
+    const j = await authFetch('token?grant_type=id_token', { provider: 'google', id_token: idToken, nonce });
+    save(sessionFrom(j));
+    return session!;
+  },
   /** Sends the browser to Google (or another provider); it comes back signed in. */
   oauth(provider: 'google', next = '/') {
     try { sessionStorage.setItem('bm-next', next); } catch { /* ignore */ }

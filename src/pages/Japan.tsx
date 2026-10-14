@@ -41,11 +41,18 @@ function PreviewNotice({ info }: { info?: api.JpInfo }) {
 const useInfo = () => useAsync(() => api.jpInfo(), []);
 const cardPath = (name: string, days?: string) => `/events/japan/card/${encodeURIComponent(name)}${days && days !== '14' ? `?days=${days}` : ''}`;
 const plural = (n: number, one: string, many = one + "s") => `${n.toLocaleString()} ${n === 1 ? one : many}`;
-/** "Still loading" line while the first catch-up runs. */
-function Loading({ info }: { info?: api.JpInfo }) {
+/** Banner while Japanese results are still being collected. */
+export function SyncNote({ info, compact = false }: { info?: api.JpInfo; compact?: boolean }) {
   const q = info?.queued;
   if (!q || (!q.lists && !q.standings)) return null;
-  return <p className="muted small jp-loading"><span className="spinner" aria-hidden="true" />Still loading older results: {q.lists ? plural(q.lists, 'list') : ''}{q.lists && q.standings ? ' and ' : ''}{q.standings ? plural(q.standings, 'event') : ''} to go. Wins and top finishes come in first.</p>;
+  const left = [q.lists ? plural(q.lists, 'list') : '', q.standings ? plural(q.standings, 'event') : ''].filter(Boolean).join(' and ');
+  if (compact) return <p className="notice sync-note"><span className="spinner" aria-hidden="true" /><span><b>Japan tournament sync in progress.</b> {left} still loading. <Link to="/events/japan">See Japan results so far</Link>.</span></p>;
+  return (
+    <div className="notice sync-note" role="status">
+      <span className="spinner" aria-hidden="true" />
+      <span><b>Tournament sync in progress.</b> We’re still collecting Japanese results: {left} to go. Wins and top finishes load first, so rankings and counts will keep moving until it’s done.</span>
+    </div>
+  );
 }
 const ONLY = 'dr';
 
@@ -71,7 +78,7 @@ export function JapanPage() {
       <div className="page-head"><h1>Tournaments</h1><RegionSwitch value="jp" /></div>
       <p className="muted lede">City League and Champions League results from Japan, with lists down to 32nd where the event posts them (City Leagues usually post 16).</p>
       <PreviewNotice info={info.data} />
-      <Loading info={info.data} />
+      <SyncNote info={info.data} />
 
       <div className="mu-filters jp-filters">
         <Segmented label="Period" value={days} onChange={v => q({ days: v === '14' ? null : v })} options={DAYS.map(d => ({ value: d, label: `${d} days` }))} />
@@ -164,6 +171,7 @@ export function JapanEventPage({ id }: { id: string }) {
   return (
     <div className="wrap page">
       <p className="crumbs"><Link to="/events">Tournaments</Link> › <Link to="/events/japan">Japan</Link></p>
+      <SyncNote info={info.data} />
       <div className="page-head"><h1>{t.name}</h1></div>
       <p className="muted">{[fmtDate(t.date), t.shop, t.players ? `${t.players.toLocaleString()} players` : ''].filter(Boolean).join(' · ')} · <Tag tone={t.kind === 'major' ? 'ok' : 'info'}>{KIND[t.kind]}</Tag></p>
       <PreviewNotice info={info.data} />
@@ -229,6 +237,7 @@ export function JapanDeckPage({ id, place }: { id: string; place: number }) {
         </div>
       </div></div></div>
       <div className="wrap">
+        <SyncNote info={info.data} />
         <PreviewNotice info={info.data} />
         {preview.length > 0
           ? <p className="dr-summary"><span className="dr-dot" aria-hidden="true" /><span><b>{sum(preview, l => l.qty)} {name} card{sum(preview, l => l.qty) > 1 ? 's' : ''}</b> in this list: {[...new Set(preview.map(l => l.name))].join(', ')}. Not legal in US Standard yet.</span></p>
@@ -287,7 +296,7 @@ export function JapanCardPage({ name }: { name: string }) {
       <div className="mu-filters jp-filters">
         <Segmented label="Period" value={days} onChange={v => setQuery({ days: v === '14' ? null : v })} options={DAYS.map(d => ({ value: d, label: `${d} days` }))} />
       </div>
-      <Loading info={info.data} />
+      <SyncNote info={info.data} />
       {stats.loading ? <Spinner /> : !s ? <Empty title={`No lists with ${name} in this period`} icon="list"><p>Try a longer period.</p></Empty> : (
         <>
           <dl className="jp-stats">

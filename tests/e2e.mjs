@@ -364,12 +364,13 @@ try {
   for (const w of [260, 390, 1280]) await scenario(`9j. Japan preview pages at ${w}px`, async () => {
     const page = await newPage({ width: w, height: 900 });
     await page.goto(BASE + '/events');
+    await page.getByText('Japan tournament sync in progress.').waitFor({ timeout: 8000 });
     await page.getByRole('radio', { name: /Japan/ }).click();
     await page.waitForURL(/\/events\/japan$/, { timeout: 8000 });
     await page.locator('.meta-list li').first().waitFor({ timeout: 8000 });
     if (!(await page.getByText('Mega Rayquaza ex').first().isVisible())) throw new Error('preview card list missing');
     if (!(await page.locator('.dr-notice').first().isVisible())) throw new Error('preview notice missing');
-    if (!(await page.getByText(/1,830 lists/).waitFor({ timeout: 8000 }).then(() => true, () => false))) throw new Error('catch-up progress missing');
+    if (!(await page.getByText(/Tournament sync in progress/).waitFor({ timeout: 8000 }).then(() => true, () => false)) || !(await page.getByText(/1,830 lists/).waitFor({ timeout: 8000 }).then(() => true, () => false))) throw new Error('catch-up progress missing');
     if (!(await page.getByRole('heading', { name: 'Winningest Delta Reign cards' }).isVisible())) throw new Error('winningest heading missing');
     await page.getByRole('radio', { name: 'Play rate' }).click();
     await page.waitForURL(/sort=played/, { timeout: 8000 });

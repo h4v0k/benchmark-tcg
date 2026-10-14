@@ -713,8 +713,8 @@ a.mu-link:hover { border-color: var(--accent); }
 a.row-main, a.row-main:hover { text-decoration: none; }
 .jp-list .row .name { white-space: normal; overflow-wrap: anywhere; } /* readable with larger text sizes */
 @media (pointer: coarse) { .chip.dr-toggle { min-height: 42px; } }
-.jp-loading { display: flex; align-items: center; gap: 8px; margin: -4px 0 12px; }
-.jp-loading .spinner { width: 13px; height: 13px; flex: none; }
+.sync-note { background: var(--info-soft); color: var(--text); border: 1px solid color-mix(in srgb, var(--info) 30%, transparent); align-items: center; }
+.sync-note .spinner { width: 14px; height: 14px; flex: none; border-top-color: var(--info); }
 .jp-explain { margin: -4px 0 10px; }
 .jp-rank { display: inline-block; min-width: 1.6em; color: var(--faint); font-weight: 700; font-variant-numeric: tabular-nums; }
 .jp-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin: 14px 0; }
@@ -727,3 +727,7 @@ a.row-main, a.row-main:hover { text-decoration: none; }
 .jp-partners .grow { flex: 1; min-width: 0; }
 .jp-partners .small { flex: none; font-variant-numeric: tabular-nums; }
 .panel-head { flex-wrap: wrap; }
+.gis-box { min-height: 44px; display: flex; justify-content: center; }
+.gis-box.loading { border-radius: var(--radius-sm); background: var(--panel2); }
+.gis-box iframe { margin: 0 auto !important; }
+.gis-alt { display: block; margin: 2px auto 0; font-size: 12px; color: var(--muted); }
