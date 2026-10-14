@@ -29,6 +29,7 @@ export function Home() {
       <section className="hero">
         <div className="wrap hero-inner">
           <div>
+            <picture><source srcSet="/brand/logo.webp" type="image/webp" /><img className="hero-logo" src="/brand/logo.png" alt="Benchmark TCG" width={640} height={510} /></picture>
             <h1>The Pokémon TCG deck builder that keeps up with the game.</h1>
             <p className="lead">Paste a list or a YouTube link and get a priced, legality-checked deck in seconds. Standard and Expanded legality update on their own as sets release, bans land and cards rotate. Buy the exact printings on TCGplayer in one click.</p>
             <div className="row-gap">
