@@ -10,7 +10,7 @@ import { fmtDate, money, sum } from '../lib/cards';
 import type { Card } from '../lib/types';
 
 const ord = (n: number) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
-const DAYS = ['7', '14', '30'] as const;
+const DAYS = ['7', '14', '30', '90'] as const;
 type Days = typeof DAYS[number];
 const KIND: Record<api.JpKind, string> = { city_league: 'City League', major: 'Champions League' };
 const SEC: Record<string, string> = { pokemon: 'Pokémon', trainer: 'Trainer', energy: 'Energy', other: 'Other' };
@@ -39,6 +39,14 @@ function PreviewNotice({ info }: { info?: api.JpInfo }) {
 }
 
 const useInfo = () => useAsync(() => api.jpInfo(), []);
+const cardPath = (name: string, days?: string) => `/events/japan/card/${encodeURIComponent(name)}${days && days !== '14' ? `?days=${days}` : ''}`;
+const plural = (n: number, one: string, many = one + "s") => `${n.toLocaleString()} ${n === 1 ? one : many}`;
+/** "Still loading" line while the first catch-up runs. */
+function Loading({ info }: { info?: api.JpInfo }) {
+  const q = info?.queued;
+  if (!q || (!q.lists && !q.standings)) return null;
+  return <p className="muted small jp-loading"><span className="spinner" aria-hidden="true" />Still loading older results: {q.lists ? plural(q.lists, 'list') : ''}{q.lists && q.standings ? ' and ' : ''}{q.standings ? plural(q.standings, 'event') : ''} to go. Wins and top finishes come in first.</p>;
+}
 const ONLY = 'dr';
 
 export function JapanPage() {
@@ -46,21 +54,24 @@ export function JapanPage() {
   const days: Days = (DAYS as readonly string[]).includes(query.get('days') || '') ? query.get('days') as Days : '14';
   const only = query.get('only') === ONLY;
   const info = useInfo();
-  const cards = useAsync(() => api.jpPreviewCards(+days), [days]);
+  const sort: api.JpCardSort = query.get('sort') === 'played' ? 'played' : 'wins';
+  const cards = useAsync(() => api.jpPreviewCards(+days, sort), [days, sort]);
   const meta = useAsync(() => api.jpMeta(+days, only), [days, only]);
   const ev = useAsync(() => api.jpEvents(+days), [days]);
   const [kind, setKind] = useState<'all' | api.JpKind>('all');
   const events = (ev.data || []).filter(t => (kind === 'all' || t.kind === kind) && (!only || t.preview_lists > 0));
-  const maxTop8 = Math.max(1, ...(meta.data || []).map(m => m.top8));
-  const maxShare = Math.max(1, ...(cards.data || []).map(c => c.share || 0));
+  const maxPts = Math.max(1, ...(meta.data || []).map(m => m.points));
+  const cardVal = (c: api.JpCardRow) => sort === 'played' ? (c.share || 0) : c.points;
+  const maxCard = Math.max(1, ...(cards.data || []).map(cardVal));
   const name = info.data?.name || 'new set';
   const q = (o: Record<string, string | null>) => setQuery(o);
 
   return (
     <div className="wrap page">
       <div className="page-head"><h1>Tournaments</h1><RegionSwitch value="jp" /></div>
-      <p className="muted lede">City League and Champions League top 8s from Japan. City League lists are the top 4 of each event.</p>
+      <p className="muted lede">City League and Champions League results from Japan, with lists down to 32nd where the event posts them (City Leagues usually post 16).</p>
       <PreviewNotice info={info.data} />
+      <Loading info={info.data} />
 
       <div className="mu-filters jp-filters">
         <Segmented label="Period" value={days} onChange={v => q({ days: v === '14' ? null : v })} options={DAYS.map(d => ({ value: d, label: `${d} days` }))} />
@@ -70,19 +81,22 @@ export function JapanPage() {
       </div>
 
       <section className="panel meta-panel">
-        <div className="panel-head"><h2>{name} cards in Japan</h2></div>
-        {cards.loading ? <Spinner /> : cards.error ? <ErrorBox error={cards.error} onRetry={cards.reload} /> : !cards.data?.length ? <p className="muted">No lists with {name} cards in this period yet. Lists are added a few at a time through the day.</p> : (
-          <ol className="meta-list">
-            {cards.data.slice(0, 15).map(c => (
+        <div className="panel-head"><h2>{sort === 'wins' ? `Winningest ${name} cards` : `Most played ${name} cards`}</h2>
+          <Segmented label="Rank cards by" value={sort} onChange={v => q({ sort: v === 'wins' ? null : v })} options={[{ value: 'wins', label: 'Results' }, { value: 'played', label: 'Play rate' }]} />
+        </div>
+        <p className="muted small jp-explain">{sort === 'wins' ? 'Ranked by finishes of the lists that play each card: a win counts 8, 2nd 6, top 4 4, top 8 2, top 16 1, top 32 ½.' : 'Ranked by the share of lists in this period that play each card.'}</p>
+        {cards.loading ? <Spinner /> : cards.error ? <ErrorBox error={cards.error} onRetry={cards.reload} /> : !cards.data?.length ? <p className="muted">No lists with {name} cards in this period yet.</p> : (
+          <ol className="meta-list jp-cards">
+            {cards.data.slice(0, 25).map((c, i) => (
               <li key={c.name}>
                 <div className="meta-row">
-                  <a className="meta-name" href={api.jpCardHref(c.code, c.num)} target="_blank" rel="noopener noreferrer"><b>{c.name}</b> <span className="muted small">{c.code} {c.num}</span></a>
-                  <span className="meta-stats">in {c.share ?? 0}% of lists ({c.lists}) · {c.avg_copies} {c.avg_copies === 1 ? 'copy' : 'copies'} on average{c.wins ? ` · ${c.wins} win${c.wins > 1 ? 's' : ''}` : ''}</span>
+                  <Link className="meta-name mu-deck-link" to={cardPath(c.name, days)}><span className="jp-rank">{i + 1}</span><b>{c.name}</b></Link>
+                  <span className="meta-stats">{[c.wins ? plural(c.wins, 'win') : '', c.top4 ? `${c.top4} top 4` : '', c.top8 ? `${c.top8} top 8` : '', `in ${c.share ?? 0}% of lists (${c.lists})`, `${c.avg_copies} ${c.avg_copies === 1 ? 'copy' : 'copies'}`].filter(Boolean).join(' · ')}</span>
                 </div>
-                <div className="meta-bar dr" aria-hidden="true"><span style={{ width: `${Math.max(3, ((c.share || 0) / maxShare) * 100)}%` }} /></div>
+                <div className="meta-bar dr" aria-hidden="true"><span style={{ width: `${Math.max(3, (cardVal(c) / maxCard) * 100)}%` }} /></div>
                 <div className="small muted">
                   {c.top_decks?.length ? <>Most played in {c.top_decks.join(', ')}</> : null}
-                  {c.best_tournament && c.best_place ? <>{c.top_decks?.length ? ' · ' : ''}<Link to={`/events/japan/${c.best_tournament}/${c.best_place}`}>Best finish: {ord(c.best_place)} place list →</Link></> : null}
+                  {c.best_tournament && c.best_place ? <>{c.top_decks?.length ? ' · ' : ''}<Link to={`/events/japan/${c.best_tournament}/${c.best_place}`}>Best: {ord(c.best_place)} place list →</Link></> : null}
                 </div>
               </li>
             ))}
@@ -98,9 +112,9 @@ export function JapanPage() {
               <li key={m.archetype}>
                 <div className="meta-row">
                   <span className="meta-name"><b>{m.archetype}</b>{m.preview_lists > 0 && <> <PreviewTag info={info.data} /></>}</span>
-                  <span className="meta-stats">{m.top8} in top 8 · {m.top4} top 4{m.wins ? ` · ${m.wins} win${m.wins > 1 ? 's' : ''}` : ''}</span>
+                  <span className="meta-stats">{[m.wins ? plural(m.wins, 'win') : '', `${m.top4} top 4`, `${m.top8} top 8`, `${m.placings} placings`].filter(Boolean).join(' · ')}</span>
                 </div>
-                <div className="meta-bar" aria-hidden="true"><span style={{ width: `${Math.max(3, (m.top8 / maxTop8) * 100)}%` }} /></div>
+                <div className="meta-bar" aria-hidden="true"><span style={{ width: `${Math.max(3, (m.points / maxPts) * 100)}%` }} /></div>
                 <div className="small muted">
                   {m.lists ? `${name} in ${m.preview_lists} of ${m.lists} list${m.lists > 1 ? 's' : ''}` : 'No lists yet'}
                   {m.best_tournament && m.best_place ? <> · <Link to={`/events/japan/${m.best_tournament}/${m.best_place}`}>Best finish: {ord(m.best_place)} place list →</Link></> : null}
@@ -146,7 +160,7 @@ export function JapanEventPage({ id }: { id: string }) {
   if (r.error) return <div className="wrap page"><ErrorBox error={r.error} onRetry={r.reload} /></div>;
   if (!r.data) return <div className="wrap page"><Empty title="Event not found" icon="list"><Link to="/events/japan" className="btn">Japanese tournaments</Link></Empty></div>;
   const { t, decks } = r.data;
-  const listTop = t.kind === 'major' ? 16 : 4;
+  const listTop = 32;
   return (
     <div className="wrap page">
       <p className="crumbs"><Link to="/events">Tournaments</Link> › <Link to="/events/japan">Japan</Link></p>
@@ -238,7 +252,7 @@ export function JapanDeckPage({ id, place }: { id: string; place: number }) {
                   return (
                     <li key={l.i} className={`row ${l.preview ? 'dr' : ''}`} data-preview={c?.image || undefined}>
                       {l.preview
-                        ? <a className="row-main" href={api.jpCardHref(l.code, l.num)} target="_blank" rel="noopener noreferrer" title="Translated card on Limitless">{inner}</a>
+                        ? <Link className="row-main" to={cardPath(l.name)} title={`How ${l.name} is doing in Japan`}>{inner}</Link>
                         : c ? <Link className="row-main" to={`/cards/${encodeURIComponent(c.id)}`}>{inner}</Link>
                         : <span className="row-main">{inner}</span>}
                     </li>
@@ -251,6 +265,77 @@ export function JapanDeckPage({ id, place }: { id: string; place: number }) {
         <p className="muted small">{d.card_count} cards{d.price ? ` · ${money(d.price)} for the cards already sold in the US` : ''}.</p>
         <Credit />
       </div>
+    </div>
+  );
+}
+
+/** One preview-set card: its results, every list that plays it, and what those lists play with it. */
+export function JapanCardPage({ name }: { name: string }) {
+  const { query } = useRoute();
+  const days: Days = (DAYS as readonly string[]).includes(query.get('days') || '') ? query.get('days') as Days : '14';
+  const info = useInfo();
+  const stats = useAsync(async () => (await api.jpPreviewCards(+days, 'wins')).find(c => c.name === name) || null, [name, days]);
+  const fin = useAsync(() => api.jpCardFinishes(name, +days), [name, days]);
+  const partners = useAsync(() => api.jpCardPartners(name, +days), [name, days]);
+  const s = stats.data;
+  const set = info.data?.name || 'new set';
+  return (
+    <div className="wrap page mu-page">
+      <p className="crumbs"><Link to="/events">Tournaments</Link> › <Link to={`/events/japan${days !== '14' ? `?days=${days}` : ''}`}>Japan</Link></p>
+      <div className="page-head mu-head"><h1>{name}</h1></div>
+      <div className="row-gap"><PreviewTag info={info.data} />{s && <a className="small" href={api.jpCardHref(s.code, s.num)} target="_blank" rel="noopener noreferrer">Translated card text on Limitless ({s.code} {s.num})<Icon name="forward" size={12} /></a>}</div>
+      <div className="mu-filters jp-filters">
+        <Segmented label="Period" value={days} onChange={v => setQuery({ days: v === '14' ? null : v })} options={DAYS.map(d => ({ value: d, label: `${d} days` }))} />
+      </div>
+      <Loading info={info.data} />
+      {stats.loading ? <Spinner /> : !s ? <Empty title={`No lists with ${name} in this period`} icon="list"><p>Try a longer period.</p></Empty> : (
+        <>
+          <dl className="jp-stats">
+            <div><dt>Wins</dt><dd>{s.wins}</dd></div>
+            <div><dt>Top 4</dt><dd>{s.top4}</dd></div>
+            <div><dt>Top 8</dt><dd>{s.top8}</dd></div>
+            <div><dt>Lists</dt><dd>{s.lists}</dd></div>
+            <div><dt>Play rate</dt><dd>{s.share ?? 0}%</dd></div>
+            <div><dt>Copies</dt><dd>{s.avg_copies}</dd></div>
+            <div><dt>Avg finish</dt><dd>{s.avg_place != null ? ord(Math.round(s.avg_place)) : '—'}</dd></div>
+          </dl>
+          {s.top_decks?.length ? <p className="muted">Most played in {s.top_decks.join(', ')}.</p> : null}
+
+          <section className="panel meta-panel">
+            <div className="panel-head"><h2>Played with</h2></div>
+            <p className="muted small jp-explain">Other cards in lists that play {name}: how many of those lists include each, and how many copies.</p>
+            {partners.loading ? <Spinner /> : partners.error ? <ErrorBox error={partners.error} onRetry={partners.reload} /> : (
+              <ul className="jp-partners">
+                {(partners.data || []).map(p => (
+                  <li key={p.name} className={p.preview ? 'dr' : ''}>
+                    <span className="grow">{p.preview ? <Link to={cardPath(p.name, days)}>{p.name}</Link> : p.cid ? <Link to={`/cards/${encodeURIComponent(p.cid)}`}>{p.name}</Link> : p.name}{p.preview && <> <PreviewTag info={info.data} /></>}</span>
+                    <span className="muted small">{p.share ?? 0}% · {p.avg_copies}×</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="panel meta-panel">
+            <div className="panel-head"><h2>Finishes</h2></div>
+            {fin.loading ? <Spinner /> : fin.error ? <ErrorBox error={fin.error} onRetry={fin.reload} /> : (
+              <ol className="standings">
+                {(fin.data || []).map(f => (
+                  <li key={`${f.tournament_id}-${f.place}`}>
+                    <Link to={`/events/japan/${f.tournament_id}/${f.place}`} className="st-row dr-row">
+                      <span className="st-place">{ord(f.place)}</span>
+                      <span className="grow st-main"><b>{f.archetype || 'Deck'}</b><span className="muted small">{[f.event_name, fmtDate(f.date), f.player].filter(Boolean).join(' · ')}</span></span>
+                      <span className="st-side"><span className="muted small">{f.qty}×</span><Icon name="chevron" size={14} /></span>
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        </>
+      )}
+      <p className="muted small">{set} cards aren’t legal in US Standard yet.</p>
+      <Credit />
     </div>
   );
 }

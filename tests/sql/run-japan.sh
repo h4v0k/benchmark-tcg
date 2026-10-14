@@ -12,6 +12,6 @@ trap '"${AS[@]}" "$PGBIN/pg_ctl" -D "$TMP/data" -m immediate stop >/dev/null 2>&
 P=(psql -h "$TMP" -p "$PORT" -U postgres -X -q -v ON_ERROR_STOP=1)
 "${P[@]}" -f "$HERE/stubs.sql"; PGOPTIONS="-c client_min_messages=warning" "${P[@]}" -f "$HERE/stubs-full.sql"
 for m in "$ROOT"/supabase/migrations/0*.sql; do "${P[@]}" -f "$m" >/dev/null 2>&1 || { echo "FAIL | $(basename "$m") does not apply"; "${P[@]}" -f "$m" 2>&1 | grep ERROR | head -3; exit 1; }; done
-"${P[@]}" -f "$ROOT/supabase/migrations/022_japan_preview.sql" >/dev/null 2>&1 || { echo "FAIL | 022 is not safe to run twice"; exit 1; }
+for m in "$ROOT"/supabase/migrations/02[2-9]_japan*.sql; do "${P[@]}" -f "$m" >/dev/null 2>&1 || { echo "FAIL | $(basename "$m") is not safe to run twice"; "${P[@]}" -f "$m" 2>&1 | grep ERROR | head -3; exit 1; }; done
 "${P[@]}" -f "$HERE/japan-test.sql" 2>&1 | sed -E 's/^psql:[^ ]+ ?//; s/^NOTICE:  //' | grep -E "PASS|FAIL|ERROR|WARNING" | tee "$TMP/out"
 ! grep -qE "FAIL|ERROR" "$TMP/out"

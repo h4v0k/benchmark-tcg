@@ -22,6 +22,7 @@ const EventDeckPage = lazy(() => import('./pages/Events').then(m => ({ default: 
 const JapanPage = lazy(() => import('./pages/Japan').then(m => ({ default: m.JapanPage })));
 const JapanEventPage = lazy(() => import('./pages/Japan').then(m => ({ default: m.JapanEventPage })));
 const JapanDeckPage = lazy(() => import('./pages/Japan').then(m => ({ default: m.JapanDeckPage })));
+const JapanCardPage = lazy(() => import('./pages/Japan').then(m => ({ default: m.JapanCardPage })));
 const MatchupsPage = lazy(() => import('./pages/Matchups').then(m => ({ default: m.MatchupsPage })));
 const DeckListsPage = lazy(() => import('./pages/DeckLists').then(m => ({ default: m.DeckListsPage })));
 const ArchetypePage = lazy(() => import('./pages/Archetype').then(m => ({ default: m.ArchetypePage })));
@@ -72,6 +73,7 @@ const ROUTES: [string, (p: Record<string, string>) => ReactElement][] = [
   ['/rules', () => <RulesPage />],
   ['/events', () => <EventsPage />],
   ['/events/japan', () => <JapanPage />],
+  ['/events/japan/card/:name', p => <JapanCardPage name={p.name} />],
   ['/events/japan/:id', p => isJpId(p.id) ? <JapanEventPage id={p.id} /> : <NotFound />],
   ['/events/japan/:id/:place', p => isJpId(p.id) && isId(p.place) ? <JapanDeckPage id={p.id} place={+p.place} /> : <NotFound />],
   ['/events/:id', p => isId(p.id) ? <EventPage id={+p.id} /> : <NotFound />],

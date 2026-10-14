@@ -713,3 +713,17 @@ a.mu-link:hover { border-color: var(--accent); }
 a.row-main, a.row-main:hover { text-decoration: none; }
 .jp-list .row .name { white-space: normal; overflow-wrap: anywhere; } /* readable with larger text sizes */
 @media (pointer: coarse) { .chip.dr-toggle { min-height: 42px; } }
+.jp-loading { display: flex; align-items: center; gap: 8px; margin: -4px 0 12px; }
+.jp-loading .spinner { width: 13px; height: 13px; flex: none; }
+.jp-explain { margin: -4px 0 10px; }
+.jp-rank { display: inline-block; min-width: 1.6em; color: var(--faint); font-weight: 700; font-variant-numeric: tabular-nums; }
+.jp-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin: 14px 0; }
+.jp-stats > div { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px; }
+.jp-stats dt { color: var(--muted); font-size: 12px; }
+.jp-stats dd { margin: 2px 0 0; font-size: 1.35em; font-weight: 800; font-variant-numeric: tabular-nums; }
+.jp-partners { list-style: none; margin: 0; padding: 0; columns: 260px 2; column-gap: 22px; }
+.jp-partners li { display: flex; gap: 8px; align-items: baseline; padding: 4px 6px; border-radius: 4px; break-inside: avoid; overflow-wrap: anywhere; }
+.jp-partners li.dr { background: var(--dr-soft); box-shadow: inset 3px 0 0 var(--dr); }
+.jp-partners .grow { flex: 1; min-width: 0; }
+.jp-partners .small { flex: none; font-variant-numeric: tabular-nums; }
+.panel-head { flex-wrap: wrap; }

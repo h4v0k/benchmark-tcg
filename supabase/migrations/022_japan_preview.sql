@@ -257,6 +257,7 @@ end $$;
 revoke execute on function public.jp_read(public.jp_fetch, text) from public, anon, authenticated;
 
 -- Runs every 10 minutes (5 minutes after the main tournament job). Sends at most 3 requests.
+drop function if exists public.jp_tick(int);  -- (024 replaces this with jp_tick(budget); keeps a re-run of 022 unambiguous)
 create or replace function public.jp_tick() returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
 declare f public.jp_fetch; resp record; sent int := 0; budget int := 3; ev record; dl record;
@@ -365,7 +366,8 @@ $$;
 grant execute on function public.jp_events(int, int) to anon, authenticated;
 
 -- Archetypes across Japanese top 8s, and how many of their lists play preview-set cards.
-create or replace function public.jp_meta(p_days int default 14, p_preview_only boolean default false)
+drop function if exists public.jp_meta(int, boolean);
+create function public.jp_meta(p_days int default 14, p_preview_only boolean default false)
 returns table (archetype text, icons text[], top8 bigint, top4 bigint, wins bigint, events bigint,
                lists bigint, preview_lists bigint, best_tournament text, best_place int)
 language sql stable security definer set search_path = public as $$
@@ -389,7 +391,9 @@ $$;
 grant execute on function public.jp_meta(int, boolean) to anon, authenticated;
 
 -- Each preview-set card: how many fetched lists play it, copies, finishes, and the decks that use it most.
-create or replace function public.jp_preview_cards(p_days int default 14)
+drop function if exists public.jp_preview_cards(int, text);
+drop function if exists public.jp_preview_cards(int);
+create function public.jp_preview_cards(p_days int default 14)
 returns table (name text, code text, num text, lists bigint, share numeric, avg_copies numeric,
                wins bigint, top_decks text[], best_tournament text, best_place int)
 language sql stable security definer set search_path = public as $$

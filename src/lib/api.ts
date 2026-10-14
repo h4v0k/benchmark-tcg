@@ -321,20 +321,25 @@ export async function archetypeFinishes(archetype: string, days: number): Promis
 /* ---------------- Japan preview (City League + Champions League; from Limitless) ----------------
    Japan plays a set before the US does. These results live in their own tables and never feed the
    Standard pages above or card legality. Lines from the preview set carry preview: true and no catalog card. */
-export type JpInfo = { name: string; code: string; jp_name: string; jp_codes: string[]; us_release: string | null; us_legal: string | null; updated: string | null };
+export type JpInfo = { name: string; code: string; jp_name: string; jp_codes: string[]; jp_since?: string; us_release: string | null; us_legal: string | null; updated: string | null; lists?: number; queued?: { standings: number; lists: number } };
 export type JpKind = 'city_league' | 'major';
 export type JpEvent = { id: string; kind: JpKind; name: string; date: string; city: string; shop: string; players: number | null; status: string; lists: number; preview_lists: number; winner: string | null; winner_icons: string[] | null };
 export type JpLine = { i: number; qty: number; name: string; code: string; num: string; sec: 'pokemon' | 'trainer' | 'energy' | 'other'; preview: boolean; cid: string | null; cat: string | null };
 export type JpDeck = { tournament_id: string; place: number; player: string; archetype: string; icons: string[]; list_ref: string | null; cards: JpLine[] | null; missing: string[]; card_count: number | null; price: number | null; has_preview: boolean; preview_qty: number };
 export type JpTournament = Omit<JpEvent, 'lists' | 'preview_lists' | 'winner' | 'winner_icons'> & { src_id: number };
-export type JpMetaRow = { archetype: string; icons: string[] | null; top8: number; top4: number; wins: number; events: number; lists: number; preview_lists: number; best_tournament: string | null; best_place: number | null };
-export type JpCardRow = { name: string; code: string; num: string; lists: number; share: number | null; avg_copies: number; wins: number; top_decks: string[] | null; best_tournament: string | null; best_place: number | null };
+export type JpMetaRow = { archetype: string; icons: string[] | null; placings: number; points: number; top8: number; top4: number; wins: number; events: number; lists: number; preview_lists: number; best_tournament: string | null; best_place: number | null };
+export type JpCardRow = { name: string; code: string; num: string; lists: number; share: number | null; avg_copies: number; wins: number; top4: number; top8: number; points: number; best_place: number | null; avg_place: number | null; top_decks: string[] | null; best_tournament: string | null };
+export type JpCardSort = 'wins' | 'played';
+export type JpFinish = { tournament_id: string; event_name: string; date: string; kind: JpKind; shop: string; players: number | null; place: number; player: string; archetype: string; qty: number };
+export type JpPartner = { name: string; preview: boolean; lists: number; share: number | null; avg_copies: number; cid: string | null };
 const JT_COLS = 'id,src_id,kind,name,date,city,shop,players,status';
 const JD_SUMMARY = 'tournament_id,place,player,archetype,icons,list_ref,card_count,price,has_preview,preview_qty,missing';
 export const jpInfo = () => sb.rpc<JpInfo>('jp_preview_info');
 export const jpEvents = (days: number) => sb.rpc<JpEvent[]>('jp_events', { p_days: days, p_limit: 120 });
 export const jpMeta = (days: number, previewOnly: boolean) => sb.rpc<JpMetaRow[]>('jp_meta', { p_days: days, p_preview_only: previewOnly });
-export const jpPreviewCards = (days: number) => sb.rpc<JpCardRow[]>('jp_preview_cards', { p_days: days });
+export const jpPreviewCards = (days: number, sort: JpCardSort = 'wins') => sb.rpc<JpCardRow[]>('jp_preview_cards', { p_days: days, p_sort: sort });
+export const jpCardFinishes = (name: string, days: number) => sb.rpc<JpFinish[]>('jp_card_finishes', { p_name: name, p_days: days, p_limit: 150 });
+export const jpCardPartners = (name: string, days: number) => sb.rpc<JpPartner[]>('jp_card_partners', { p_name: name, p_days: days, p_limit: 40 });
 export async function jpEvent(id: string): Promise<{ t: JpTournament; decks: JpDeck[] } | null> {
   const [{ rows: ts }, { rows: decks }] = await Promise.all([
     sb.select<JpTournament>('jp_tournaments', { select: JT_COLS, id: `eq.${id}` }),

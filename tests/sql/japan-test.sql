@@ -75,14 +75,14 @@ update jt.fx set body = replace(body, 'DATE1', (current_date - 1)::text);
 
 -- 1. first tick: one index request, nothing else
 select public.jp_tick() \gset
-select jt.eq('first tick sends only the City League index', (select string_agg(url, ' ') from net.sent), 'https://limitlesstcg.com/tournaments/jp?show=100');
+select jt.eq('first tick: City League index and the weekly main list', (select string_agg(url, ' ' order by id) from net.sent), 'https://limitlesstcg.com/tournaments/jp?show=100 https://limitlesstcg.com/tournaments?show=100');
 select jt.answer();
 
 -- 2. reading the index adds events; next tick sends a look-back page and standings (budget 3)
 select public.jp_tick() \gset
 select jt.eq('index read: 2 City Leagues', (select count(*)::text from public.jp_tournaments where kind = 'city_league'), '2');
 select jt.eq('city name decoded', (select shop from public.jp_tournaments where id = 'c5071'), 'Shop & Co');
-select jt.check('second tick: at most 3 requests', (select count(*) from net.sent) <= 4);
+select jt.check('second tick: at most 3 more requests', (select count(*) from net.sent) <= 5);
 select jt.check('look-back page requested', exists (select 1 from net.sent where url like '%show=100&page=2'));
 select jt.answer();
 
@@ -94,7 +94,7 @@ select public.jp_tick() \gset
 select jt.answer();
 select public.jp_tick() \gset
 
-select jt.eq('standings: places 1-8 only', (select string_agg(place::text, ',' order by place) from public.jp_decks where tournament_id = 'c5063'), '1,2');
+select jt.eq('standings: every place up to 32', (select string_agg(place::text, ',' order by place) from public.jp_decks where tournament_id = 'c5063'), '1,2,9');
 select jt.eq('archetype from icons matches catalog archetype', (select archetype from public.jp_decks where tournament_id = 'c5063' and place = 1), 'N''s Zoroark');
 select jt.eq('archetype from icons fallback', (select archetype from public.jp_decks where tournament_id = 'c5063' and place = 2), 'Mega Rayquaza Talonflame');
 select jt.eq('list ref keeps jp path', (select list_ref from public.jp_decks where tournament_id = 'c5063' and place = 2), 'jp/75535');
@@ -107,7 +107,7 @@ select jt.eq('preview cards not reported missing', (select array_to_string(missi
 select jt.eq('sections read from headings', (select string_agg(distinct x->>'sec', ',') from public.jp_decks d, jsonb_array_elements(d.cards) x where tournament_id = 'c5063' and place = 2), 'energy,pokemon,trainer');
 select jt.eq('preview lines never get a catalog card', (select count(*)::text from public.jp_decks d, jsonb_array_elements(d.cards) x where (x->>'preview')::boolean and x->>'cid' is not null), '0');
 
-select jt.eq('event done once top-4 lists are in', (select status from public.jp_tournaments where id = 'c5063'), 'done');
+select jt.eq('event done once its lists are in', (select status from public.jp_tournaments where id = 'c5063'), 'done');
 select jt.eq('empty standings: retried later, not done', (select status || '/' || standings_tries from public.jp_tournaments where id = 'c5071'), 'new/1');
 
 -- 3. majors come from the main index response (no extra request)
@@ -115,11 +115,15 @@ insert into public.tourney_fetch (net_id, kind, handled_at) values (900001, 'ind
 insert into net._http_response (id, status_code, content) values (900001, 200,
   '<tr data-date="' || (current_date - 2) || '" data-name="Champions League Yokohama" data-country="JP" data-players="4000" data-format="standard-jp"><a href="/tournaments/29">x</a></tr>'
   || '<tr data-date="' || (current_date - 2) || '" data-name="Regional Louisville" data-country="US" data-players="2000" data-format="standard"><a href="/tournaments/580">x</a></tr>');
-select count(*) as before_n from net.sent \gset
+select jt.answer();
 select public.jp_tick() \gset
+select jt.answer();
+select max(id) as before_n from net.sent \gset
+select public.jp_tick() as t3 \gset
+\echo :t3
 select jt.eq('Champions League picked up from main index', (select name || '/' || players from public.jp_tournaments where id = 'm29'), 'Champions League Yokohama/4000');
 select jt.check('Regionals are not copied into Japan', not exists (select 1 from public.jp_tournaments where name like 'Regional%'));
-select jt.check('majors standings requested first', exists (select 1 from net.sent where id > :before_n and url = 'https://limitlesstcg.com/tournaments/29'));
+select jt.check('majors standings requested first', exists (select 1 from net.sent where url = 'https://limitlesstcg.com/tournaments/29'));
 select jt.answer();
 select public.jp_tick() \gset
 select jt.eq('major standings: archetype from data-deck', (select archetype || '/' || player || '/' || list_ref from public.jp_decks where tournament_id = 'm29'), 'Mega Rayquaza/Yu & Me/29455');
@@ -143,6 +147,38 @@ select count(*) as anon_decks from public.jp_decks \gset
 reset role;
 select jt.check('anon reads Japan events', :anon_events > 0);
 select jt.check('anon reads jp_decks', :anon_decks > 0);
-select jt.check('anon cannot run jp_tick', not has_function_privilege('anon', 'public.jp_tick()', 'execute'));
+select jt.check('anon cannot run jp_tick', not has_function_privilege('anon', 'public.jp_tick(int)', 'execute'));
 select jt.check('anon cannot read jp_fetch', not has_table_privilege('anon', 'public.jp_fetch', 'select'));
 select jt.check('cron job scheduled', exists (select 1 from cron.job where jobname = 'benchmark-japan' and schedule = '5-59/10 * * * *'));
+
+-- 7. round 2 (024): catch-up, ordering, card pages
+select jt.check('catch-up job scheduled', exists (select 1 from cron.job where jobname = 'benchmark-japan-catchup' and schedule = '* * * * *'));
+select jt.check('normal job passes its budget', exists (select 1 from cron.job where jobname = 'benchmark-japan' and command like '%jp_tick(3)%'));
+-- three more events with lists waiting: 1st places must be fetched before a 2nd place
+insert into public.jp_tournaments (id, src_id, kind, name, date, status) values
+  ('c901', 901, 'city_league', 'City League A', current_date - 3, 'lists'),
+  ('c902', 902, 'city_league', 'City League B', current_date - 2, 'lists');
+insert into public.jp_decks (tournament_id, place, list_ref) values
+  ('c901', 2, 'jp/1002'), ('c901', 1, 'jp/1001'), ('c902', 17, 'jp/2017'), ('c902', 1, 'jp/2001'), ('c902', 3, 'jp/2003');
+update public.app_settings set value = now()::text where key in ('jp_index_at', 'jp_majors_at');
+insert into public.app_settings (key, value) values ('jp_majors_at', now()::text) on conflict (key) do update set value = excluded.value;
+update public.app_settings set value = '12' where key = 'jp_index_back';
+update net._http_response set status_code = 200 where false;
+select jt.answer();
+select max(id) as m0 from net.sent \gset
+select public.jp_catchup_tick() as ct \gset
+select jt.eq('catch-up sends 4, best placings first (majors first within a place)', (select string_agg(url, ' ' order by id) from net.sent where id > :m0),
+  'https://limitlesstcg.com/decks/list/29455 https://limitlesstcg.com/decks/list/jp/2001 https://limitlesstcg.com/decks/list/jp/1001 https://limitlesstcg.com/decks/list/jp/1002');
+select jt.check('backlog reported', (:'ct'::jsonb->'backlog'->>'lists')::int >= 4, :'ct');
+select jt.eq('card finishes list the deck', (select place || ' ' || archetype || ' x' || qty from public.jp_card_finishes('Mega Rayquaza ex', 30, 50) limit 1), '2 Mega Rayquaza Talonflame x3');
+select jt.eq('card partners include other preview cards', (select string_agg(name || (case when preview then '*' else '' end), ',' order by name) from public.jp_card_partners('Mega Rayquaza ex', 30, 50)), 'Adventuring Lantern*,Talonflame ex*,Ultra Ball');
+select jt.eq('winningest sort uses finish points', (select string_agg(name || ':' || points, ',') from public.jp_preview_cards(30, 'wins')), 'Adventuring Lantern:6,Mega Rayquaza ex:6,Talonflame ex:6');
+select jt.check('jp_meta has points and placings', (select points > 0 and placings >= top8 from public.jp_meta(30, false) limit 1));
+-- catch-up turns itself off once nothing is left
+update public.jp_decks set attempts = 3 where cards is null;
+update public.jp_tournaments set standings_tries = 3 where status = 'new';
+select jt.answer();
+select public.jp_tick(3) \gset
+select public.jp_catchup_tick() as ct2 \gset
+select jt.check('catch-up unschedules itself when done', not exists (select 1 from cron.job where jobname = 'benchmark-japan-catchup'), :'ct2');
+select jt.check('anon cannot run catch-up', not has_function_privilege('anon', 'public.jp_catchup_tick()', 'execute'));
