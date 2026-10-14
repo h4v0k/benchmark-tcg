@@ -161,7 +161,8 @@ function ReportsPanel() {
           {list.map(x => (
             <li key={x.id} className={x.resolved ? 'done' : ''}>
               <div className="muted small">#{x.id} · {ago(x.created_at)} · {x.contact_email ? <a href={`mailto:${x.contact_email}`}>{x.contact_email}</a> : 'no email'}
-                {' · '}{x.emailed_at ? <Tag tone="ok">Emailed</Tag> : <Tag tone="warn" >{x.email_error === 'email not set up yet' ? 'Not emailed: email not set up' : 'Email failed'}</Tag>}</div>
+                {x.emailed_at && <> · <Tag tone="ok">Emailed</Tag></>}
+                {x.email_error && x.email_error !== 'email not set up yet' && <> · <span title={x.email_error}><Tag tone="warn">Email failed</Tag></span></>}</div>
               <p className="report-msg">{x.message}</p>
               <div className="muted small report-meta">{x.page_url}{x.user_agent ? ` · ${x.user_agent}` : ''}</div>
               <button className="btn small" style={{ marginTop: 8 }} onClick={() => toggle(x.id, !x.resolved)}><Icon name="check" size={14} />{x.resolved ? 'Reopen' : 'Mark resolved'}</button>
