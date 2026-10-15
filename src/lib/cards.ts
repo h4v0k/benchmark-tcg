@@ -125,3 +125,11 @@ export function atLeast(deck: number, hits: number, draw: number, need = 1) {
   for (let k = need; k <= Math.min(hits, draw); k++) p += choose(hits, k) * choose(deck - hits, draw - k) / choose(deck, draw);
   return p;
 }
+
+/** Best card to show as a deck's cover: the strongest-looking Pokémon (ex/V/Stage 2 first), then by count. */
+export function autoCover(lines: Line[]): string {
+  const main = lines.filter(l => l.board === 'main' && l.card?.image);
+  const score = (l: Line) => (l.card!.category === 'Pokemon' ? 100 : 0) + (/( ex| V| VSTAR| VMAX| GX| EX)$/i.test(l.name) ? 50 : 0) + (/stage ?2|vstar|vmax|mega/i.test(l.card!.stage) ? 10 : 0) + l.qty;
+  const best = main.sort((a, b) => score(b) - score(a))[0];
+  return best?.card?.image || '';
+}

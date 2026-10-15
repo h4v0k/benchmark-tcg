@@ -8,7 +8,7 @@ import { ExportModal } from '../components/deck/DeckModals';
 import { Link, navigate } from '../router';
 import { useAuth, toast } from '../state';
 import * as api from '../lib/api';
-import { fmtDate, money, type Line } from '../lib/cards';
+import { autoCover, fmtDate, money, type Line } from '../lib/cards';
 import { RegionSwitch, SyncNote } from './Japan';
 import type { Card, Rules } from '../lib/types';
 
@@ -134,7 +134,7 @@ export function EventDeckPage({ id, place }: { id: number; place: number }) {
     if (!session || !profile) { navigate('/signup'); return; }
     setBusy(true);
     try {
-      const deck = await api.createDeck({ name: `${d.archetype || 'Deck'} (${d.player}, ${ord(d.place)} ${t.name})`.slice(0, 80), format: 'standard', cards: d.cards!, archetype: d.archetype, description: `${ord(d.place)} place at ${t.name} (${fmtDate(t.date)}) by ${d.player}. List from Limitless.`, is_public: false });
+      const deck = await api.createDeck({ name: `${d.archetype || 'Deck'} (${d.player}, ${ord(d.place)} ${t.name})`.slice(0, 80), format: 'standard', cards: d.cards!, cover: autoCover(lines), archetype: d.archetype, description: `${ord(d.place)} place at ${t.name} (${fmtDate(t.date)}) by ${d.player}. List from Limitless.`, is_public: false });
       toast('Copied to your decks', 'ok'); navigate(`/decks/${deck.id}`);
     } catch (e: any) { toast(e.message, 'bad'); setBusy(false); }
   };

@@ -12,7 +12,7 @@ import { coverUrl } from '../components/DeckTile';
 import { Link, navigate, setQuery, useRoute } from '../router';
 import { useAuth, toast } from '../state';
 import * as api from '../lib/api';
-import { ago, fmtDate, FORMAT_LABEL, linePrice, sum, type Line, type SortKey } from '../lib/cards';
+import { ago, autoCover, fmtDate, FORMAT_LABEL, linePrice, sum, type Line, type SortKey } from '../lib/cards';
 import { exportPTCGL } from '../lib/decklist';
 import { validateDeck } from '../lib/legality';
 import { massEntry } from '../lib/tcgplayer';
@@ -21,13 +21,6 @@ import type { Board, Card, DeckEntry, DeckRow, Finish, Rules } from '../lib/type
 const pref = <T extends string>(k: string, d: T): T => { try { return (localStorage.getItem('bm:' + k) as T) || d; } catch { return d; } };
 const setPref = (k: string, v: string) => { try { localStorage.setItem('bm:' + k, v); } catch {} };
 const slim = (e: DeckEntry): DeckEntry => ({ cid: e.cid, qty: e.qty, board: e.board, ...(e.variant && e.variant !== 'normal' ? { variant: e.variant } : {}), name: e.name, cat: e.cat || '' });
-
-function autoCover(lines: Line[]): string {
-  const main = lines.filter(l => l.board === 'main' && l.card?.image);
-  const score = (l: Line) => (l.card!.category === 'Pokemon' ? 100 : 0) + (/( ex| V| VSTAR| VMAX| GX| EX)$/i.test(l.name) ? 50 : 0) + (/stage ?2|vstar|vmax|mega/i.test(l.card!.stage) ? 10 : 0) + l.qty;
-  const best = main.sort((a, b) => score(b) - score(a))[0];
-  return best?.card?.image || '';
-}
 
 export function DeckPage({ id }: { id: string }) {
   const { session, profile } = useAuth();
@@ -84,6 +77,12 @@ export function DeckPage({ id }: { id: string }) {
   useEffect(() => { if (query.get('import') === '1' && isOwner) { setEditing(true); setModal({ kind: 'import' }); setQuery({ import: null, edit: '1' }); } }, [isOwner]);
 
   const lines: Line[] = useMemo(() => entries.map(e => ({ ...e, card: cards.get(e.cid) })), [entries, cards]);
+  // Decks saved without a cover (e.g. copied from a tournament list) get one picked the first time their owner opens them.
+  useEffect(() => {
+    if (!isOwner || !row || row.cover) return;
+    const c = autoCover(lines);
+    if (c) { setRow(r => r && { ...r, cover: c }); queue({ cover: c }); }
+  }, [isOwner, row?.id, row?.cover, lines]);
   const boardLines = useMemo(() => lines.filter(l => l.board === board), [lines, board]);
   const mainLines = useMemo(() => lines.filter(l => l.board === 'main'), [lines]);
   const total = sum(mainLines, l => l.qty);

@@ -10,7 +10,7 @@ import { Link, navigate, setQuery, useRoute } from '../router';
 import { useAuth, toast } from '../state';
 import * as api from '../lib/api';
 import { parseDeckText } from '../lib/decklist';
-import { fmtDate, type Line } from '../lib/cards';
+import { autoCover, fmtDate, type Line } from '../lib/cards';
 
 const DAYS = ['30', '60', '90'] as const;
 const DEFAULT_DAYS = '60';
@@ -123,7 +123,7 @@ function ListView({ id, best, title }: { id: string; best: boolean; title: strin
     if (!session || !profile) { navigate('/signup'); return; }
     setBusy(true);
     try {
-      const d = await api.createDeck({ name: label, format: 'standard', cards: lines.map(({ card, ...e }) => e), archetype: title,
+      const d = await api.createDeck({ name: label, format: 'standard', cards: lines.map(({ card, ...e }) => e), cover: autoCover(lines), archetype: title,
         description: `${[record(l), finish(l)].filter(Boolean).join(', ')} at ${l.event_name} (${fmtDate(l.date)}) by ${l.player}. List from Limitless.`, is_public: false });
       toast('Copied to your decks', 'ok'); navigate(`/decks/${d.id}`);
     } catch (e: any) { toast(e.message, 'bad'); setBusy(false); }
