@@ -168,7 +168,8 @@ export function EventDeckPage({ id, place }: { id: number; place: number }) {
         </aside>
       </div>
       {open && <CardModal line={open} format="standard" editable={false} isCover={false} onClose={() => setOpen(null)} />}
-      {exporting && <ExportModal lines={lines} name={title} onClose={() => setExporting(false)} />}
+      {exporting && <ExportModal lines={lines} name={title} onClose={() => setExporting(false)}
+        meta={{ name: d.archetype || 'Deck', format: `Standard · ${ord(d.place)} place · ${t.name}`, author: d.player, updated: fmtDate(t.date), url: 'benchmarktcg.us' + location.pathname }} />}
       <div className="wrap"><LimitlessCredit /></div>
     </div>
   );
