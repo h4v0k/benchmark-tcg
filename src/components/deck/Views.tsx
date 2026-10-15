@@ -142,7 +142,7 @@ export function TableView(p: ViewProps) {
   return (
     <div className="table-view">
       <table>
-        <thead><tr><th className="num">Qty</th><th>Name</th><th>Set</th><th>Finish</th><th>Type</th><th title="Regulation mark">Mark</th><th>Legality</th><th className="num">Each</th><th className="num">Total</th>{p.editable && <th aria-label="Change quantity" />}</tr></thead>
+        <thead><tr><th className="num">Qty</th><th>Name</th><th>Set</th><th className="col-extra">Finish</th><th className="col-extra">Type</th><th className="col-extra" title="Regulation mark">Mark</th><th>Legality</th><th className="num">Each</th><th className="num">Total</th>{p.editable && <th aria-label="Change quantity" />}</tr></thead>
         {groups.map(g => (
           <tbody key={g.name}>
             {p.group !== 'none' && <tr className="table-group"><td colSpan={p.editable ? 10 : 9}>{g.name} · {sum(g.lines, l => l.qty)}</td></tr>}
@@ -150,10 +150,10 @@ export function TableView(p: ViewProps) {
               <tr key={l.cid + l.board} className={p.highlight?.has(l.name) ? 'hl' : ''} data-preview={l.card?.image || undefined} onClick={() => p.onOpen(l)}>
                 <td className="num">{l.qty}</td>
                 <td className="name">{l.name}</td>
-                <td>{l.card?.set?.name || '—'} <span className="muted">{printLabel(l.card)}</span></td>
-                <td>{FINISH_LABEL[finishOf(l)] || finishOf(l)}</td>
-                <td>{l.card ? (l.card.category === 'Pokemon' ? l.card.stage || 'Pokémon' : l.card.trainer_type || l.card.energy_type || l.card.category) : '—'}</td>
-                <td>{l.card?.reg_mark || '—'}</td>
+                <td><span className="set-long">{l.card?.set?.name || '—'} </span><span className="muted">{printLabel(l.card)}</span></td>
+                <td className="col-extra">{FINISH_LABEL[finishOf(l)] || finishOf(l)}</td>
+                <td className="col-extra">{l.card ? (l.card.category === 'Pokemon' ? l.card.stage || 'Pokémon' : l.card.trainer_type || l.card.energy_type || l.card.category) : '—'}</td>
+                <td className="col-extra">{l.card?.reg_mark || "—"}</td>
                 <td>{cardProblem(l, p.format)?.label || <span className="ok-text">Legal</span>}</td>
                 <td className="num">{money(linePrice(l))}</td>
                 <td className="num">{money(linePrice(l) == null ? null : (linePrice(l) || 0) * l.qty)}</td>

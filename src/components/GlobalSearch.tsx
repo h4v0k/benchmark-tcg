@@ -10,6 +10,8 @@ export function GlobalSearch() {
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [open, setOpen] = useState(false);
+  const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 600px)').matches);
+  useEffect(() => { const m = window.matchMedia('(max-width: 600px)'); const f = () => setNarrow(m.matches); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []);
   const [active, setActive] = useState(-1);
   const dq = useDebounced(q, 200);
   const ref = useRef<HTMLInputElement>(null);
@@ -30,7 +32,7 @@ export function GlobalSearch() {
   return (
     <div className="gsearch">
       <Icon name="search" />
-      <input ref={ref} value={q} placeholder="Search cards or decks  ( / )" aria-label="Search cards or decks"
+      <input ref={ref} value={q} placeholder={narrow ? 'Search' : 'Search cards & decks  ( / )'} aria-label="Search cards or decks"
         onChange={e => { setQ(e.target.value); setOpen(true); setActive(-1); }}
         onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={e => {

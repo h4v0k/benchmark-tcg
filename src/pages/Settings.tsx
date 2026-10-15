@@ -51,7 +51,7 @@ export function SettingsPage() {
         <h2>Account</h2>
         <p className="muted">Signed in as {session.user.email}. Your username is <b>{profile.username}</b>.</p>
         <form onSubmit={e => { e.preventDefault(); changePw(); }} className="field-row">
-          <label className="field grow"><span>Password (optional: Google, email links and passkeys work without one)</span><input type="password" value={pw} onChange={e => setPw(e.target.value)} autoComplete="new-password" /></label>
+          <label className="field grow"><span>New password</span><input type="password" value={pw} onChange={e => setPw(e.target.value)} autoComplete="new-password" aria-describedby="pw-help" /><small id="pw-help" className="muted field-help">Optional. Google, email links and passkeys work without one.</small></label>
           <button className="btn"><Icon name="check" />Set password</button>
         </form>
       </section>

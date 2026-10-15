@@ -82,7 +82,7 @@ export function LoginPage({ mode }: { mode: 'signin' | 'signup' }) {
         </form>
         <p className="auth-alt">
           <button className="link-btn" onClick={() => { setUsePw(!usePw); setErr(''); }}>{usePw ? 'No password? Email me a sign-in link instead' : 'Use a password instead'}</button>
-          {usePw && mode === 'signin' && <> · <button className="link-btn" onClick={reset}>Forgot password?</button></>}
+          {usePw && mode === 'signin' && <button className="link-btn" onClick={reset}>Forgot password?</button>}
         </p>
         <p className="auth-alt">
           {mode === 'signin' ? <>New here? <Link to="/signup">Create an account</Link></> : <>Have an account? <Link to="/login">Sign in</Link></>}

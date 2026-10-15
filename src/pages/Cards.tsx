@@ -89,7 +89,7 @@ export function CardPage({ id }: { id: string }) {
         </div>
       </div>
       <h2 className="section-title">All printings</h2>
-      <div className="print-table">
+      <div className="print-table" role="region" aria-label="All printings" tabIndex={0}>
         <table>
           <thead><tr><th>Set</th><th>#</th><th>Rarity</th><th>Mark</th><th>Standard</th><th>Expanded</th><th className="num">Price</th><th /></tr></thead>
           <tbody>

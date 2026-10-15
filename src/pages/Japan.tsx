@@ -240,7 +240,7 @@ export function JapanDeckPage({ id, place }: { id: string; place: number }) {
         <SyncNote info={info.data} />
         <PreviewNotice info={info.data} />
         {preview.length > 0
-          ? <p className="dr-summary"><span className="dr-dot" aria-hidden="true" /><span><b>{sum(preview, l => l.qty)} {name} card{sum(preview, l => l.qty) > 1 ? 's' : ''}</b> in this list: {[...new Set(preview.map(l => l.name))].join(', ')}. Not legal in US Standard yet.</span></p>
+          ? <div className="dr-summary"><b><span className="dr-dot" aria-hidden="true" /> {sum(preview, l => l.qty)} {name} card{sum(preview, l => l.qty) > 1 ? 's' : ''} in this list</b><span className="muted">{[...new Set(preview.map(l => l.name))].join(', ')}. Not legal in US Standard yet.</span></div>
           : <p className="muted">Every card in this list is from a set already out in the US.</p>}
         {!!d.missing?.length && <p className="notice warn"><Icon name="warn" size={15} />Not matched to a card yet: {d.missing.join(', ')}.</p>}
         <div className="text-view jp-list">

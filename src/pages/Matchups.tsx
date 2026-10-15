@@ -221,14 +221,15 @@ function MuRow({ m, min, bar = false, big = false, note = false }: { m: api.Matc
   const t = few ? '' : tone(m.win_pct);
   return (
     <li className={`mu-item${few ? ' few' : ''}${big ? ' big' : ''}`}>
-      <div className="mu-row">
-        <span className="mu-name"><Link className="mu-deck-link" to={`/matchups/${encodeURIComponent(m.opp)}/lists`} title={`Winning ${m.name} lists`}><b>{m.name}</b></Link>
+      <Link className="mu-row mu-deck-link" to={`/matchups/${encodeURIComponent(m.opp)}/lists`} title={`Winning ${m.name} lists`}>
+        <span className="mu-name"><b>{m.name}</b>
           <span className="muted small">{games(m.games)} · {record(m)}{few ? ' · few games' : note && t ? ` · ${verdict(m.win_pct)}` : ''}</span></span>
         {big ? (
           <span><span className={`mu-pct ${t}`}>{pct(m.win_pct)}</span>
             <span className={`mu-verdict ${t}`}>{few ? 'Few games' : verdict(m.win_pct).replace(/^./, c => c.toUpperCase())}</span></span>
         ) : <span className={`mu-pct ${t}`}>{pct(m.win_pct)}<span className="sr-only"> win rate, {few ? 'few games' : verdict(m.win_pct)}</span></span>}
-      </div>
+        <Icon name="forward" size={16} className="mu-go" />
+      </Link>
       {bar && <div className={`mu-bar ${t}`} aria-hidden="true"><span style={{ width: `${Math.max(2, Math.min(100, m.win_pct ?? 0))}%` }} /><i /></div>}
     </li>
   );
