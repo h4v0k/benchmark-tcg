@@ -3,7 +3,7 @@ import { Avatar, Icon } from './ui';
 import { ago, FORMAT_LABEL, img, money } from '../lib/cards';
 import type { DeckRow } from '../lib/types';
 
-export const coverUrl = (c: string | undefined) => (c && /^https:\/\/assets\.tcgdex\.net\/[A-Za-z0-9/._-]+$/.test(c) ? img(c, 'high') : '');
+export const coverUrl = (c: string | undefined) => (c && (/^https:\/\/assets\.tcgdex\.net\/[A-Za-z0-9/._-]+$/.test(c) || /^https:\/\/tcgplayer-cdn\.tcgplayer\.com\/product\/\d+$/.test(c)) ? img(c, 'high') : '');
 
 export function DeckTile({ d, showAuthor = true }: { d: DeckRow; showAuthor?: boolean }) {
   const cover = coverUrl(d.cover);

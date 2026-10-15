@@ -1,7 +1,7 @@
 // Draws a shareable PNG of a deck in one of three layouts (grid, stacks, featured + list).
 // Card art is loaded through our own /img/* route (see worker/index.js) so the canvas stays exportable.
 import { CONFIG } from '../config';
-import { category, groupOf, img, sortLines, sum, type Line } from './cards';
+import { category, groupOf, img, sortLines, sum, TCGP_IMG, type Line } from './cards';
 
 export type ImageLayout = 'grid' | 'stacks' | 'featured';
 export type ImageMeta = { name: string; format: string; author?: string; updated: string; url?: string };
@@ -24,7 +24,9 @@ const RATIO = 88 / 63;
 /** Same-origin URL for a card's art, or '' when the card has none we can proxy. */
 export function proxied(base: string | undefined, q: 'low' | 'high' = 'high') {
   const u = img(base, q);
-  return u.startsWith(CONFIG.imageBase + '/') ? '/img' + u.slice(CONFIG.imageBase.length) : '';
+  if (u.startsWith(CONFIG.imageBase + '/')) return '/img' + u.slice(CONFIG.imageBase.length);
+  if (u.startsWith(TCGP_IMG)) return '/img/tcgp/' + u.slice(TCGP_IMG.length);
+  return '';
 }
 
 function loadImage(src: string, ms = 12000): Promise<HTMLImageElement | null> {
@@ -379,30 +381,14 @@ function drawFeatured(ctx: Ctx, W: number, H: number, lines: Line[], art: Art, m
 
 /* ---------- entry point ---------- */
 
-/** Looks up other printings' art (image base URLs) for a card name, used when a list's printing has none. */
-export type FindArt = (name: string) => Promise<string[]>;
-
-/** The line's own art, or the first other printing whose art actually loads. */
-async function artFor(l: Line, findArt?: FindArt): Promise<HTMLImageElement | null> {
-  const own = await loadImage(proxied(l.card?.image, 'high'));
-  if (own || !findArt) return own;
-  let bases: string[] = [];
-  try { bases = await findArt(l.name); } catch { return null; }
-  for (const b of bases.filter(b => b && b !== l.card?.image).slice(0, 5)) {
-    const im = await loadImage(proxied(b, 'high'), 8000);
-    if (im) return im;
-  }
-  return null;
-}
-
-export async function renderDeckImage(layout: ImageLayout, allLines: Line[], meta: ImageMeta, cover = '', findArt?: FindArt): Promise<Blob> {
+export async function renderDeckImage(layout: ImageLayout, allLines: Line[], meta: ImageMeta, cover = ''): Promise<Blob> {
   const lines = ordered(allLines.filter(l => l.board === 'main' && l.qty > 0));
   const [W, H] = LAYOUTS.find(x => x.value === layout)!.size;
   const want = layout === 'featured' ? new Set(featuredLines(lines, cover).map(l => l.cid)) : null;
   const [, mark, ...ims] = await Promise.all([
     fonts(),
     loadImage('/brand/mark.png'),
-    ...lines.map(l => (want && !want.has(l.cid) ? Promise.resolve(null) : artFor(l, findArt))),
+    ...lines.map(l => (want && !want.has(l.cid) ? Promise.resolve(null) : loadImage(proxied(l.card?.image, 'high')))),
   ]);
   const art: Art = new Map(lines.map((l, i) => [l.cid, ims[i] as HTMLImageElement | null]));
   const canvas = document.createElement('canvas');
