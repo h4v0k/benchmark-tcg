@@ -165,7 +165,7 @@ function Footer() {
   return (
     <footer className="foot">
       <div className="wrap foot-inner">
-        <div className="foot-top"><div><strong>Benchmark</strong> · build, price and share Pokémon TCG decks.</div><div className="foot-links"><SupportButton /><ReportIssueButton /></div></div>
+        <div className="foot-top"><div><strong>Benchmark</strong> · build, price and share Pokémon TCG decks.</div><div className="foot-links"><a className="foot-social" href="https://x.com/benchmark_tcg" target="_blank" rel="noopener noreferrer" aria-label="Follow Benchmark on X"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>Follow on X</a><SupportButton /><ReportIssueButton /></div></div>
         <div className="muted">Card data from <a href="https://tcgdex.dev" target="_blank" rel="noopener noreferrer">TCGdex</a>, prices from TCGplayer via <a href="https://tcgcsv.com" target="_blank" rel="noopener noreferrer">TCGCSV</a>, bans from <a href="https://www.pokemon.com/us/play-pokemon/about/pokemon-tcg-banned-card-list" target="_blank" rel="noopener noreferrer">Play! Pokémon</a>. Not affiliated with The Pokémon Company, Nintendo, Creatures or Game Freak.</div>
       </div>
     </footer>
