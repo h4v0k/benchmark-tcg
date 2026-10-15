@@ -2,10 +2,15 @@
 {
   "name": "benchmark-tcg",
   "compatibility_date": "2026-10-01",
+  // Tiny Worker that only handles /img/* (card art re-served from our domain for the deck image export).
+  "main": "worker/index.js",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     // Single-page app: unknown paths load index.html
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    // Everything except /img/* is served as static files without running the Worker.
+    "run_worker_first": ["/img/*"]
   },
   // Builds of branches other than main run `wrangler preview`, which needs this block (it can stay empty).
   "previews": {}

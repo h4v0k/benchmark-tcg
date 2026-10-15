@@ -748,3 +748,8 @@ a.row-main, a.row-main:hover { text-decoration: none; }
 .gis-box.loading { border-radius: var(--radius-sm); background: var(--panel2); }
 .gis-box iframe { margin: 0 auto !important; }
 .gis-alt { display: block; margin: 2px auto 0; font-size: 12px; color: var(--muted); }
+
+/* deck image export */
+.image-export { display: flex; flex-direction: column; gap: 12px; }
+.image-preview { width: 100%; max-width: 100%; max-height: 62vh; background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius); display: grid; place-items: center; overflow: hidden; margin-inline: auto; }
+.image-preview img { width: 100%; height: 100%; object-fit: contain; display: block; }

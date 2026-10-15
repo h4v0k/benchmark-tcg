@@ -12,7 +12,7 @@ import { coverUrl } from '../components/DeckTile';
 import { Link, navigate, setQuery, useRoute } from '../router';
 import { useAuth, toast } from '../state';
 import * as api from '../lib/api';
-import { ago, FORMAT_LABEL, linePrice, sum, type Line, type SortKey } from '../lib/cards';
+import { ago, fmtDate, FORMAT_LABEL, linePrice, sum, type Line, type SortKey } from '../lib/cards';
 import { exportPTCGL } from '../lib/decklist';
 import { validateDeck } from '../lib/legality';
 import { massEntry } from '../lib/tcgplayer';
@@ -338,7 +338,8 @@ export function DeckPage({ id }: { id: string }) {
         <ImportModal title="Edit as text" allowLink={false} format={row.format} defaultMode="replace" onClose={() => setModal(null)} onApply={applyImport}
           initialText={exportPTCGL(lines, 'main') + (maybeCount ? '\n\nConsidering:\n' + lines.filter(l => l.board === 'maybe').map(l => `${l.qty} ${l.name}${l.card ? ` ${l.card.set?.code || ''} ${/^\d+$/.test(l.card.local_id) ? parseInt(l.card.local_id, 10) : l.card.local_id}` : ''}`).join('\n') : '')} />
       )}
-      {modal?.kind === 'export' && <ExportModal lines={lines} name={row.name} onClose={() => setModal(null)} />}
+      {modal?.kind === 'export' && <ExportModal lines={lines} name={row.name} cover={row.cover || autoCover(lines)} onClose={() => setModal(null)}
+        meta={{ name: row.name, format: FORMAT_LABEL[row.format] + (row.archetype && row.archetype !== row.name ? ` · ${row.archetype}` : ''), author: row.owner_profile?.username, updated: `Updated ${fmtDate(row.updated_at)}`, url: row.is_public ? `benchmarktcg.us/decks/${row.id}` : undefined }} />}
       {modal?.kind === 'settings' && <SettingsModal deck={row} onClose={() => setModal(null)} onSave={patchRow} />}
       {modal?.kind === 'delete' && (
         <Modal title="Delete this deck?" onClose={() => setModal(null)} footer={<><button className="btn ghost" onClick={() => setModal(null)}>Cancel</button><button className="btn danger" onClick={remove}>Delete deck</button></>}>

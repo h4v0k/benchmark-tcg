@@ -25,6 +25,7 @@ const P: Record<string, string> = {
   list: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
   stack: 'M7 3h10v4H7zM7 9h10v4H7zM7 15h10v6H7z',
   table: 'M3 5h18v14H3zM3 10h18M3 15h18M9 5v14',
+  image: 'M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M15.5 9.5h.01',
   dots: 'M5 12h.01M12 12h.01M19 12h.01',
   user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-8 9a8 8 0 0 1 16 0',
   folder: 'M3 6h6l2 2h10v11H3z',
