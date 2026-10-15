@@ -96,3 +96,61 @@ select pg_temp.ok('anon can call deck_lists/deck_list', (select count(*) from pu
 reset role;
 select pg_temp.ok('deck_list(bigint) forwards for pages opened before the update', (select list from public.deck_list(1::bigint)) = '4 Dreepy SV6 128');
 select pg_temp.ok('deck_lists without p_majors (pages from before 019) stays online-only with ids', (select string_agg(id::text, ',' order by id) from public.deck_lists('dragapult-ex', 60)) = '1,2');
+
+-- ---------- 028: pre-launch hardening ----------
+grant usage on schema auth to anon, authenticated;
+set role authenticated; set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+do $$ declare k int := 0; begin
+  for k in 1..7 loop
+    insert into public.deck_comments (deck_id, body, created_at) values ('aaaaaaaa-0000-0000-0000-000000000001', 'spam ' || k, '2000-01-01');
+  end loop;
+  raise notice 'FAIL | backdated comments still hit the per-minute limit';
+exception when others then raise notice 'PASS | backdated comments still hit the per-minute limit'; end $$;
+insert into public.decks (id, owner, name, created_at) values ('aaaaaaaa-0000-0000-0000-0000000000b1', '22222222-2222-2222-2222-222222222222', 'backdated', '2000-01-01');
+set benchmark.counter_bump = 'on';
+update public.decks set like_count = 999, view_count = 999, featured = true, created_at = '2001-01-01',
+  id = 'aaaaaaaa-0000-0000-0000-0000000000b2' where id = 'aaaaaaaa-0000-0000-0000-0000000000b1';
+reset benchmark.counter_bump;
+reset role; reset request.jwt.claim.sub;
+select pg_temp.ok('server sets created_at on insert', (select created_at > now() - interval '1 hour' from public.decks where id = 'aaaaaaaa-0000-0000-0000-0000000000b1'));
+select pg_temp.ok('bump switch ignored for site roles; id/created_at pinned',
+  (select like_count = 0 and view_count = 0 and not featured and created_at > now() - interval '1 hour' from public.decks where id = 'aaaaaaaa-0000-0000-0000-0000000000b1'));
+
+set role anon;
+do $$ declare k int; begin for k in 1..60 loop perform public.record_view('aaaaaaaa-0000-0000-0000-000000000001', 'v' || k); end loop; end $$;
+reset role;
+select pg_temp.ok('anonymous views capped per deck per day', (select view_count from public.decks where id = 'aaaaaaaa-0000-0000-0000-000000000001') = 50);
+
+select pg_temp.ok('anon cannot write or truncate tables', not has_table_privilege('anon', 'public.decks', 'insert')
+  and not has_table_privilege('anon', 'public.cards', 'update') and not has_table_privilege('authenticated', 'public.decks', 'truncate'));
+select pg_temp.ok('internal tables closed to the API', not has_table_privilege('anon', 'public.app_settings', 'select')
+  and not has_table_privilege('authenticated', 'public.app_settings', 'select') and not has_table_privilege('authenticated', 'public.deck_views', 'select'));
+select pg_temp.ok('signed-in users still write decks, comments, likes, follows, bans (RLS decides)',
+  has_table_privilege('authenticated', 'public.decks', 'insert') and has_table_privilege('authenticated', 'public.deck_likes', 'insert')
+  and has_table_privilege('authenticated', 'public.follows', 'delete') and has_table_privilege('authenticated', 'public.bans', 'insert'));
+select pg_temp.ok('catalog read-only for signed-in users', has_table_privilege('authenticated', 'public.cards', 'select')
+  and not has_table_privilege('authenticated', 'public.cards', 'insert'));
+do $$ begin
+  perform public.resolve_decklist_v2((select jsonb_agg(jsonb_build_object('i', g, 'qty', 1, 'name', 'x')) from generate_series(1, 151) g), 'standard', 'exact');
+  raise notice 'FAIL | decklist matcher rejects > 150 lines';
+exception when others then raise notice 'PASS | decklist matcher rejects > 150 lines'; end $$;
+
+-- legality: an undated new set is not legal yet; an undated set we've had for months is
+insert into public.sets (id, name, code, reg_mark, release_date, legal_date) values ('zz-new', 'Undated New', 'ZZN', 'J', null, null);
+insert into public.cards (id, set_id, local_id, num_key, name, name_norm, category, stage, reg_mark)
+  values ('zz-new-1', 'zz-new', '1', '1', 'Testmon', 'testmon', 'Pokemon', 'Basic', 'J');
+update public.cards set legal_standard = true where id = 'zz-new-1';
+select public.recompute_legality();
+select pg_temp.ok('undated new set is not Standard legal', not (select legal_standard from public.cards where id = 'zz-new-1'));
+update public.sets set created_at = now() - interval '90 days' where id = 'zz-new';
+select public.recompute_legality();
+select pg_temp.ok('undated set we have had for months is live', (select legal_standard from public.cards where id = 'zz-new-1'));
+
+-- tournaments: an empty standings page counts as a try; old stuck events close
+insert into public.tournaments (id, name, date, kind, status) values (990001, 'Regional Empty', current_date - 2, 'regional', 'new'),
+  (990002, 'Regional Ancient', current_date - 200, 'regional', 'new');
+insert into public.tourney_fetch (net_id, kind, tournament_id) values (990001, 'standings', 990001);
+insert into net._http_response (id, status_code, content) values (990001, 200, '<html>no standings yet</html>');
+select public.tourney_tick();
+select pg_temp.ok('empty standings: still new, one try counted', (select status = 'new' and standings_tries = 1 from public.tournaments where id = 990001));
+select pg_temp.ok('events older than the window are closed', (select status from public.tournaments where id = 990002) = 'done');

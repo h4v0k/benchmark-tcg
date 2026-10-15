@@ -4,9 +4,9 @@
 // The row is saved first, so a report is never lost if email isn't set up or fails.
 //
 // Email secrets (Supabase → Edge Functions → Secrets):
-//   SMTP_USER  the Google Workspace address that sends (e.g. mike@skillcapturemedia.com)
+//   SMTP_USER  the Google Workspace address that sends
 //   SMTP_PASS  a Google app password for that account
-//   REPORT_TO  where reports go (defaults to mike@skillcapturemedia.com)
+//   REPORT_TO  where reports go (defaults to SMTP_USER); reports are always saved for the Admin page
 // Sent through smtp.gmail.com on port 465 (Edge Functions block 25 and 587).
 import nodemailer from "npm:nodemailer@6.9.16";
 
@@ -20,6 +20,7 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), { status
 const URL_ = Deno.env.get("SUPABASE_URL");
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const PER_HOUR = 5; // per visitor
+const ALL_PER_HOUR = 40; // everyone together
 
 const clip = (v, n) => (typeof v === "string" ? v.trim().slice(0, n) : "") || null;
 const isEmail = (v) => !!v && /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(v);
@@ -50,7 +51,7 @@ async function sendEmail(row, user) {
   const userName = Deno.env.get("SMTP_USER");
   const pass = Deno.env.get("SMTP_PASS");
   if (!userName || !pass) return "email not set up yet";
-  const to = Deno.env.get("REPORT_TO") || "mike@skillcapturemedia.com";
+  const to = Deno.env.get("REPORT_TO") || userName;
   const replyTo = row.contact_email || user?.email || undefined;
   const firstLine = row.message.split("\n")[0].slice(0, 70);
   const lines = [
@@ -86,12 +87,19 @@ Deno.serve(async (req) => {
   let contact = clip(body.email, 254);
   if (contact && !isEmail(contact)) return json({ ok: false, error: "That email address doesn't look right." }, 400);
 
-  const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || req.headers.get("cf-connecting-ip") || "unknown";
+  // Cloudflare (in front of Supabase) sets cf-connecting-ip and the client can't override it. The first
+  // x-forwarded-for entry is whatever the browser sent, so it's only a last resort (the last entry is added by our proxies).
+  const xff = (req.headers.get("x-forwarded-for") || "").split(",").map((x) => x.trim()).filter(Boolean);
+  const ip = req.headers.get("cf-connecting-ip") || xff[xff.length - 1] || "unknown";
   const ip_hash = await sha(`benchmark-report:${ip}`);
   const since = new Date(Date.now() - 3600_000).toISOString();
-  const recent = await db(`issue_reports?select=id&ip_hash=eq.${ip_hash}&created_at=gte.${since}`, { headers: { Prefer: "count=exact", Range: "0-0" } });
-  const count = Number((recent.headers.get("content-range") || "*/0").split("/")[1] || 0);
-  if (count >= PER_HOUR) return json({ ok: false, error: "You've sent several reports in the last hour. Please try again later." }, 429);
+  const countOf = async (filter) => {
+    const r = await db(`issue_reports?select=id&created_at=gte.${since}${filter}`, { headers: { Prefer: "count=exact", Range: "0-0" } });
+    return Number((r.headers.get("content-range") || "*/0").split("/")[1] || 0);
+  };
+  if (await countOf(`&ip_hash=eq.${ip_hash}`) >= PER_HOUR) return json({ ok: false, error: "You've sent several reports in the last hour. Please try again later." }, 429);
+  // A ceiling for everyone together, so a flood can't fill the table or the inbox whatever addresses it comes from.
+  if (await countOf("") >= ALL_PER_HOUR) return json({ ok: false, error: "We're getting a lot of reports right now. Please try again in an hour." }, 429);
 
   const user = await signedInUser(req);
   if (!contact && user?.email) contact = user.email;
