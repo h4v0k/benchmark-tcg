@@ -143,7 +143,8 @@ function ListView({ id, best, title }: { id: string; best: boolean; title: strin
       {!!missing.length && <p className="notice warn"><Icon name="warn" size={15} />Not matched to a card yet: {missing.join(', ')}.</p>}
       <DeckView mode="text" lines={lines} format="standard" group="type" sort="default" editable={false} onOpen={setOpen} onQty={() => {}} />
       {open && <CardModal line={open} format="standard" editable={false} isCover={false} onClose={() => setOpen(null)} />}
-      {exporting && <ExportModal lines={lines} name={label} onClose={() => setExporting(false)} />}
+      {exporting && <ExportModal lines={lines} name={label} onClose={() => setExporting(false)}
+        meta={{ name: title, format: ['Standard', l.place ? `${ord(l.place)} place` : record(l), l.event_name].filter(Boolean).join(' · '), author: l.player, updated: fmtDate(l.date), url: 'benchmarktcg.us' + location.pathname + location.search }} />}
     </section>
   );
 }
