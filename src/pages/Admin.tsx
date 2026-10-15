@@ -58,7 +58,7 @@ export function AdminPage() {
           <h2>Rotations</h2>
           <table className="runs">
             <thead><tr><th>New minimum mark</th><th>Season</th><th>In person</th><th>Source</th></tr></thead>
-            <tbody>{rotations.map((x: any) => <tr key={x.id}><td><b>{x.new_min_mark}</b></td><td>{x.season}</td><td><input type="date" defaultValue={x.effective_date || ''} onBlur={e => e.target.value !== (x.effective_date || '') && datedRotation(x.id, e.target.value)} aria-label="Effective date" /></td><td className="muted small">{x.source === 'admin' ? 'admin' : <a href={x.source} target="_blank" rel="noopener noreferrer">link</a>}</td></tr>)}</tbody>
+            <tbody>{rotations.map((x: any) => <tr key={x.id}><td><b>{x.new_min_mark}</b></td><td>{x.season}</td><td><input type="date" defaultValue={x.effective_date || ''} onBlur={e => e.target.value !== (x.effective_date || '') && datedRotation(x.id, e.target.value)} aria-label="Effective date" /></td><td className="muted small">{x.source === 'admin' ? 'admin' : !/^https:\/\//.test(String(x.source || '')) ? String(x.source || '') : <a href={x.source} target="_blank" rel="noopener noreferrer">link</a>}</td></tr>)}</tbody>
           </table>
           <h3>Add a rotation</h3>
           <div className="field-row">

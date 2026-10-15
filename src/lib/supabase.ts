@@ -209,7 +209,7 @@ export const auth = {
     save(null);
   },
   /** Picks up tokens Supabase puts in the URL after email confirmation or a password reset. */
-  async fromUrl(stillWanted: () => boolean = () => true): Promise<{ type?: string; error?: string } | null> {
+  async fromUrl(stillWanted: () => boolean = () => true): Promise<{ type?: string; error?: string; email?: string } | null> {
     const h = new URLSearchParams(location.hash.replace(/^#/, ''));
     const q = new URLSearchParams(location.search);
     const err = h.get('error_description') || q.get('error_description');
@@ -227,7 +227,7 @@ export const auth = {
     } catch (e) { return { error: netError(e).message }; }
     if (!stillWanted()) return null; // the page already gave up waiting and told the user
     save({ access_token: at, refresh_token: rt, expires_at: parseInt(h.get('expires_at') || '0', 10) || Math.floor(Date.now() / 1000) + parseInt(h.get('expires_in') || '3600', 10), user });
-    return { type };
+    return { type, email: typeof user?.email === 'string' ? user.email : undefined };
   },
   /** Google Identity Services hands the page an ID token; Supabase turns it into a session. `nonce` is the raw value. */
   async googleIdToken(idToken: string, nonce: string) {

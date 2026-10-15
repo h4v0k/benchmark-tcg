@@ -110,12 +110,19 @@ const RULES = {"standard_min_mark":"H","formats":[{"format":"standard","min_mark
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
 /* ---------- static server ---------- */
+// Serve HTML with the production Content-Security-Policy, read from public/_headers so they can't drift.
+// The only change: upgrade-insecure-requests is dropped (it would turn the http://127.0.0.1 test origin into https).
+// 'self' is then the local origin, and the app still talks to the real Supabase hostname (the mock intercepts it
+// after the CSP check), so connect-src is exercised as in production.
+const CSP = (fs.readFileSync(path.join(ROOT, 'public', '_headers'), 'utf8').match(/^\s*Content-Security-Policy:\s*(.+)$/m) || [])[1]?.replace(/;?\s*upgrade-insecure-requests/, '').trim();
+if (!CSP) throw new Error('No Content-Security-Policy in public/_headers');
+
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png' };
 const server = http.createServer((req, res) => {
   let p; try { p = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { p = '/'; }
   let f = path.join(DIST, p);
   if (!f.startsWith(DIST) || !fs.existsSync(f) || !fs.statSync(f).isFile()) f = path.join(DIST, 'index.html');
-  res.writeHead(200, { 'content-type': MIME[path.extname(f)] || 'application/octet-stream' });
+  res.writeHead(200, { 'content-type': MIME[path.extname(f)] || 'application/octet-stream', ...(path.extname(f) === '.html' ? { 'content-security-policy': CSP } : {}) });
   fs.createReadStream(f).pipe(res);
 });
 await new Promise(r => server.listen(0, '127.0.0.1', r));
@@ -231,11 +238,14 @@ async function handleSupabase(route) {
 
 /* ---------- harness ---------- */
 const pageErrors = [];
+const cspViolations = [];
 const results = [];
 const browser = await chromium.launch();
 async function newPage(viewport) {
   const ctx = await browser.newContext({ viewport });
   const page = await ctx.newPage();
+  await page.exposeFunction('__bmCsp', v => cspViolations.push(v));
+  await page.addInitScript(() => document.addEventListener('securitypolicyviolation', e => window.__bmCsp(`${e.violatedDirective} blocked ${e.blockedURI} (${e.sourceFile || 'inline'})`)));
   await page.route('**/*', route => {
     const u = new URL(route.request().url());
     if (u.hostname === '127.0.0.1' || u.hostname === 'localhost') return route.continue();
@@ -310,6 +320,20 @@ try {
     await see(desk, 'Plan');
     await desk.getByRole('tab', { name: 'Comments' }).or(desk.getByRole('button', { name: /^Comments/ })).first().click(T);
     await see(desk, 'No comments yet');
+  });
+  await scenario('3v. viewing someone else’s deck never saves', async () => {
+    const page = await newPage({ width: 1000, height: 800 });
+    const writes = [];
+    page.on('request', r => { if (new URL(r.url()).pathname === '/rest/v1/decks' && r.method() !== 'GET' && r.method() !== 'OPTIONS') writes.push(`${r.method()} ${r.url()}`); });
+    await page.goto(`${BASE}/decks/${DECK_ID}`);
+    await see(page, 'Dragapult test');
+    await page.waitForTimeout(2000);
+    if (await page.getByText(/Saving/).count()) throw new Error('"Saving" shown while only viewing');
+    await page.getByRole('button', { name: /^Export/ }).first().click(T);
+    await page.keyboard.press('Escape');
+    await page.goto(BASE + '/decks'); // leaving the page must not flush a save either
+    await page.waitForTimeout(500);
+    if (writes.length) throw new Error(`writes while viewing: ${writes.join(', ')}`);
   });
   await scenario('4. /cards?q=dre', async () => {
     await desk.goto(BASE + '/cards?q=dre');
@@ -1014,6 +1038,8 @@ try {
   await browser.close();
   server.close();
 }
+console.log('\nCSP violations (' + cspViolations.length + '):'); cspViolations.forEach(e => console.log('  ' + e));
+if (cspViolations.length) results.push(['CSP violations', false]);
 console.log('\nPage errors (' + pageErrors.length + '):'); pageErrors.forEach(e => console.log('  ' + e));
 console.log('\nUnexpected Supabase calls (' + unexpected.length + '):'); [...new Set(unexpected)].forEach(e => console.log('  ' + e));
 process.exit(results.some(r => !r[1]) ? 1 : 0);

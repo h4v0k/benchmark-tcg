@@ -152,7 +152,7 @@ export function CardImg({ src, alt, q = 'low', className = '' }: { src: string; 
 /** `card` is a card image base URL (profiles.avatar_card). Shows the top of the art, cropped round. */
 export function Avatar({ card, name, size = 28 }: { card?: string; name: string; size?: number }) {
   const letters = (name || '?').slice(0, 1).toUpperCase();
-  const ok = !!card && /^https:\/\/assets\.tcgdex\.net\//.test(card);
+  const ok = !!card && /^https:\/\/assets\.tcgdex\.net\/[A-Za-z0-9/._-]+$/.test(card);
   if (!ok) return <span className="avatar" style={{ width: size, height: size, fontSize: size * 0.45 }} aria-hidden="true">{letters}</span>;
   return <span className="avatar art" style={{ width: size, height: size, backgroundImage: `url("${card}/low.webp")` }} aria-hidden="true" />;
 }

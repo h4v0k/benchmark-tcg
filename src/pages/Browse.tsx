@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DeckGrid } from '../components/DeckTile';
 import { Empty, ErrorBox, Icon, Spinner, useDebounced } from '../components/ui';
 import { setQuery, useRoute } from '../router';
@@ -15,9 +15,13 @@ export function Browse() {
   const page = Math.max(0, parseInt(query.get('page') || '0', 10) || 0);
   const [q, setQ] = useState(query.get('q') || '');
   const dq = useDebounced(q, 300);
+  // Follow the URL (Back/Forward, links) without echoing our own debounced write back into the box.
+  const urlQ = query.get('q') || '';
+  const lastUrlQ = useRef(urlQ);
+  useEffect(() => { if (urlQ !== lastUrlQ.current) { lastUrlQ.current = urlQ; setQ(urlQ); } }, [urlQ]);
   const [res, setRes] = useState<{ rows: DeckRow[]; count: number | null } | null>(null);
   const [error, setError] = useState<Error | null>(null);
-  useEffect(() => { if ((query.get('q') || '') !== dq) setQuery({ q: dq || null, page: null }); }, [dq]);
+  useEffect(() => { if (dq !== urlQ && q === dq) { lastUrlQ.current = dq; setQuery({ q: dq || null, page: null }); } }, [dq]);
   useEffect(() => {
     let alive = true;
     setRes(null); setError(null);
@@ -25,6 +29,7 @@ export function Browse() {
     return () => { alive = false; };
   }, [format, sort, query.get('q'), card, tag, page]);
   const pages = res?.count ? Math.ceil(res.count / PER) : 1;
+  const pastEnd = !!res && !res.rows.length && !!res.count && page > 0;
   return (
     <div className="wrap page">
       <div className="page-head"><h1>Decks</h1>{res?.count != null && <span className="muted">{res.count} public deck{res.count === 1 ? '' : 's'}</span>}</div>
@@ -39,12 +44,12 @@ export function Browse() {
         {card && <button className="chip" onClick={() => setQuery({ card: null, page: null })}>With {card} <Icon name="x" size={12} /></button>}
         {tag && <button className="chip" onClick={() => setQuery({ tag: null, page: null })}>#{tag} <Icon name="x" size={12} /></button>}
       </div>
-      {error ? <ErrorBox error={error} /> : !res ? <Spinner /> : res.rows.length ? (
+      {error ? <ErrorBox error={error} /> : !res ? <Spinner /> : res.rows.length || pastEnd ? (
         <>
-          <DeckGrid decks={res.rows} />
+          {res.rows.length ? <DeckGrid decks={res.rows} /> : <Empty title="No decks on this page" icon="search"><p>That page is past the end of the results.</p></Empty>}
           {pages > 1 && (
             <div className="pager">
-              <button className="btn" disabled={page === 0} onClick={() => setQuery({ page: page - 1 || null })}>Previous</button>
+              <button className="btn" disabled={page === 0} onClick={() => setQuery({ page: Math.min(page, pages) - 1 || null })}>Previous</button>
               <span className="muted">Page {page + 1} of {pages}</span>
               <button className="btn" disabled={page + 1 >= pages} onClick={() => setQuery({ page: page + 1 })}>Next</button>
             </div>

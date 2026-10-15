@@ -1,6 +1,8 @@
+import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { auth } from './lib/supabase';
+import { toast } from './state';
 
 // Old links used hash routes (#/deck/<id>, #/u/<name>); send them to the new paths.
 function legacyRedirect() {
@@ -25,8 +27,19 @@ function legacyRedirect() {
   // Back from Google: return to the page they signed in from.
   try {
     const next = sessionStorage.getItem('bm-next');
-    if (next) { sessionStorage.removeItem('bm-next'); if (fromLink && !fromLink.error && next.startsWith('/') && !next.startsWith('//')) history.replaceState(null, '', next); }
+    if (next) {
+      sessionStorage.removeItem('bm-next');
+      if (fromLink && !fromLink.error) {
+        // Same-origin paths only: resolve against our origin and refuse anything that lands elsewhere.
+        const u = new URL(next, location.origin);
+        if (u.origin === location.origin && u.pathname.startsWith('/')) history.replaceState(null, '', u.pathname + u.search + u.hash);
+      }
+    }
   } catch { /* storage blocked */ }
   legacyRedirect();
-  createRoot(document.getElementById('root')!).render(<App authLink={fromLink} />);
+  // A link that signs you in names the account, so a crafted link can't quietly sign you in as someone else.
+  const named = !!fromLink && !fromLink.error && !!fromLink.email && (!fromLink.type || fromLink.type === 'magiclink');
+  const root = createRoot(document.getElementById('root')!);
+  flushSync(() => root.render(<App authLink={named ? { ...fromLink, type: undefined } : fromLink} />));
+  if (named) toast(`Signed in as ${fromLink!.email}`, 'ok');
 })();

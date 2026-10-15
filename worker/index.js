@@ -26,6 +26,8 @@ async function cardImage(request, ctx, url) {
       'Content-Type': up.headers.get('Content-Type') || 'image/webp',
       'Cache-Control': `public, max-age=${WEEK}`,
       'X-Content-Type-Options': 'nosniff',
+      'Cross-Origin-Resource-Policy': 'same-origin',
+      'Content-Security-Policy': "default-src 'none'",
     },
   });
   ctx.waitUntil(cache.put(key, res.clone()));

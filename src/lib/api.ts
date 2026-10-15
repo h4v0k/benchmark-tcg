@@ -43,7 +43,9 @@ export async function cardsById(ids: string[]): Promise<Map<string, Card>> {
 }
 export async function printingsOf(name: string): Promise<Card[]> {
   // Pokémon TCG Pocket (digital-only) sets are hidden from printings.
-  const { rows } = await sb.select<Card>('cards', { select: CARD_COLS, name: `eq.${name}`, 'set.hidden': 'is.false', limit: 300 });
+  const LIMIT = 1000;
+  const { rows } = await sb.select<Card>('cards', { select: CARD_COLS, name: `eq.${name}`, 'set.hidden': 'is.false', order: 'id.desc', limit: LIMIT });
+  if (rows.length >= LIMIT) console.warn(`printingsOf: ${name} hit the ${LIMIT}-row limit; some printings may be missing`);
   rows.forEach(c => cardCache.set(c.id, withArt(c)));
   return rows
     .sort((a, b) => (b.set?.release_date || '').localeCompare(a.set?.release_date || '') || localNum(a.local_id) - localNum(b.local_id));
@@ -159,7 +161,8 @@ export async function searchUsers(q: string): Promise<Profile[]> {
 
 /* ---------------- decks ---------------- */
 export type DeckQuery = { format?: Format | ''; sort?: 'likes' | 'views' | 'updated' | 'new' | 'price'; q?: string; card?: string; tag?: string; owner?: string; featured?: boolean; owners?: string[]; page?: number; per?: number; folder?: string | null };
-const SORT: Record<string, string> = { likes: 'like_count.desc,updated_at.desc', views: 'view_count.desc,updated_at.desc', updated: 'updated_at.desc', new: 'created_at.desc', price: 'price.desc' };
+// Every sort ends in id so equal values still have one fixed order and pages never skip or repeat a deck.
+const SORT: Record<string, string> = { likes: 'like_count.desc,updated_at.desc,id.asc', views: 'view_count.desc,updated_at.desc,id.asc', updated: 'updated_at.desc,id.asc', new: 'created_at.desc,id.asc', price: 'price.desc,id.asc' };
 
 export async function listDecks(o: DeckQuery & { mine?: boolean } = {}) {
   // Folders are private, so folder_id is only selected for your own decks.

@@ -28,6 +28,10 @@ export function DeckPage({ id }: { id: string }) {
   const [row, setRow] = useState<DeckRow | null>(null);
   const [entries, setEntries] = useState<DeckEntry[]>([]);
   const [cards, setCards] = useState<Map<string, Card>>(new Map());
+  // Latest entries/cards, updated synchronously, so an edit that awaits a card lookup builds on
+  // whatever changed meanwhile instead of on the snapshot from when it started.
+  const entriesRef = useRef<DeckEntry[]>([]);
+  const cardsRef = useRef<Map<string, Card>>(new Map());
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
@@ -56,10 +60,11 @@ export function DeckPage({ id }: { id: string }) {
     try {
       const d = await api.getDeck(id);
       if (stale()) return;
-      if (!d) { setRow(null); setEntries([]); setCards(new Map()); setLoading(false); return; }
+      if (!d) { setRow(null); entriesRef.current = []; cardsRef.current = new Map(); setEntries([]); setCards(new Map()); setLoading(false); return; }
       const list = (Array.isArray(d.cards) ? d.cards : []).filter(e => e && e.cid && e.qty > 0).map(e => ({ ...e, board: (e.board === 'maybe' ? 'maybe' : 'main') as Board, name: e.name || String(e.cid) }));
       const map = await api.cardsById(list.map(e => e.cid));
       if (stale()) return;
+      entriesRef.current = list; cardsRef.current = map;
       setRow(d); setEntries(list); setCards(map);
       if (uid && uid !== d.owner) api.likedSet(uid, [d.id]).then(s => { if (!stale()) setLiked(s.has(d.id)); }).catch(() => {});
       if (!uid || uid !== d.owner) api.recordView(d.id);
@@ -77,12 +82,6 @@ export function DeckPage({ id }: { id: string }) {
   useEffect(() => { if (query.get('import') === '1' && isOwner) { setEditing(true); setModal({ kind: 'import' }); setQuery({ import: null, edit: '1' }); } }, [isOwner]);
 
   const lines: Line[] = useMemo(() => entries.map(e => ({ ...e, card: cards.get(e.cid) })), [entries, cards]);
-  // Decks saved without a cover (e.g. copied from a tournament list) get one picked the first time their owner opens them.
-  useEffect(() => {
-    if (!isOwner || !row || row.cover) return;
-    const c = autoCover(lines);
-    if (c) { setRow(r => r && { ...r, cover: c }); queue({ cover: c }); }
-  }, [isOwner, row?.id, row?.cover, lines]);
   const boardLines = useMemo(() => lines.filter(l => l.board === board), [lines, board]);
   const mainLines = useMemo(() => lines.filter(l => l.board === 'main'), [lines]);
   const total = sum(mainLines, l => l.qty);
@@ -109,7 +108,10 @@ export function DeckPage({ id }: { id: string }) {
     return inflight.current;
   }, [id]);
   const flushRef = useRef(flush); flushRef.current = flush;
+  // Only a deck you own can be saved; viewing someone else's deck never sends anything.
+  const ownerRef = useRef(false); ownerRef.current = isOwner;
   const queue = useCallback((patch: api.DeckWrite) => {
+    if (!ownerRef.current) return;
     pending.current = { ...pending.current, ...patch };
     setStatus('Saving…');
     clearTimeout(timer.current);
@@ -121,7 +123,11 @@ export function DeckPage({ id }: { id: string }) {
     return () => { window.removeEventListener('beforeunload', warn); clearTimeout(timer.current); flush(); };
   }, [flush]);
 
-  const commit = (next: DeckEntry[], map = cards) => {
+  /** Apply an edit to the latest entries (not a stale snapshot) and queue the save. */
+  const commit = (edit: (prev: DeckEntry[]) => DeckEntry[]) => {
+    const next = edit(entriesRef.current);
+    const map = cardsRef.current;
+    entriesRef.current = next;
     setEntries(next);
     const ls: Line[] = next.map(e => ({ ...e, card: map.get(e.cid) }));
     const main = ls.filter(l => l.board === 'main');
@@ -137,48 +143,56 @@ export function DeckPage({ id }: { id: string }) {
   };
 
   /* ---------- edits ---------- */
+  const learnCards = async (ids: string[]) => {
+    if (ids.some(id => !cardsRef.current.has(id))) {
+      const got = await api.cardsById(ids);
+      const map = new Map(cardsRef.current); got.forEach((v, k) => map.set(k, v));
+      cardsRef.current = map; setCards(map);
+    }
+    return cardsRef.current;
+  };
   const addCard = async (cid: string, qty: number, b: Board) => {
-    const map = new Map(cards);
-    if (!map.has(cid)) { const got = await api.cardsById([cid]); got.forEach((v, k) => map.set(k, v)); setCards(map); }
-    const c = map.get(cid);
+    const c = (await learnCards([cid])).get(cid);
     if (!c) { toast('That card couldn’t be found', 'bad'); return; }
-    const i = entries.findIndex(e => e.cid === cid && e.board === b);
-    const next = i >= 0 ? entries.map((e, j) => j === i ? { ...e, qty: Math.min(60, e.qty + qty) } : e) : [...entries, { cid, qty, board: b, name: c.name, cat: c.category }];
-    commit(next, map);
+    commit(entries => {
+      const i = entries.findIndex(e => e.cid === cid && e.board === b);
+      return i >= 0 ? entries.map((e, j) => j === i ? { ...e, qty: Math.min(60, e.qty + qty) } : e) : [...entries, { cid, qty, board: b, name: c.name, cat: c.category }];
+    });
     toast(`Added ${qty}× ${c.name}`, 'ok');
   };
   const changeLine = async (l: Line, patch: { qty?: number; board?: Board; variant?: Finish; cid?: string }) => {
-    let map = cards;
-    if (patch.cid && !cards.has(patch.cid)) { map = new Map(cards); (await api.cardsById([patch.cid])).forEach((v, k) => map.set(k, v)); setCards(map); }
-    let next = entries.map(e => {
-      if (e.cid !== l.cid || e.board !== l.board) return e;
-      const n = { ...e };
-      if (patch.qty !== undefined) n.qty = Math.max(0, Math.min(60, patch.qty));
-      if (patch.variant) n.variant = patch.variant;
-      if (patch.board) n.board = patch.board;
-      if (patch.cid) { const c = map.get(patch.cid)!; n.cid = patch.cid; n.name = c.name; n.cat = c.category; if (n.variant && !(c.variants || []).includes(n.variant as string) && !(n.variant in (c.prices || {}))) delete n.variant; }
-      return n;
-    }).filter(e => e.qty > 0);
-    // merge duplicates created by moving boards or swapping printings
-    const merged = new Map<string, DeckEntry>();
-    for (const e of next) { const k = `${e.cid}|${e.board}`; const m = merged.get(k); if (m) m.qty = Math.min(60, m.qty + e.qty); else merged.set(k, { ...e }); }
-    next = [...merged.values()];
-    commit(next, map);
+    const map = patch.cid ? await learnCards([patch.cid]) : cardsRef.current;
+    if (patch.cid && !map.has(patch.cid)) { toast('That card couldn’t be found', 'bad'); return; }
+    commit(prev => {
+      const next = prev.map(e => {
+        if (e.cid !== l.cid || e.board !== l.board) return e;
+        const n = { ...e };
+        if (patch.qty !== undefined) n.qty = Math.max(0, Math.min(60, patch.qty));
+        if (patch.variant) n.variant = patch.variant;
+        if (patch.board) n.board = patch.board;
+        if (patch.cid) { const c = map.get(patch.cid)!; n.cid = patch.cid; n.name = c.name; n.cat = c.category; if (n.variant && !(c.variants || []).includes(n.variant as string) && !(n.variant in (c.prices || {}))) delete n.variant; }
+        return n;
+      }).filter(e => e.qty > 0);
+      // merge duplicates created by moving boards or swapping printings
+      const merged = new Map<string, DeckEntry>();
+      for (const e of next) { const k = `${e.cid}|${e.board}`; const m = merged.get(k); if (m) m.qty = Math.min(60, m.qty + e.qty); else merged.set(k, { ...e }); }
+      return [...merged.values()];
+    });
     if (modal?.kind === 'card' && (patch.cid || patch.board)) setModal({ kind: 'card', cid: patch.cid || l.cid, board: patch.board || l.board });
   };
   const applyImport = async (incoming: DeckEntry[], how: 'add' | 'replace', meta: { title?: string }) => {
-    const map = new Map(cards);
-    (await api.cardsById(incoming.map(e => e.cid))).forEach((v, k) => map.set(k, v));
-    setCards(map);
-    let next: DeckEntry[];
-    if (how === 'replace') {
-      // keep chosen finishes for cards that stay
-      next = incoming.map(e => { const old = entries.find(o => o.cid === e.cid && o.board === e.board); return old?.variant ? { ...e, variant: old.variant } : e; });
-    } else {
-      next = entries.map(e => ({ ...e }));
-      for (const e of incoming) { const m = next.find(x => x.cid === e.cid && x.board === e.board); if (m) m.qty = Math.min(60, m.qty + e.qty); else next.push(e); }
-    }
-    commit(next, map);
+    await learnCards(incoming.map(e => e.cid));
+    commit(prev => {
+      let next: DeckEntry[];
+      if (how === 'replace') {
+        // keep chosen finishes for cards that stay
+        next = incoming.map(e => { const old = prev.find(o => o.cid === e.cid && o.board === e.board); return old?.variant ? { ...e, variant: old.variant } : e; });
+      } else {
+        next = prev.map(e => ({ ...e }));
+        for (const e of incoming) { const m = next.find(x => x.cid === e.cid && x.board === e.board); if (m) m.qty = Math.min(60, m.qty + e.qty); else next.push({ ...e }); }
+      }
+      return next;
+    });
     if (meta.title && row && /^untitled deck$/i.test(row.name)) patchRow({ name: meta.title.slice(0, 80) });
     setModal(null);
     toast(how === 'replace' ? 'Deck replaced' : `Added ${sum(incoming, e => e.qty)} cards`, 'ok');

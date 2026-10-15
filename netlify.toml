@@ -1,3 +1,4 @@
+# Legacy: production is Cloudflare (wrangler.jsonc), which reads headers from public/_headers; keep this file's headers in sync only if Netlify is used again.
 [build]
   command = "npm install --no-audit --no-fund && npm run build"
   publish = "dist"
