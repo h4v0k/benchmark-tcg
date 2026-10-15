@@ -4,18 +4,22 @@
 // image export can draw it to a canvas and save it as a PNG (cross-origin images would block that).
 
 const UPSTREAM = 'https://assets.tcgdex.net';
+// TCGplayer's photo of a printing that TCGdex has no art for: /img/tcgp/475431_in_1000x1000.jpg
+const TCGP_UPSTREAM = 'https://tcgplayer-cdn.tcgplayer.com/product/';
+const TCGP_ALLOWED = /^\/img\/tcgp\/(\d{1,9}_(?:in_1000x1000|200w)\.jpg)$/;
 // e.g. /img/en/sv/sv10/081/high.webp → https://assets.tcgdex.net/en/sv/sv10/081/high.webp
 const ALLOWED = /^\/img\/[a-z]{2}(?:-[a-z]{2})?\/[a-z0-9.-]+\/[a-z0-9.-]+\/[A-Za-z0-9.-]+\/(?:low|high)\.(?:webp|png|jpg)$/;
 const WEEK = 60 * 60 * 24 * 7;
 
 async function cardImage(request, ctx, url) {
   if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed', { status: 405 });
-  if (!ALLOWED.test(url.pathname)) return new Response('Not found', { status: 404 });
+  const tcgp = url.pathname.match(TCGP_ALLOWED);
+  if (!tcgp && !ALLOWED.test(url.pathname)) return new Response('Not found', { status: 404 });
   const cache = caches.default;
   const key = new Request(url.origin + url.pathname, { method: 'GET' });
   const hit = await cache.match(key);
   if (hit) return hit;
-  const up = await fetch(UPSTREAM + url.pathname.slice(4), { cf: { cacheTtl: WEEK, cacheEverything: true } });
+  const up = await fetch(tcgp ? TCGP_UPSTREAM + tcgp[1] : UPSTREAM + url.pathname.slice(4), { cf: { cacheTtl: WEEK, cacheEverything: true } });
   if (!up.ok) return new Response('Not found', { status: up.status === 404 ? 404 : 502 });
   const res = new Response(up.body, {
     headers: {

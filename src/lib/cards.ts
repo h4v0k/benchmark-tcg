@@ -8,7 +8,10 @@ export const FINISH_LABEL: Record<string, string> = {
 };
 export const FORMAT_LABEL: Record<Format, string> = { standard: 'Standard', expanded: 'Expanded', unlimited: 'Unlimited' };
 
-export const img = (base: string | undefined, q: 'low' | 'high' = 'low') => (base ? `${base}/${q}.webp` : '');
+/** TCGplayer's photo of a product. Used only for a printing TCGdex has no art for, and only that printing's own product. */
+export const TCGP_IMG = 'https://tcgplayer-cdn.tcgplayer.com/product/';
+export const img = (base: string | undefined, q: 'low' | 'high' = 'low') =>
+  !base ? '' : base.startsWith(TCGP_IMG) ? `${base}_${q === 'high' ? 'in_1000x1000' : '200w'}.jpg` : `${base}/${q}.webp`;
 
 export const TYPE_COLOR: Record<string, string> = {
   Grass: '#4caf50', Fire: '#ef5b3a', Water: '#3d8ee6', Lightning: '#f5c518', Psychic: '#a35ad6',

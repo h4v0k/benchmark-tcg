@@ -53,15 +53,6 @@ export function ExportModal({ lines, name, meta, cover = '', onClose }: { lines:
   );
 }
 
-const BASIC_ENERGY = /^(basic )?(grass|fire|water|lightning|psychic|fighting|darkness|metal|fairy) energy$/i;
-/** Art from other printings of a card, newest first. Basic Energy is filed under two spellings. */
-const findArt = async (name: string) => {
-  const m = name.match(BASIC_ENERGY);
-  const names = m ? [`Basic ${m[2][0].toUpperCase()}${m[2].slice(1).toLowerCase()} Energy`, `${m[2][0].toUpperCase()}${m[2].slice(1).toLowerCase()} Energy`] : [name];
-  const lists = await Promise.all(names.map(n => api.printingsOf(n).catch(() => [])));
-  return lists.flat().map(c => c.image).filter(Boolean);
-};
-
 const fileBase = (name: string) => name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'deck';
 const prefLayout = (): ImageLayout => { try { const v = localStorage.getItem('bm:imageLayout'); return LAYOUTS.some(l => l.value === v) ? (v as ImageLayout) : 'grid'; } catch { return 'grid'; } };
 
@@ -75,7 +66,7 @@ function ImageExport({ lines, meta, cover, name }: { lines: Line[]; meta: ImageM
   useEffect(() => {
     const n = ++seq.current;
     setBlob(null); setError('');
-    renderDeckImage(layout, lines, meta, cover, findArt)
+    renderDeckImage(layout, lines, meta, cover)
       .then(b => { if (n === seq.current) { setBlob(b); setUrl(u => { if (u) URL.revokeObjectURL(u); return URL.createObjectURL(b); }); } })
       .catch(e => { if (n === seq.current) setError(e?.message || 'Couldn’t create the image'); });
   }, [layout]);

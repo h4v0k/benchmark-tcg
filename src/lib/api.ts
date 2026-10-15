@@ -2,8 +2,14 @@
 import * as sb from './supabase';
 import type { Card, Comment, DeckEntry, DeckRow, Folder, Format, Profile, RuleChange, Rules, SearchHit } from './types';
 import type { ParsedLine } from './decklist';
+import { TCGP_IMG } from './cards';
 
 const CARD_COLS = 'id,set_id,local_id,name,category,stage,trainer_type,energy_type,suffix,evolves_from,types,hp,retreat,rarity,reg_mark,illustrator,effect,abilities,attacks,weaknesses,resistances,variants,image,is_ace,is_radiant,is_prism,is_basic_energy,tcgp_product_id,tcgp,prices,prices_at,legal_standard,legal_expanded,standard_from,rotating,rotating_on,banned_in,detail_at,set:sets!inner(id,name,code,series,release_date,legal_date,symbol,logo,is_promo,is_classic,hidden)';
+/** A printing TCGdex has no art for shows TCGplayer's photo of that same printing (its own product id). */
+const withArt = (c: Card): Card => {
+  if (!c.image && c.tcgp_product_id) c.image = TCGP_IMG + c.tcgp_product_id;
+  return c;
+};
 const DECK_LIST_COLS = 'id,owner,name,format,is_public,cover,price,card_count,like_count,view_count,comment_count,featured,tags,archetype,created_at,updated_at,owner_profile:profiles!decks_owner_fkey(username,avatar_card)';
 const DECK_COLS = '*,owner_profile:profiles!decks_owner_fkey(username,avatar_card)';
 
@@ -25,7 +31,7 @@ export async function cardsById(ids: string[]): Promise<Map<string, Card>> {
   for (let i = 0; i < fresh.length; i += 80) {
     const chunk = fresh.slice(i, i + 80);
     const req = sb.select<Card>('cards', { select: CARD_COLS, id: `in.(${chunk.map(x => `"${x.replace(/"/g, '')}"`).join(',')})` })
-      .then(({ rows }) => { rows.forEach(c => cardCache.set(c.id, c)); })
+      .then(({ rows }) => { rows.forEach(c => cardCache.set(c.id, withArt(c))); })
       .finally(() => chunk.forEach(id => cardInflight.delete(id)));
     chunk.forEach(id => cardInflight.set(id, req));
     waits.push(req);
@@ -38,7 +44,7 @@ export async function cardsById(ids: string[]): Promise<Map<string, Card>> {
 export async function printingsOf(name: string): Promise<Card[]> {
   // Pokémon TCG Pocket (digital-only) sets are hidden from printings.
   const { rows } = await sb.select<Card>('cards', { select: CARD_COLS, name: `eq.${name}`, 'set.hidden': 'is.false', limit: 300 });
-  rows.forEach(c => cardCache.set(c.id, c));
+  rows.forEach(c => cardCache.set(c.id, withArt(c)));
   return rows
     .sort((a, b) => (b.set?.release_date || '').localeCompare(a.set?.release_date || '') || localNum(a.local_id) - localNum(b.local_id));
 }
