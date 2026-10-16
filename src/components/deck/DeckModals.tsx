@@ -31,7 +31,7 @@ export function ExportModal({ lines, name, meta, cover = '', onClose }: { lines:
     <Modal title="Export" onClose={onClose} wide>
       <div className="row-gap wrap-row">
         <Segmented label="Format" value={kind} onChange={setKind} options={[
-          { value: 'ptcgl', label: 'Pokémon TCG Live', title: 'Paste into Pokémon TCG Live or Limitless' },
+          { value: 'ptcgl', label: 'Pokémon TCG Live / RK9', title: 'Paste into Pokémon TCG Live, Limitless or RK9' },
           { value: 'plain', label: 'Plain list' },
           { value: 'grouped', label: 'Grouped' },
           { value: 'tcgplayer', label: 'TCGplayer' },
@@ -47,6 +47,7 @@ export function ExportModal({ lines, name, meta, cover = '', onClose }: { lines:
         <button className="btn" onClick={download}><Icon name="download" />Download .txt</button>
         {kind === 'tcgplayer' && <a className="btn" href={me.url} target="_blank" rel="noopener noreferrer"><Icon name="cart" />Open in TCGplayer Mass Entry</a>}
       </div>
+      {kind === 'ptcgl' && <p className="muted small">For RK9 (Regionals and bigger): Deck List Creator → <b>Import from Pokémon TCG Live</b> → paste → Convert deck list.</p>}
       <textarea className="export-text" readOnly value={text} rows={12} onFocus={e => e.currentTarget.select()} aria-label="Exported list" />
       </>}
     </Modal>

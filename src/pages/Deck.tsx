@@ -6,6 +6,7 @@ import { AddCard } from '../components/deck/AddCard';
 import { CardModal } from '../components/deck/CardModal';
 import { ImportModal } from '../components/deck/ImportModal';
 import { ExportModal, SettingsModal } from '../components/deck/DeckModals';
+import { RegSheetModal } from '../components/deck/RegSheet';
 import { Comments } from '../components/deck/Comments';
 import { Markdown } from '../components/Markdown';
 import { coverUrl } from '../components/DeckTile';
@@ -44,7 +45,7 @@ export function DeckPage({ id }: { id: string }) {
   const [group, setGroup] = useState<GroupMode>(pref('group', 'type'));
   const [sort, setSort] = useState<SortKey>(pref('sort', 'default'));
   const [highlight, setHighlight] = useState<Set<string>>(new Set());
-  const [modal, setModal] = useState<null | { kind: 'card'; cid: string; board: Board } | { kind: 'import' | 'bulk' | 'export' | 'settings' | 'delete' }>(null);
+  const [modal, setModal] = useState<null | { kind: 'card'; cid: string; board: Board } | { kind: 'import' | 'bulk' | 'export' | 'settings' | 'delete' | 'reg' }>(null);
   const [editing, setEditing] = useState(query.get('edit') === '1');
   const isOwner = !!session && !!row && session.user.id === row.owner;
   const editable = isOwner && editing;
@@ -270,6 +271,7 @@ export function DeckPage({ id }: { id: string }) {
             <Menu label={<Icon name="dots" />} className="btn" title="More">
               <MenuItem icon="share" onClick={share}>Copy link</MenuItem>
               <MenuItem icon="copy" onClick={async () => toast((await copyText(exportPTCGL(lines))) ? 'List copied for Pokémon TCG Live' : 'Couldn’t copy', 'ok')}>Copy for Pokémon TCG Live</MenuItem>
+              <MenuItem icon="list" onClick={() => setModal({ kind: 'reg' })}>Registration sheet (PDF)</MenuItem>
               <MenuItem icon="copy" onClick={clone}>Copy to my decks</MenuItem>
               {isOwner && <MenuItem icon="upload" onClick={() => { setEditing(true); setModal({ kind: 'import' }); }}>Import cards</MenuItem>}
               {isOwner && <MenuItem icon="list" onClick={() => { setEditing(true); setModal({ kind: 'bulk' }); }}>Edit as text</MenuItem>}
@@ -354,6 +356,7 @@ export function DeckPage({ id }: { id: string }) {
         <ImportModal title="Edit as text" allowLink={false} format={row.format} defaultMode="replace" onClose={() => setModal(null)} onApply={applyImport}
           initialText={exportPTCGL(lines, 'main') + (maybeCount ? '\n\nConsidering:\n' + lines.filter(l => l.board === 'maybe').map(l => `${l.qty} ${l.name}${l.card ? ` ${l.card.set?.code || ''} ${/^\d+$/.test(l.card.local_id) ? parseInt(l.card.local_id, 10) : l.card.local_id}` : ''}`).join('\n') : '')} />
       )}
+      {modal?.kind === 'reg' && <RegSheetModal lines={lines} deckName={row.name} format={row.format} onClose={() => setModal(null)} />}
       {modal?.kind === 'export' && <ExportModal lines={lines} name={row.name} cover={row.cover || autoCover(lines)} onClose={() => setModal(null)}
         meta={{ name: row.name, format: FORMAT_LABEL[row.format] + (row.archetype && row.archetype !== row.name ? ` · ${row.archetype}` : ''), author: row.owner_profile?.username, updated: `Updated ${fmtDate(row.updated_at)}`, url: row.is_public ? `benchmarktcg.us/decks/${row.id}` : undefined }} />}
       {modal?.kind === 'settings' && <SettingsModal deck={row} onClose={() => setModal(null)} onSave={patchRow} />}

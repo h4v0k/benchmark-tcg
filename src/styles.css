@@ -805,3 +805,17 @@ a.mu-row.mu-deck-link:hover .mu-name b { text-decoration: underline; text-underl
   .table-view .tv-sub { display: block; font-weight: 400; font-size: .85em; overflow-wrap: anywhere; }
   .table-view table { width: 100%; }
 }
+
+/* Deck registration sheet */
+.reg-layout { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.reg-form fieldset { border: 0; margin: 0 0 8px; padding: 0; min-width: 0; }
+.reg-form legend { font-weight: 700; margin-bottom: 8px; padding: 0; }
+.reg-form .field .segmented { align-self: flex-start; }
+.reg-form .check-row { display: flex; gap: 8px; align-items: center; font-size: 13px; margin: 0 0 8px; }
+.reg-warn { margin: 4px 0 0; padding: 10px 12px 10px 28px; border-radius: var(--radius-sm); background: var(--warn-soft); color: var(--warn); font-size: 13px; display: grid; gap: 4px; }
+.reg-sheets { display: grid; gap: 14px; min-width: 0; }
+.reg-preview { min-width: 0; border-radius: 4px; overflow: hidden; box-shadow: 0 0 0 1px var(--line2), var(--shadow); background: #fff; }
+.reg-preview canvas { display: block; }
+@media (max-width: 760px) {
+  .reg-layout { grid-template-columns: minmax(0, 1fr); }
+}

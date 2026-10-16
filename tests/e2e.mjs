@@ -341,6 +341,48 @@ try {
     await page.waitForTimeout(500);
     if (writes.length) throw new Error(`writes while viewing: ${writes.join(', ')}`);
   });
+  for (const w of [360, 1280]) await scenario(`3r. registration sheet PDF at ${w}px`, async () => {
+    const page = await newPage({ width: w, height: 900 });
+    await page.goto(`${BASE}/decks/${DECK_ID}`);
+    await see(page, 'Dragapult test');
+    await page.getByRole('button', { name: 'More' }).first().click(T);
+    await page.getByRole('menuitem', { name: /Registration sheet/ }).click(T);
+    const dlg = page.getByRole('dialog', { name: 'Deck registration sheet' });
+    await dlg.waitFor(T);
+    await dlg.getByLabel('Player name').fill('Ash Ketchum (Pallet)');
+    await dlg.getByLabel('Player ID').fill('12ab345');
+    if (await dlg.getByLabel('Player ID').inputValue() !== '12345') throw new Error('Player ID should keep digits only');
+    await dlg.getByLabel('Date of birth').fill('1997-04-01');
+    // a 1997 birth date picks Masters on this season's sheet
+    if (await dlg.getByRole('radio', { name: 'Masters' }).getAttribute('aria-checked') !== 'true') throw new Error('division not picked from the birth date');
+    await dlg.getByRole('button', { name: 'Open PDF to print' }).waitFor(T);
+    // the 20-card test deck is flagged
+    await dlg.getByText(/This deck has 20 cards/).waitFor(T);
+    // the preview is painted (non-white pixels on the canvas)
+    const inked = await dlg.locator('canvas').evaluate(c => { const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 400) if (d[i] < 128) n++; return n; });
+    if (inked < 50) throw new Error(`preview looks empty (${inked})`);
+    const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    if (over > 1) throw new Error(`${over}px sideways overflow`);
+    await page.screenshot({ path: path.join(OUT, `regsheet-${w}.png`), fullPage: false });
+    // Download gives a real one-page PDF with the details on it
+    const [dl] = await Promise.all([page.waitForEvent('download'), dlg.getByRole('button', { name: 'Download PDF' }).click()]);
+    const file = await dl.path();
+    const pdf = fs.readFileSync(file).toString('latin1');
+    if (!pdf.startsWith('%PDF-1.4') || !/\/Count 1/.test(pdf)) throw new Error('not a one-page PDF');
+    if (!pdf.includes('Ash Ketchum \\(Pallet\\)') || !pdf.includes('(12345)') || !pdf.includes('(04)') || !pdf.includes('(1997)')) throw new Error('PDF is missing the player details');
+    if (!pdf.includes('Tournament Season') && pdf.length < 400000) throw new Error('not the official sheet');
+    if (!dl.suggestedFilename().endsWith('.pdf')) throw new Error('download name ' + dl.suggestedFilename());
+    // Open PDF opens a new tab with the PDF itself (not a print of the web page)
+    await page.evaluate(() => { window.__opened = []; const o = window.open.bind(window); window.open = (u, ...a) => { window.__opened.push(String(u)); return o(u, ...a); }; });
+    await dlg.getByRole('button', { name: 'Open PDF to print' }).click();
+    const opened = await page.evaluate(() => window.__opened[0] || '');
+    if (!opened.startsWith('blob:')) throw new Error('Open PDF should open the PDF itself: ' + opened);
+    // (its bytes are the same file the Download check above already read)
+    // date of birth stays on the device, never sent to the server
+    const stored = await page.evaluate(() => localStorage.getItem('bm:reg:dob'));
+    if (stored !== '1997-04-01') throw new Error('date of birth not remembered on this device');
+    await page.context().close();
+  });
   await scenario('4. /cards?q=dre', async () => {
     await desk.goto(BASE + '/cards?q=dre');
     await see(desk, 'Dreepy');

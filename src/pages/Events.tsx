@@ -5,6 +5,7 @@ import { DeckView, type ViewMode } from '../components/deck/Views';
 import { BuyPanel, LegalityPanel, SampleHand, StatsPanel } from '../components/deck/Sidebar';
 import { CardModal } from '../components/deck/CardModal';
 import { ExportModal } from '../components/deck/DeckModals';
+import { RegSheetModal } from '../components/deck/RegSheet';
 import { Link, navigate } from '../router';
 import { useAuth, toast } from '../state';
 import * as api from '../lib/api';
@@ -123,6 +124,7 @@ export function EventDeckPage({ id, place }: { id: number; place: number }) {
   const [mode, setMode] = useState<ViewMode>('text');
   const [open, setOpen] = useState<Line | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [reg, setReg] = useState(false);
   const [busy, setBusy] = useState(false);
   const lines: Line[] = useMemo(() => (r.data?.d.cards || []).map(e => ({ ...e, card: r.data!.cards.get(e.cid) })), [r.data]);
   if (r.loading) return <Spinner />;
@@ -149,6 +151,7 @@ export function EventDeckPage({ id, place }: { id: number; place: number }) {
         <div className="deck-actions">
           <button className="btn primary" onClick={copy} disabled={busy}><Icon name="copy" />{busy ? 'Copying…' : 'Copy to my decks'}</button>
           <button className="btn" onClick={() => setExporting(true)}><Icon name="download" />Export</button>
+          <button className="btn" onClick={() => setReg(true)}><Icon name="list" />Registration sheet</button>
           {d.list_id && <a className="btn" href={`https://limitlesstcg.com/decks/list/${d.list_id}`} target="_blank" rel="noopener noreferrer"><Icon name="link" />Limitless</a>}
         </div>
       </div></div></div>
@@ -168,6 +171,7 @@ export function EventDeckPage({ id, place }: { id: number; place: number }) {
         </aside>
       </div>
       {open && <CardModal line={open} format="standard" editable={false} isCover={false} onClose={() => setOpen(null)} />}
+      {reg && <RegSheetModal lines={lines} deckName={d.archetype || 'Deck'} format="standard" onClose={() => setReg(false)} />}
       {exporting && <ExportModal lines={lines} name={title} onClose={() => setExporting(false)}
         meta={{ name: d.archetype || 'Deck', format: `Standard · ${ord(d.place)} place · ${t.name}`, author: d.player, updated: fmtDate(t.date), url: 'benchmarktcg.us' + location.pathname }} />}
       <div className="wrap"><LimitlessCredit /></div>

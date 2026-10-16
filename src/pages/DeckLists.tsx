@@ -6,6 +6,7 @@ import { Empty, ErrorBox, Icon, Spinner, Tag, useAsync } from '../components/ui'
 import { DeckView } from '../components/deck/Views';
 import { CardModal } from '../components/deck/CardModal';
 import { ExportModal } from '../components/deck/DeckModals';
+import { RegSheetModal } from '../components/deck/RegSheet';
 import { Link, navigate, setQuery, useRoute } from '../router';
 import { useAuth, toast } from '../state';
 import * as api from '../lib/api';
@@ -109,6 +110,7 @@ function ListView({ id, best, title }: { id: string; best: boolean; title: strin
   }, [id]);
   const [open, setOpen] = useState<Line | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [reg, setReg] = useState(false);
   const [busy, setBusy] = useState(false);
   const lines = useMemo(() => r.data?.lines || [], [r.data]);
 
@@ -137,12 +139,14 @@ function ListView({ id, best, title }: { id: string; best: boolean; title: strin
       <div className="deck-actions">
         <button className="btn primary" onClick={copy} disabled={busy || !lines.length}><Icon name="copy" />{busy ? 'Copying…' : 'Copy to my decks'}</button>
         <button className="btn" onClick={() => setExporting(true)} disabled={!lines.length}><Icon name="download" />Export</button>
+        <button className="btn" onClick={() => setReg(true)} disabled={!lines.length}><Icon name="list" />Registration sheet</button>
         {eventHref ? <a className="btn" href={eventHref} target="_blank" rel="noopener noreferrer"><Icon name="external" />Event</a>
           : <Link className="btn" to={`/events/${encodeURIComponent(l.event_id)}`}><Icon name="forward" />Event</Link>}
       </div>
       {!!missing.length && <p className="notice warn"><Icon name="warn" size={15} />Not matched to a card yet: {missing.join(', ')}.</p>}
       <DeckView mode="text" lines={lines} format="standard" group="type" sort="default" editable={false} onOpen={setOpen} onQty={() => {}} />
       {open && <CardModal line={open} format="standard" editable={false} isCover={false} onClose={() => setOpen(null)} />}
+      {reg && <RegSheetModal lines={lines} deckName={title} format="standard" onClose={() => setReg(false)} />}
       {exporting && <ExportModal lines={lines} name={label} onClose={() => setExporting(false)}
         meta={{ name: title, format: ['Standard', l.place ? `${ord(l.place)} place` : record(l), l.event_name].filter(Boolean).join(' · '), author: l.player, updated: fmtDate(l.date), url: 'benchmarktcg.us' + location.pathname + location.search }} />}
     </section>

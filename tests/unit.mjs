@@ -9,6 +9,7 @@ const bundle = async (entry) => {
 const D = await bundle('src/lib/decklist.ts');
 const L = await bundle('src/lib/legality.ts');
 const T = await bundle('src/lib/tcgplayer.ts');
+const RS = await bundle('src/lib/regsheet.ts');
 let n = 0; const t = (name, fn) => { fn(); n++; };
 
 t('PTCGL export', () => {
@@ -92,6 +93,79 @@ t('TCGplayer links', () => {
   assert.match(T.buyUrl(a, 'reverse'), /^https:\/\/www\.tcgplayer\.com\/product\/497557\?Language=English&Printing=Reverse%20Holofoil$/);
   assert.match(T.buyUrl(b), /tcgplayer\.com\/search\/pokemon\/product\?.*q=Mystery/);
   assert.match(T.massEntry([line(2, b)]).url, /c=2%20Mystery$/);
+});
+
+t('registration sheet: rows from a deck', () => {
+  const card = (id, name, category, code, local_id, reg_mark = 'H') => ({ id, name, category, local_id, reg_mark, set: { code }, set_id: code.toLowerCase(), stage: 'Basic' });
+  const lines = [
+    { cid: 'a', qty: 4, board: 'main', name: 'Dreepy', card: card('a', 'Dreepy', 'Pokemon', 'TWM', '128') },
+    { cid: 'b', qty: 1, board: 'main', name: 'Dreepy', card: card('b', 'Dreepy', 'Pokemon', 'PRE', '071') },
+    { cid: 'c', qty: 2, board: 'main', name: 'Iono', card: card('c', 'Iono', 'Trainer', 'PAL', '185') },
+    { cid: 'd', qty: 2, board: 'main', name: 'Iono', card: card('d', 'Iono', 'Trainer', 'PAL', '254') },
+    { cid: 'e', qty: 4, board: 'main', name: 'Ultra Ball', card: card('e', 'Ultra Ball', 'Trainer', 'MEG', '131') },
+    { cid: 'f', qty: 3, board: 'main', name: 'Nidoran♀', card: card('f', 'Nidoran♀', 'Pokemon', 'MEW', '029', 'G') },
+    { cid: 'g', qty: 1, board: 'maybe', name: 'Switch', card: card('g', 'Switch', 'Trainer', 'MEG', '130') },
+  ];
+  const c = RS.sheetCards(lines);
+  // Pokémon: one line per printing, with set, collector number (no leading zeros) and regulation mark
+  assert.deepEqual(c.pokemon.map(r => [r.qty, r.name, r.set, r.num, r.reg]).sort(), [[1, 'Dreepy', 'PRE', '71', 'H'], [3, 'Nidoran F', 'MEW', '29', 'G'], [4, 'Dreepy', 'TWM', '128', 'H']]);
+  // Trainer: name and quantity only, printings merged; Considering is left out
+  assert.deepEqual(c.trainer.map(r => [r.qty, r.name]).sort(), [[4, 'Iono'], [4, 'Ultra Ball']]);
+  assert.equal(c.energy.length, 0);
+});
+t('registration sheet: division from birth date (this season’s sheet)', () => {
+  assert.equal(RS.divisionFor('2015-06-01'), 'junior');
+  assert.equal(RS.divisionFor('2014-01-01'), 'junior');
+  assert.equal(RS.divisionFor('2013-12-31'), 'senior');
+  assert.equal(RS.divisionFor('2010-01-01'), 'senior');
+  assert.equal(RS.divisionFor('2009-12-31'), 'masters');
+  assert.equal(RS.divisionFor(''), '');
+});
+const fs = await import('node:fs');
+const TPLJ = JSON.parse(fs.readFileSync('src/lib/regsheet-template.json', 'utf8'));
+const tpl = new Uint8Array(fs.readFileSync('public/regsheet/template.pdf'));
+const checkPdf = (bytes, pagesWanted) => {
+  const s = Buffer.from(bytes).toString('latin1');
+  assert.equal(Buffer.from(bytes.slice(0, tpl.length)).compare(Buffer.from(tpl)), 0, 'the official sheet is kept byte for byte');
+  assert.ok(s.trimEnd().endsWith('%%EOF'));
+  const xref = +s.match(/startxref\n(\d+)\n%%EOF\n$/)[1];
+  assert.ok(xref > tpl.length && s.slice(xref).startsWith('xref\n'));
+  const sec = s.slice(xref, s.indexOf('trailer', xref)).split('\n').slice(1, -1);
+  for (let i = 0; i < sec.length; i += 2) {
+    const n = +sec[i].split(' ')[0], off = +sec[i + 1].slice(0, 10);
+    assert.equal(sec[i + 1].length, 19, 'xref entries are 20 bytes with the newline');
+    assert.ok(s.slice(off).startsWith(`${n} 0 obj\n`), `object ${n} at its offset`);
+  }
+  assert.ok(s.slice(xref).includes(`/Prev ${TPLJ.startxref}`));
+  assert.ok(s.includes(`/Count ${pagesWanted} >>`));
+  // stream lengths match
+  for (const m of s.slice(tpl.length).matchAll(/<< \/Length (\d+) >>\nstream\n/g)) {
+    const start = tpl.length + m.index + m[0].length;
+    assert.equal(s.slice(start + +m[1], start + +m[1] + 10), '\nendstream');
+  }
+  return s;
+};
+{
+  const info = { playerName: 'Mike (Havok) O’Neil', playerId: '1234567', dob: '1990-01-02', division: 'masters', format: 'standard' };
+  const cards = { pokemon: [{ qty: 4, name: 'Pokémon Catcher', set: 'SVI', num: '187', reg: 'G' }], trainer: [{ qty: 4, name: 'Professor\\Test' }], energy: [] };
+  const s = checkPdf(RS.fillTemplate(tpl, RS.sheetPages(info, cards), 'Deck list - test'), 1);
+  assert.ok(s.includes('Mike \\(Havok\\) O\x92Neil'), 'parentheses escaped, curly apostrophe in WinAnsi');
+  assert.ok(s.includes('Pok\xe9mon Catcher') && s.includes('Professor\\\\Test'));
+  assert.ok(s.includes('(01)') && s.includes('(02)') && s.includes('(1990)'));
+  // two sheets when Pokémon lines don't fit on one
+  const many = Array.from({ length: RS.ROWS.pokemon + 3 }, (_, i) => ({ qty: 1, name: `Mon ${i}`, set: 'TWM', num: String(i), reg: 'H' }));
+  const pages = RS.sheetPages(info, { pokemon: many, trainer: [], energy: [] });
+  assert.equal(pages.length, 2);
+  const s2 = checkPdf(RS.fillTemplate(tpl, pages, 'two'), 2);
+  assert.ok(s2.includes('(Mon 12)') && s2.includes('(Sheet 2 of 2)'));
+  n++;
+}
+t('registration sheet: long names shrink, then get cut, inside their column', () => {
+  const long = 'Radiant Greninja Radiant Greninja Radiant Greninja Radiant Greninja';
+  const [ops] = RS.sheetPages({ playerName: '', playerId: '', dob: '', division: '', format: '' }, { pokemon: [{ qty: 1, name: long, set: 'ASR', num: '46', reg: 'F' }], trainer: [], energy: [] });
+  const t1 = ops.find(o => o.t === 'text' && o.s.startsWith('Radiant'));
+  assert.ok(t1.s.endsWith('…') && t1.size >= 6);
+  assert.ok(RS.textWidth(t1.s, t1.size) <= 2.27 + 1e-6);
 });
 console.log(`unit: ${n} groups ok`);
 await import('./rules-parse.test.mjs');
