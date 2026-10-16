@@ -43,5 +43,5 @@ function legacyRedirect() {
   const quiet = named && (!fromLink!.type || fromLink!.type === 'magiclink'); // App shows its own message for signup/recovery
   const root = createRoot(document.getElementById('root')!);
   flushSync(() => root.render(<App authLink={quiet ? { ...fromLink, type: undefined } : fromLink} />));
-  if (named) toast(quiet ? `Signed in as ${fromLink!.email}` : `Signed in as ${fromLink!.email}.`, 'ok');
+  if (named) toast(`Signed in as ${fromLink!.email}`, 'ok');
 })();

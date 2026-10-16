@@ -94,7 +94,13 @@ Deno.serve(async (req) => {
   let ip = cfip || xff[xff.length - 1] || "unknown";
   if (!cfip) console.log("report-issue: no cf-connecting-ip, using x-forwarded-for");
   // One IPv6 visitor controls a whole /64, so count it as one.
-  if (ip.includes(":")) ip = ip.split(":").slice(0, 4).join(":") + "::/64";
+  if (ip.includes(":")) {
+    // expand "::" so the first four groups really are the /64 prefix
+    const [head, tail = ""] = ip.split("::");
+    const h = head ? head.split(":") : [], t = tail ? tail.split(":") : [];
+    const groups = ip.includes("::") ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t] : ip.split(":");
+    ip = groups.slice(0, 4).map((g) => g.toLowerCase().replace(/^0+(?=.)/, "")).join(":") + "::/64";
+  }
   const ip_hash = await sha(`benchmark-report:${ip}`);
   const since = new Date(Date.now() - 3600_000).toISOString();
   const countOf = async (filter) => {
