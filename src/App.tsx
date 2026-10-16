@@ -96,6 +96,7 @@ function Shell({ authLink }: { authLink: { type?: string; error?: string } | nul
   useEffect(() => {
     if (authLink?.error) toast(authLink.error, 'bad');
     else if (authLink?.type === 'signup') toast('Email confirmed. Welcome to Benchmark!', 'ok');
+    else if (authLink?.type === 'recovery') toast('Choose a new password for this account.', 'ok');
     else if (authLink?.type === 'magiclink') toast('Signed in', 'ok');
   }, []);
   let page: ReactElement | null = null;

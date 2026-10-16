@@ -90,7 +90,11 @@ Deno.serve(async (req) => {
   // Cloudflare (in front of Supabase) sets cf-connecting-ip and the client can't override it. The first
   // x-forwarded-for entry is whatever the browser sent, so it's only a last resort (the last entry is added by our proxies).
   const xff = (req.headers.get("x-forwarded-for") || "").split(",").map((x) => x.trim()).filter(Boolean);
-  const ip = req.headers.get("cf-connecting-ip") || xff[xff.length - 1] || "unknown";
+  const cfip = req.headers.get("cf-connecting-ip");
+  let ip = cfip || xff[xff.length - 1] || "unknown";
+  if (!cfip) console.log("report-issue: no cf-connecting-ip, using x-forwarded-for");
+  // One IPv6 visitor controls a whole /64, so count it as one.
+  if (ip.includes(":")) ip = ip.split(":").slice(0, 4).join(":") + "::/64";
   const ip_hash = await sha(`benchmark-report:${ip}`);
   const since = new Date(Date.now() - 3600_000).toISOString();
   const countOf = async (filter) => {

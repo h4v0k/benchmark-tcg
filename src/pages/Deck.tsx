@@ -32,6 +32,7 @@ export function DeckPage({ id }: { id: string }) {
   // whatever changed meanwhile instead of on the snapshot from when it started.
   const entriesRef = useRef<DeckEntry[]>([]);
   const cardsRef = useRef<Map<string, Card>>(new Map());
+  const coverRef = useRef<string | null | undefined>(undefined); // latest cover, read after awaits
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
@@ -123,6 +124,7 @@ export function DeckPage({ id }: { id: string }) {
     return () => { window.removeEventListener('beforeunload', warn); clearTimeout(timer.current); flush(); };
   }, [flush]);
 
+  coverRef.current = row?.cover;
   /** Apply an edit to the latest entries (not a stale snapshot) and queue the save. */
   const commit = (edit: (prev: DeckEntry[]) => DeckEntry[]) => {
     const next = edit(entriesRef.current);
@@ -131,8 +133,9 @@ export function DeckPage({ id }: { id: string }) {
     setEntries(next);
     const ls: Line[] = next.map(e => ({ ...e, card: map.get(e.cid) }));
     const main = ls.filter(l => l.board === 'main');
-    const keepCover = row?.cover && ls.some(l => l.card?.image === row.cover);
-    queue({ cards: next.map(slim), card_count: sum(main, l => l.qty), price: Math.round(sum(main, l => (linePrice(l) || 0) * l.qty) * 100) / 100, cover: keepCover ? row!.cover : autoCover(ls) });
+    const cur = coverRef.current;
+    const keepCover = !!cur && ls.some(l => l.card?.image === cur);
+    queue({ cards: next.map(slim), card_count: sum(main, l => l.qty), price: Math.round(sum(main, l => (linePrice(l) || 0) * l.qty) * 100) / 100, cover: keepCover ? cur! : autoCover(ls) });
   };
   const patchRow = (patch: Partial<DeckRow>) => {
     setRow(r => r && { ...r, ...patch });

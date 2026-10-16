@@ -762,7 +762,7 @@ a.row-main, a.row-main:hover { text-decoration: none; }
 .deck-tabs-bar { flex-wrap: nowrap; gap: .5em; min-width: 0; }
 .deck-tabs-bar .tabs { flex: 0 1 auto; flex-wrap: nowrap; gap: .3em; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .deck-tabs-bar .tabs::-webkit-scrollbar { display: none; }
-.deck-tabs-bar .tabs button { flex: none; white-space: nowrap; padding: .85em .8em; }
+.deck-tabs-bar .tabs button { flex: none; white-space: nowrap; padding: .75em .55em; font-size: .92em; }
 .tabs .count, .count { font-size: .8em; }
 .save-state { flex: none; margin-left: auto; white-space: nowrap; font-size: .86em; }
 .save-state .link-btn { min-height: 0; }
@@ -799,4 +799,9 @@ a.mu-row.mu-deck-link:hover .mu-name b { text-decoration: underline; text-underl
   .mu-filters .segmented button { height: auto; min-height: 44px; }
 }
 .auth-alt .link-btn { display: flex; margin-left: 0; }
-@media (max-width: 640px) { .table-view td:nth-child(3) { white-space: nowrap; } }
+.table-view .tv-sub { display: none; }
+@media (max-width: 640px) {
+  .table-view .col-wide { display: none; }
+  .table-view .tv-sub { display: block; font-weight: 400; font-size: .85em; overflow-wrap: anywhere; }
+  .table-view table { width: 100%; }
+}

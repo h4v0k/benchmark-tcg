@@ -12,9 +12,10 @@ create or replace function public.rate_limit() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare n int; lim int; win interval; who uuid := auth.uid();
 begin
-  -- The server's clock decides when a row was made; a client-sent created_at would dodge the limits below.
-  new.created_at := now();
   if who is null then return new; end if;
+  -- For people using the site, the server's clock decides when a row was made; a client-sent created_at
+  -- would dodge the limits below. (Server jobs and restores, which have no signed-in user, keep their own.)
+  new.created_at := now();
   if tg_table_name = 'deck_comments' then
     select count(*) into n from public.deck_comments where user_id = who and created_at > now() - interval '1 minute';
     if n >= 6 then raise exception 'You''re commenting too fast. Wait a minute and try again.'; end if;
@@ -72,6 +73,8 @@ begin
   if new.folder_id is not null and not exists (select 1 from public.folders f where f.id = new.folder_id and f.owner = new.owner) then
     new.folder_id := null;
   end if;
+  -- People can't set updated_at themselves (it orders the 'recently updated' list); it moves only when the list or name changes.
+  if tg_op = 'UPDATE' and current_user in ('anon', 'authenticated') then new.updated_at := old.updated_at; end if;
   if tg_op = 'UPDATE' and (new.cards is distinct from old.cards or new.name is distinct from old.name) then
     new.updated_at := now();
   end if;
@@ -164,8 +167,8 @@ begin
                               and s.release_date >= newest_date then newest_mark end,
                     '') as mark,
            -- A set with no legal date yet isn't live (it used to be, so an undated new set went legal at once).
-           -- Sets we've had for 60+ days without a date are old sets and count as live.
-           (coalesce(s.legal_date <= current_date, false) or (s.legal_date is null and s.created_at < now() - interval '60 days')) as live,
+           -- It goes live once a release date syncs (legal 14 days later) or an admin dates it.
+           coalesce(s.legal_date <= current_date, false) as live,
            (s.release_date is not null and s.release_date >= exp_from) as exp_era,
            c.legal_standard as old_std
     from public.cards c join public.sets s on s.id = c.set_id

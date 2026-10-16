@@ -38,8 +38,10 @@ function legacyRedirect() {
   } catch { /* storage blocked */ }
   legacyRedirect();
   // A link that signs you in names the account, so a crafted link can't quietly sign you in as someone else.
-  const named = !!fromLink && !fromLink.error && !!fromLink.email && (!fromLink.type || fromLink.type === 'magiclink');
+  // Every link type is named (the type comes from the link itself, so it can't decide whether we say who you are).
+  const named = !!fromLink && !fromLink.error && !!fromLink.email;
+  const quiet = named && (!fromLink!.type || fromLink!.type === 'magiclink'); // App shows its own message for signup/recovery
   const root = createRoot(document.getElementById('root')!);
-  flushSync(() => root.render(<App authLink={named ? { ...fromLink, type: undefined } : fromLink} />));
-  if (named) toast(`Signed in as ${fromLink!.email}`, 'ok');
+  flushSync(() => root.render(<App authLink={quiet ? { ...fromLink, type: undefined } : fromLink} />));
+  if (named) toast(quiet ? `Signed in as ${fromLink!.email}` : `Signed in as ${fromLink!.email}.`, 'ok');
 })();

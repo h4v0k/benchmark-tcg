@@ -113,6 +113,10 @@ update public.decks set like_count = 999, view_count = 999, featured = true, cre
 reset benchmark.counter_bump;
 reset role; reset request.jwt.claim.sub;
 select pg_temp.ok('server sets created_at on insert', (select created_at > now() - interval '1 hour' from public.decks where id = 'aaaaaaaa-0000-0000-0000-0000000000b1'));
+set role authenticated; set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+update public.decks set updated_at = '2099-01-01', description = 'x' where id = 'aaaaaaaa-0000-0000-0000-0000000000b1';
+reset role; reset request.jwt.claim.sub;
+select pg_temp.ok('owners cannot set updated_at', (select updated_at < now() + interval '1 minute' from public.decks where id = 'aaaaaaaa-0000-0000-0000-0000000000b1'));
 select pg_temp.ok('bump switch ignored for site roles; id/created_at pinned',
   (select like_count = 0 and view_count = 0 and not featured and created_at > now() - interval '1 hour' from public.decks where id = 'aaaaaaaa-0000-0000-0000-0000000000b1'));
 
@@ -142,9 +146,12 @@ insert into public.cards (id, set_id, local_id, num_key, name, name_norm, catego
 update public.cards set legal_standard = true where id = 'zz-new-1';
 select public.recompute_legality();
 select pg_temp.ok('undated new set is not Standard legal', not (select legal_standard from public.cards where id = 'zz-new-1'));
-update public.sets set created_at = now() - interval '90 days' where id = 'zz-new';
+update public.sets set legal_date = current_date - 1 where id = 'zz-new';
 select public.recompute_legality();
-select pg_temp.ok('undated set we have had for months is live', (select legal_standard from public.cards where id = 'zz-new-1'));
+select pg_temp.ok('the set goes live once it has a legal date', (select legal_standard from public.cards where id = 'zz-new-1'));
+
+insert into public.deck_comments (deck_id, user_id, body, created_at) values ('aaaaaaaa-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'restored', '2001-02-03');
+select pg_temp.ok('server-side inserts keep their own created_at', (select created_at::date = '2001-02-03' from public.deck_comments where body = 'restored'));
 
 -- tournaments: an empty standings page counts as a try; old stuck events close
 insert into public.tournaments (id, name, date, kind, status) values (990001, 'Regional Empty', current_date - 2, 'regional', 'new'),
