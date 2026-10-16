@@ -152,6 +152,11 @@ export async function insert<T = any>(table: string, row: object | object[], q: 
   if (!r.ok) throw await readError(r);
   return withDeadline(r.json());
 }
+export async function upsert<T = any>(table: string, row: object, onConflict: string): Promise<T[]> {
+  const r = await call(`/rest/v1/${table}${qs({ on_conflict: onConflict })}`, { method: 'POST', headers: { Prefer: 'return=representation,resolution=merge-duplicates' }, body: JSON.stringify(row) });
+  if (!r.ok) throw await readError(r);
+  return withDeadline(r.json());
+}
 export async function update<T = any>(table: string, q: Query, patch: object): Promise<T[]> {
   const r = await call(`/rest/v1/${table}${qs(q)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) });
   if (!r.ok) throw await readError(r);

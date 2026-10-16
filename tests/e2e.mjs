@@ -160,6 +160,8 @@ const unexpected = [];
 const deckDelay = {}; // deck id -> ms to hold the decks response
 const cardReqs = []; // { start, end, n } per /rest/v1/cards `in.` request
 const passkeyReqs = [];
+const PLAYER_INFO = { player_name: 'Test Player', player_id: '1234567', division: 'masters' };
+const playerInfoWrites = [];
 const json = (route, body, extra = {}) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*', ...(extra.headers || {}) }, body: JSON.stringify(body) });
 async function handleSupabase(route) {
   const req = route.request();
@@ -228,6 +230,10 @@ async function handleSupabase(route) {
     return json(route, rows, { headers: { 'content-range': `0-0/1` } });
   }
   if (p === '/rest/v1/profiles' && u.searchParams.get('id') === `eq.${ME}`) return json(route, [{ id: ME, username: 'tester', bio: '', avatar_card: '', is_admin: false, created_at: NOW }], { headers: { 'content-range': '0-0/1' } });
+  if (p === '/rest/v1/player_info') {
+    if (method === 'GET') return json(route, [PLAYER_INFO], { headers: { 'content-range': '0-0/1' } });
+    if (method === 'POST' || method === 'PATCH') { playerInfoWrites.push({ method, search: u.search, body }); return json(route, [{ ...PLAYER_INFO, ...body }]); }
+  }
   if (p === '/rest/v1/follows') return json(route, [], { headers: { 'content-range': '*/0' } });
   if (p === '/auth/v1/passkeys/') passkeyReqs.push(Date.now());
   if (p === '/auth/v1/passkeys/') return json(route, [{ id: 'pk1', created_at: NOW }]);
@@ -902,6 +908,28 @@ try {
     await see(page, 'Passkeys');
     await page.waitForTimeout(1000);
     if (passkeyReqs.length !== 1) throw new Error(`expected 1 passkeys request, got ${passkeyReqs.length}`);
+    await page.context().close();
+  });
+  await scenario('24b. /settings: Tournament registration is prefilled and saves the edited player ID', async () => {
+    const page = await newPage({ width: 360, height: 800 });
+    await page.addInitScript(([me]) => {
+      const exp = Math.floor(Date.now() / 1000) + 3600;
+      localStorage.setItem('sb-rnujzhrfiqjfjqskekpt-auth-token', JSON.stringify({ access_token: 'x', refresh_token: 'y', expires_at: exp, user: { id: me, email: 't@example.com' } }));
+    }, [ME]);
+    playerInfoWrites.length = 0;
+    await page.goto(BASE + '/settings');
+    await see(page, 'Tournament registration');
+    const sec = page.locator('#registration');
+    const pid = sec.locator('input[inputmode="numeric"]');
+    await page.waitForFunction(() => document.querySelector('#registration input[inputmode="numeric"]')?.value === '1234567', null, T);
+    if ((await sec.locator('input').first().inputValue()) !== 'Test Player') throw new Error('name not prefilled');
+    if ((await sec.locator('select').inputValue()) !== 'masters') throw new Error('division not prefilled');
+    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('horizontal overflow at 360px');
+    await pid.fill('7654321');
+    await sec.getByRole('button', { name: 'Save details' }).click();
+    await page.waitForFunction(() => document.body.innerText.includes('Tournament details saved'), null, T);
+    const w = playerInfoWrites[0];
+    if (!w || w.body.player_id !== '7654321' || w.body.player_name !== 'Test Player' || w.body.division !== 'masters') throw new Error('bad save: ' + JSON.stringify(playerInfoWrites));
     await page.context().close();
   });
   await scenario('14. nav has Matchups link', async () => {

@@ -161,3 +161,32 @@ insert into net._http_response (id, status_code, content) values (990001, 200, '
 select public.tourney_tick();
 select pg_temp.ok('empty standings: still new, one try counted', (select status = 'new' and standings_tries = 1 from public.tournaments where id = 990001));
 select pg_temp.ok('events older than the window are closed', (select status from public.tournaments where id = 990002) = 'done');
+
+-- ---------- 029: player_info (private tournament details) ----------
+set role authenticated; set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+insert into public.player_info (player_name, player_id, division) values ('Alice A', '1234567', 'masters');
+select pg_temp.ok('alice saves her player info and reads it back', (select player_name = 'Alice A' and player_id = '1234567' and division = 'masters'
+  and user_id = '11111111-1111-1111-1111-111111111111' from public.player_info));
+reset role; reset request.jwt.claim.sub;
+set role authenticated; set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+select pg_temp.ok('bob cannot read alice''s player info', (select count(*) from public.player_info) = 0);
+update public.player_info set player_name = 'hacked' where user_id = '11111111-1111-1111-1111-111111111111';
+do $$ begin
+  insert into public.player_info (user_id, player_name, player_id) values ('11111111-1111-1111-1111-111111111111', 'Forged', '999');
+  raise notice 'PASS | forged user_id is coerced or rejected';
+exception when others then raise notice 'PASS | forged user_id is coerced or rejected'; end $$;
+do $$ begin
+  insert into public.player_info (player_name, player_id) values ('Bob', 'abc123');
+  raise notice 'FAIL | player_id with letters is rejected';
+exception when others then raise notice 'PASS | player_id with letters is rejected'; end $$;
+reset role; reset request.jwt.claim.sub;
+select pg_temp.ok('bob cannot update alice''s player info', (select player_name from public.player_info where user_id = '11111111-1111-1111-1111-111111111111') = 'Alice A');
+select pg_temp.ok('forged insert never lands on alice''s row', (select player_id from public.player_info where user_id = '11111111-1111-1111-1111-111111111111') = '1234567'
+  and (select count(*) from public.player_info where user_id = '22222222-2222-2222-2222-222222222222') in (0, 1));
+select pg_temp.ok('bob has at most his own row', not exists (select 1 from public.player_info where player_name = 'Forged' and user_id <> '22222222-2222-2222-2222-222222222222'));
+select pg_temp.ok('anon has no privileges on player_info', not has_table_privilege('anon', 'public.player_info', 'select')
+  and not has_table_privilege('anon', 'public.player_info', 'insert') and not has_table_privilege('anon', 'public.player_info', 'update')
+  and not has_table_privilege('anon', 'public.player_info', 'delete'));
+select pg_temp.ok('authenticated cannot truncate or reference player_info', not has_table_privilege('authenticated', 'public.player_info', 'truncate')
+  and not has_table_privilege('authenticated', 'public.player_info', 'references') and not has_table_privilege('authenticated', 'public.player_info', 'trigger'));
+select pg_temp.ok('player_info: one policy per action', (select count(*) from pg_policies where tablename = 'player_info') = 4);
