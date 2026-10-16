@@ -68,14 +68,15 @@ export async function clearPrintingPref(name: string) {
 }
 
 /* Tournament details for deck registration sheets (private; date of birth is never stored). */
-export type PlayerInfo = { player_name: string; player_id: string; division: '' | 'junior' | 'senior' | 'masters' };
+/** Name and Player ID only: birth date and age division stay on the device. */
+export type PlayerInfo = { player_name: string; player_id: string };
 export async function getPlayerInfo(): Promise<PlayerInfo | null> {
   if (!sb.getSession()) return null;
-  const { rows } = await sb.select<PlayerInfo>('player_info', { select: 'player_name,player_id,division', limit: 1 });
+  const { rows } = await sb.select<PlayerInfo>('player_info', { select: 'player_name,player_id', limit: 1 });
   return rows[0] || null;
 }
 export async function savePlayerInfo(p: PlayerInfo): Promise<void> {
-  await sb.upsert('player_info', { player_name: p.player_name, player_id: p.player_id, division: p.division }, 'user_id');
+  await sb.upsert('player_info', { player_name: p.player_name, player_id: p.player_id }, 'user_id');
 }
 
 export const searchCards =(q: string, fmt: Format, cat = '', lim = 24) =>

@@ -160,7 +160,7 @@ const unexpected = [];
 const deckDelay = {}; // deck id -> ms to hold the decks response
 const cardReqs = []; // { start, end, n } per /rest/v1/cards `in.` request
 const passkeyReqs = [];
-const PLAYER_INFO = { player_name: 'Test Player', player_id: '1234567', division: 'masters' };
+const PLAYER_INFO = { player_name: 'Test Player', player_id: '1234567' };
 const playerInfoWrites = [];
 const json = (route, body, extra = {}) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*', ...(extra.headers || {}) }, body: JSON.stringify(body) });
 async function handleSupabase(route) {
@@ -352,7 +352,7 @@ try {
     await dlg.getByLabel('Player name').fill('Ash Ketchum (Pallet)');
     await dlg.getByLabel('Player ID').fill('12ab345');
     if (await dlg.getByLabel('Player ID').inputValue() !== '12345') throw new Error('Player ID should keep digits only');
-    await dlg.getByLabel('Date of birth').fill('1997-04-01');
+    await dlg.getByLabel('Date of birth', { exact: true }).fill('1997-04-01');
     // a 1997 birth date picks Masters on this season's sheet
     if (await dlg.getByRole('radio', { name: 'Masters' }).getAttribute('aria-checked') !== 'true') throw new Error('division not picked from the birth date');
     await dlg.getByRole('button', { name: 'Open PDF to print' }).waitFor(T);
@@ -965,13 +965,12 @@ try {
     const pid = sec.locator('input[inputmode="numeric"]');
     await page.waitForFunction(() => document.querySelector('#registration input[inputmode="numeric"]')?.value === '1234567', null, T);
     if ((await sec.locator('input').first().inputValue()) !== 'Test Player') throw new Error('name not prefilled');
-    if ((await sec.locator('select').inputValue()) !== 'masters') throw new Error('division not prefilled');
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error('horizontal overflow at 360px');
     await pid.fill('7654321');
     await sec.getByRole('button', { name: 'Save details' }).click();
     await page.waitForFunction(() => document.body.innerText.includes('Tournament details saved'), null, T);
     const w = playerInfoWrites[0];
-    if (!w || w.body.player_id !== '7654321' || w.body.player_name !== 'Test Player' || w.body.division !== 'masters') throw new Error('bad save: ' + JSON.stringify(playerInfoWrites));
+    if (!w || w.body.player_id !== '7654321' || w.body.player_name !== 'Test Player' || 'division' in w.body) throw new Error('bad save: ' + JSON.stringify(playerInfoWrites));
     await page.context().close();
   });
   await scenario('14. nav has Matchups link', async () => {

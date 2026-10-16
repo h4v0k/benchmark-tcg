@@ -11,7 +11,7 @@ import { exportPTCGL } from '../../lib/decklist';
 import { validateDeck } from '../../lib/legality';
 import type { Line } from '../../lib/cards';
 import type { Format } from '../../lib/types';
-import { MAX_SHEETS, PREVIEW_URL, ROWS, divisionFor, drawOps, fillTemplate, loadTemplate, sheetCards, sheetPages, sheetsNeeded, type Division, type Op, type SheetInfo } from '../../lib/regsheet';
+import { MAX_SHEETS, PREVIEW_URL, ROWS, divisionFor, drawOps, fillTemplate, loadTemplate, sheetCanPrint, sheetCards, sheetPages, sheetsNeeded, type Division, type Op, type SheetInfo } from '../../lib/regsheet';
 
 const local = {
   get: (k: string) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } },
@@ -25,20 +25,22 @@ export function RegSheetModal({ lines, deckName, format, onClose }: { lines: Lin
   const [saved, setSaved] = useState<api.PlayerInfo | null>(null);
   const [info, setInfo] = useState<SheetInfo>(() => {
     const dob = local.get('bm:reg:dob');
-    return { playerName: '', playerId: '', dob, division: divisionFor(dob), format: format === 'expanded' ? 'expanded' : 'standard' };
+    return { playerName: '', playerId: '', dob, division: divisionFor(dob) || (local.get('bm:reg:division') as Division), format: format === 'expanded' ? 'expanded' : 'standard' };
   });
   const [remember, setRemember] = useState(true);
+  const [rememberDob, setRememberDob] = useState(true);
   const [template, setTemplate] = useState<Uint8Array | null>(null);
   const [loadError, setLoadError] = useState('');
+  const load = () => { setLoadError(''); loadTemplate().then(setTemplate, e => setLoadError(e.message || 'Couldn’t load the sheet.')); };
 
   useEffect(() => {
     // Fetched up front so the buttons can open the PDF right inside the tap (Safari blocks it otherwise).
-    loadTemplate().then(setTemplate, e => setLoadError(e.message || 'Couldn’t load the sheet.'));
+    load();
     if (!session) return;
     api.getPlayerInfo().then(p => {
       if (!p) return;
       setSaved(p);
-      setInfo(i => ({ ...i, playerName: i.playerName || p.player_name, playerId: i.playerId || p.player_id, division: i.dob ? i.division : i.division || p.division }));
+      setInfo(i => ({ ...i, playerName: i.playerName || p.player_name, playerId: i.playerId || p.player_id }));
     }).catch(() => { /* fill in by hand */ });
   }, [session]);
 
@@ -54,25 +56,26 @@ export function RegSheetModal({ lines, deckName, format, onClose }: { lines: Lin
 
   const warnings: string[] = [];
   if (!info.playerName.trim() || !info.playerId) warnings.push('Add your name and Player ID as they are on your Play! Pokémon account.');
+  if (!sheetCanPrint(info.playerName)) warnings.push('Some letters in your name can’t be printed by the sheet’s font and show as “?”. Write them in by hand.');
   if (!info.dob) warnings.push('Add your date of birth.');
   if (!info.division) warnings.push('Pick your age division.');
   if (total !== 60) warnings.push(`This deck has ${total} cards. A tournament deck has exactly 60.`);
-  if (format !== 'unlimited') {
-    for (const c of validateDeck(lines, format).filter(c => c.level === 'bad' && !/^\d+ cards$/.test(c.msg))) warnings.push(`${c.msg}${c.detail ? `: ${c.detail}` : ''}`);
+  if (info.format) {
+    for (const c of validateDeck(lines, info.format).filter(c => c.level === 'bad' && !/^\d+ cards$/.test(c.msg))) warnings.push(`${c.msg}${c.detail ? `: ${c.detail}` : ''}`);
   }
   const over = (['pokemon', 'trainer', 'energy'] as const).filter(k => cards[k].length > ROWS[k] * MAX_SHEETS);
   for (const k of over) warnings.push(`${cards[k].length} ${LABEL[k]} lines won’t fit on two sheets (${ROWS[k] * MAX_SHEETS} max); the rest won’t print.`);
   const sheets = sheetsNeeded(cards);
 
   const changed = !!session && (saved
-    ? info.playerName.trim() !== saved.player_name || info.playerId !== saved.player_id || info.division !== saved.division
-    : !!(info.playerName.trim() || info.playerId || info.division));
+    ? info.playerName.trim() !== saved.player_name || info.playerId !== saved.player_id
+    : !!(info.playerName.trim() || info.playerId));
   const fileName = ['Deck list', info.playerName.trim(), deckName.trim()].filter(Boolean).join(' - ').replace(/[\\/:*?"<>|]+/g, '').slice(0, 120);
 
   const keep = () => {
-    local.set('bm:reg:dob', info.dob);
+    if (rememberDob) { local.set('bm:reg:dob', info.dob); local.set('bm:reg:division', info.division); } else { local.set('bm:reg:dob', ''); local.set('bm:reg:division', ''); }
     if (session && changed && remember) {
-      const p: api.PlayerInfo = { player_name: info.playerName.trim().slice(0, 60), player_id: info.playerId, division: info.division };
+      const p: api.PlayerInfo = { player_name: info.playerName.trim().slice(0, 60), player_id: info.playerId };
       api.savePlayerInfo(p).then(() => setSaved(p)).catch((e: any) => toast(`Couldn’t save your details: ${e.message}`, 'bad'));
     }
   };
@@ -118,13 +121,14 @@ export function RegSheetModal({ lines, deckName, format, onClose }: { lines: Lin
           </div>
           {session
             ? changed
-              ? <label className="check-row"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} /> Save name, Player ID and division to my settings</label>
+              ? <label className="check-row"><input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} /> Save name and Player ID to my settings</label>
               : saved && <p className="muted small">From your <Link to="/settings#registration">settings</Link>. Only you can see them.</p>
             : <p className="muted small"><Link to="/login">Sign in</Link> to have your details filled in every time.</p>}
-          <p className="muted small">Your date of birth stays on this device.</p>
+          <label className="check-row"><input type="checkbox" checked={rememberDob} onChange={e => setRememberDob(e.target.checked)} /> Remember my date of birth and division on this device (never sent to Benchmark)</label>
           {sheets > 1 && <p className="notice info"><Icon name="info" size={15} />This deck needs {sheets} sheets: the Pokémon, Trainer or Energy lines don’t all fit on one. Hand in both.</p>}
-          {loadError && <p className="notice warn"><Icon name="warn" size={15} />{loadError}</p>}
+          {loadError && <p className="notice warn"><Icon name="warn" size={15} /><span>{loadError} <button type="button" className="link-btn" onClick={load}>Try again</button></span></p>}
           {warnings.length > 0 && <ul className="reg-warn" role="status">{warnings.map(w => <li key={w}>{w}</li>)}</ul>}
+          <p className="muted small">Official Play! Pokémon deck list © Pokémon, reproduced under its noncommercial permission.</p>
           <button type="submit" hidden />
         </form>
         <div className="reg-sheets">{pages.map((ops, i) => <SheetPreview key={i} ops={ops} label={`Sheet ${i + 1} of ${pages.length}`} />)}</div>

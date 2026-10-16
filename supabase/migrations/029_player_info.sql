@@ -1,11 +1,11 @@
 -- Private tournament details for deck registration sheets. Only the owner can read or write their row.
--- Date of birth is deliberately NOT stored here: it stays on the device.
+-- Date of birth and age division are deliberately NOT stored here: anything that tells us a player's age
+-- stays on their device.
 
 create table if not exists public.player_info (
   user_id uuid primary key references public.profiles(id) on delete cascade default auth.uid(),
   player_name text not null default '' check (char_length(player_name) <= 60),
   player_id text not null default '' check (player_id ~ '^[0-9]{0,12}$'),
-  division text not null default '' check (division in ('', 'junior', 'senior', 'masters')),
   updated_at timestamptz not null default now()
 );
 alter table public.player_info enable row level security;

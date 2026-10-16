@@ -162,10 +162,11 @@ select public.tourney_tick();
 select pg_temp.ok('empty standings: still new, one try counted', (select status = 'new' and standings_tries = 1 from public.tournaments where id = 990001));
 select pg_temp.ok('events older than the window are closed', (select status from public.tournaments where id = 990002) = 'done');
 
+select pg_temp.ok('no age data on the server', not exists (select 1 from information_schema.columns where table_name = 'player_info' and column_name in ('division', 'birth_date', 'dob')));
 -- ---------- 029: player_info (private tournament details) ----------
 set role authenticated; set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
-insert into public.player_info (player_name, player_id, division) values ('Alice A', '1234567', 'masters');
-select pg_temp.ok('alice saves her player info and reads it back', (select player_name = 'Alice A' and player_id = '1234567' and division = 'masters'
+insert into public.player_info (player_name, player_id) values ('Alice A', '1234567');
+select pg_temp.ok('alice saves her player info and reads it back', (select player_name = 'Alice A' and player_id = '1234567'
   and user_id = '11111111-1111-1111-1111-111111111111' from public.player_info));
 reset role; reset request.jwt.claim.sub;
 set role authenticated; set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';

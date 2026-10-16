@@ -62,9 +62,10 @@ export function SettingsPage() {
 }
 
 function RegistrationInfo() {
-  const [info, setInfo] = useState<api.PlayerInfo>({ player_name: '', player_id: '', division: '' });
+  const [info, setInfo] = useState<api.PlayerInfo>({ player_name: '', player_id: '' });
   const [busy, setBusy] = useState(false);
-  useEffect(() => { let alive = true; api.getPlayerInfo().then(p => { if (alive && p) setInfo(p); }).catch(() => {}); return () => { alive = false; }; }, []);
+  // Fill in only fields still empty, so a slow load doesn't overwrite what someone already typed.
+  useEffect(() => { let alive = true; api.getPlayerInfo().then(p => { if (alive && p) setInfo(i => ({ player_name: i.player_name || p.player_name, player_id: i.player_id || p.player_id })); }).catch(() => {}); return () => { alive = false; }; }, []);
   const save = async () => {
     setBusy(true);
     try { await api.savePlayerInfo({ ...info, player_name: info.player_name.trim().slice(0, 60) }); toast('Tournament details saved', 'ok'); } catch (e: any) { toast(e.message, 'bad'); }
@@ -76,12 +77,7 @@ function RegistrationInfo() {
       <form onSubmit={e => { e.preventDefault(); save(); }}>
         <label className="field"><span>Player name (as on your Play! Pokémon account)</span><input value={info.player_name} maxLength={60} autoComplete="name" onChange={e => setInfo({ ...info, player_name: e.target.value })} /></label>
         <label className="field"><span>Player ID</span><input value={info.player_id} inputMode="numeric" pattern="[0-9]*" maxLength={12} autoComplete="off" onChange={e => setInfo({ ...info, player_id: e.target.value.replace(/\D/g, '').slice(0, 12) })} /></label>
-        <label className="field"><span>Age division</span>
-          <select value={info.division} onChange={e => setInfo({ ...info, division: e.target.value as api.PlayerInfo['division'] })}>
-            <option value="">Not set</option><option value="junior">Junior</option><option value="senior">Senior</option><option value="masters">Masters</option>
-          </select>
-        </label>
-        <p className="muted small">Used to fill in deck registration sheets. Only you can see these. Your date of birth is entered on the sheet itself and stays on this device.</p>
+        <p className="muted small">Used to fill in deck registration sheets. Only you can see these. Your date of birth and age division are entered on the sheet itself and stay on this device.</p>
         <div className="row-end"><button className="btn primary" disabled={busy}>Save details</button></div>
       </form>
     </section>

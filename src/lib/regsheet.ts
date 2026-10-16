@@ -43,8 +43,11 @@ export type Op =
 // Card names use a few characters the PDF standard fonts don't have.
 const SUBST: Record<string, string> = { '♀': ' F', '♂': ' M', '◇': ' Prism Star', '☆': ' Star', '★': ' Star', 'δ': ' Delta' };
 export function sheetText(s: string): string {
-  return [...s.normalize('NFC')].map(ch => SUBST[ch] ?? ch).join('').replace(/\s+/g, ' ').trim();
+  return [...s.normalize('NFC')].map(ch => SUBST[ch] ?? (printable(ch) ? ch : '?')).join('').replace(/\s+/g, ' ').trim();
 }
+/** True when the sheet's fonts (Helvetica, WinAnsi) can print every character of s. */
+export const sheetCanPrint = (s: string) => [...s.normalize('NFC')].every(ch => SUBST[ch] != null || printable(ch));
+function printable(ch: string) { const c = ch.codePointAt(0)!; return (c >= 0x20 && c < 0x7f) || (c >= 0xa0 && c <= 0xff) || CP1252[ch] != null; }
 const CP1252: Record<string, number> = { '€': 0x80, '‚': 0x82, 'ƒ': 0x83, '„': 0x84, '…': 0x85, '†': 0x86, '‡': 0x87, 'ˆ': 0x88, '‰': 0x89, 'Š': 0x8a, '‹': 0x8b, 'Œ': 0x8c, 'Ž': 0x8e, '‘': 0x91, '’': 0x92, '“': 0x93, '”': 0x94, '•': 0x95, '–': 0x96, '—': 0x97, '˜': 0x98, '™': 0x99, 'š': 0x9a, '›': 0x9b, 'œ': 0x9c, 'ž': 0x9e, 'Ÿ': 0x9f };
 function winAnsi(s: string): string {
   let out = '';
@@ -60,6 +63,7 @@ function winAnsi(s: string): string {
 // Helvetica advance widths (1/1000 em) for ASCII 32–126, from the standard font metrics.
 const HW = [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
 const HBW = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584];
+const WIDE: Record<string, number> = { '…': 1000, '’': 222, '‘': 222, '“': 333, '”': 333, '–': 556, '—': 1000, '•': 350, '×': 584, 'é': 556, 'É': 667 };
 /** Width in inches of s at `size` points. Accented letters use their base letter's width. */
 export function textWidth(s: string, size: number, font: Font = 'H'): number {
   const tbl = font === 'HB' ? HBW : HW;
@@ -67,7 +71,7 @@ export function textWidth(s: string, size: number, font: Font = 'H'): number {
   for (const ch of s.normalize('NFD')) {
     const c = ch.codePointAt(0)!;
     if (c >= 0x300 && c < 0x370) continue;
-    w += c >= 32 && c <= 126 ? tbl[c - 32] : 556;
+    w += c >= 32 && c <= 126 ? tbl[c - 32] : WIDE[ch] ?? 556;
   }
   return (w / 1000) * size / 72;
 }
@@ -116,10 +120,10 @@ export function sheetPages(info: SheetInfo, cards: SheetCards): Op[][] {
     if (info.format === 'standard') g.check(2.164, 0.633, 2.268, 0.764);
     if (info.format === 'expanded') g.check(2.856, 0.633, 2.959, 0.764);
     g.fit(1.45, 1.1, 11, 'HB', sheetText(info.playerName), 1.82);
-    g.fit(3.96, 1.1, 11, 'HB', info.playerId, 1.2);
+    g.fit(3.96, 1.1, 11, 'HB', sheetText(info.playerId), 1.2);
     g.center(6.998, 1.1, 10.5, 'HB', mm, 0.3);
     g.center(7.34, 1.1, 10.5, 'HB', dd, 0.3);
-    g.center(7.875, 1.1, 10.5, 'HB', yy, 0.45);
+    g.center(7.85, 1.1, 10, 'HB', yy, 0.42);
     const div: Record<string, number> = { junior: 1.512, senior: 1.699, masters: 1.887 };
     if (div[info.division]) g.check(5.211, div[info.division], 5.306, div[info.division] + 0.119);
     if (n > 1) g.text(6.55, 0.56, 8, 'HB', `Sheet ${p + 1} of ${n}`);
@@ -168,7 +172,8 @@ export function fillTemplate(template: Uint8Array, pages: Op[][], title: string)
   });
   const kids = TPL.page.slice(0, pages.length).map(n => `${n} 0 R`).join(' ');
   objs.push([TPL.pages, `<< ${TPL.pagesDict} /Kids [${kids}] /Count ${pages.length} >>`]);
-  objs.push([TPL.info, `<< /Title (${winAnsi(title)}) /Producer (Benchmark - benchmarktcg.us) >>`]);
+  const ascii = title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[’‘]/g, "'").replace(/[^\x20-\x7e]/g, '').trim() || 'Deck list';
+  objs.push([TPL.info, `<< /Title (${winAnsi(ascii)}) /Producer (Benchmark - benchmarktcg.us) >>`]);
   objs.sort((a, b) => a[0] - b[0]);
 
   let body = '\n';

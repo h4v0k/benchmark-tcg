@@ -211,6 +211,8 @@ export const auth = {
   async setPassword(password: string) { await authFetch('user', { password }, true); },
   async signOut() {
     try { if (session) await fetch(`${base}/auth/v1/logout`, { method: 'POST', headers: { apikey: anon, Authorization: `Bearer ${session.access_token}` }, signal: timeoutSignal(5000) }); } catch { /* offline */ }
+    // Details kept on this device for registration sheets go with the account.
+    try { for (const k of ['bm:reg:dob', 'bm:reg:division']) localStorage.removeItem(k); } catch { /* storage blocked */ }
     save(null);
   },
   /** Picks up tokens Supabase puts in the URL after email confirmation or a password reset. */
