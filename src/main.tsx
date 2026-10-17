@@ -26,7 +26,8 @@ function legacyRedirect() {
   // Never leave a blank page: if the link check hangs or fails, render anyway.
   let gaveUp = false;
   const slow = new Promise<{ error: string }>(res => setTimeout(() => { gaveUp = true; res({ error: 'That took too long. Try the link again, or sign in.' }); }, 6000));
-  const fromLink = await Promise.race([auth.fromUrl(() => !gaveUp), slow]).catch(() => ({ error: 'Something went wrong with that link. Try again.' }));
+  type LinkResult = { type?: string; error?: string; email?: string } | null;
+  const fromLink: LinkResult = await Promise.race<LinkResult>([auth.fromUrl(() => !gaveUp), slow]).catch(() => ({ error: 'Something went wrong with that link. Try again.' }));
   // Back from Google: return to the page they signed in from.
   try {
     const next = sessionStorage.getItem('bm-next');
