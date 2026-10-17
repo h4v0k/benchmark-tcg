@@ -18,6 +18,79 @@ const KIND_TONE: Record<string, 'info' | 'accent' | 'ok'> = { regional: 'info', 
 const ord = (n: number) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
 const LimitlessCredit = () => <p className="muted small credit">Results and lists from <a href="https://limitlesstcg.com" target="_blank" rel="noopener noreferrer">Limitless</a>. Prices from TCGplayer.</p>;
 
+const clock = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+const record = (s: api.LiveStanding) => `${s.wins}-${s.losses}-${s.ties}`;
+function liveStatus(e: api.LiveEvent) {
+  if (!e.live) return 'Finished · final lists post soon';
+  if (!e.round) return 'Starting';
+  return e.rounds && e.round > e.rounds ? 'Top cut' : `Round ${e.round}${e.rounds ? ` of ${e.rounds}` : ''}`;
+}
+function LiveMeta({ e }: { e: api.LiveEvent }) {
+  const when = e.updated_at || e.checked_at;
+  return (
+    <p className="muted small live-meta">
+      {e.live ? <span className="live-dot" aria-hidden="true" /> : null}<b>{liveStatus(e)}</b>
+      {e.players ? ` · ${e.players.toLocaleString()} players` : ''}{e.country ? ` · ${e.country}` : ''}
+      {when ? <> · Updated {clock(when)}{e.live ? ' (checked hourly)' : ''}</> : null}
+    </p>
+  );
+}
+function LiveRows({ rows }: { rows: api.LiveStanding[] }) {
+  return (
+    <ol className="standings live-standings">
+      {rows.map(s => (
+        <li key={s.pos}><div className="st-row off">
+          <span className="st-place">{s.placement ? ord(s.placement) : '–'}</span>
+          <span className="grow st-main">
+            <b>{s.deck_name || 'Deck not listed yet'}</b>
+            <span className="muted small">{s.name}{s.country ? ` · ${s.country}` : ''}{s.dropped ? ' · dropped' : ''}</span>
+          </span>
+          <span className="st-side">{record(s)}</span>
+        </div></li>
+      ))}
+    </ol>
+  );
+}
+function LiveSection() {
+  const live = useAsync(() => api.liveEvents(8), []);
+  if (!live.data?.length) return null;
+  return (
+    <section className="live-section" aria-label="Events in progress">
+      {live.data.map(e => (
+        <div key={e.id} className="panel live-panel">
+          <div className="panel-head">
+            <h2>{e.name}</h2>
+            <Tag tone={e.live ? 'bad' : 'ok'}>{e.live ? 'Live' : 'Finished'}</Tag>
+          </div>
+          <LiveMeta e={e} />
+          <LiveRows rows={e.standings} />
+          <Link className="small" to={`/events/live/${e.id}`}>Full standings →</Link>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+export function LiveEventPage({ id }: { id: string }) {
+  const [limit, setLimit] = useState(64);
+  const r = useAsync(() => api.liveEvent(id, limit), [id, limit]);
+  if (r.loading && !r.data) return <Spinner />;
+  if (r.error) return <div className="wrap page"><ErrorBox error={r.error} onRetry={r.reload} /></div>;
+  if (!r.data) return <div className="wrap page"><Empty title="No live standings for this event" icon="list"><p>Final results show on the Tournaments page once Limitless posts them.</p><Link to="/events" className="btn">All tournaments</Link></Empty></div>;
+  const e = r.data;
+  return (
+    <div className="wrap page">
+      <p className="crumbs"><Link to="/events">Tournaments</Link></p>
+      <div className="page-head"><h1>{e.name}</h1><Tag tone={e.live ? 'bad' : 'ok'}>{e.live ? 'Live' : 'Finished'}</Tag></div>
+      <LiveMeta e={e} />
+      <p className="muted small">Masters standings. Decks show once players' lists are revealed; full lists post after the event.</p>
+      <LiveRows rows={e.standings} />
+      {(e.total || 0) > e.standings.length && <button type="button" className="btn more-btn" onClick={() => setLimit(l => l + 192)}>Show more ({(e.total! - e.standings.length).toLocaleString()} left)</button>}
+      <p className="muted small credit">Live standings from <a href="https://labs.limitlesstcg.com" target="_blank" rel="noopener noreferrer">Limitless Labs</a>.</p>
+    </div>
+  );
+}
+
 export function EventsPage() {
   const ev = useAsync(() => api.tournaments(), []);
   const jp = useAsync(() => api.jpInfo(), []);
@@ -31,6 +104,7 @@ export function EventsPage() {
       <div className="page-head"><h1>Tournaments</h1><RegionSwitch value="world" /></div>
       <SyncNote info={jp.data} compact />
       <p className="muted lede">Top 32 from Regionals, Internationals and Worlds. Open any list to test it, check prices, or copy it to your decks. To see what each deck beats and loses to, open <Link to="/matchups">Matchups</Link>.</p>
+      <LiveSection />
 
       <section className="panel meta-panel">
         <div className="panel-head"><h2>What’s winning</h2>

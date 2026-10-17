@@ -291,6 +291,12 @@ export type Tournament = { id: number; name: string; date: string; country: stri
 export type TourneyDeck = { tournament_id: number; place: number; player: string; country: string; archetype: string; list_id: number | null; card_count: number | null; price: number | null; cards?: DeckEntry[] | null; missing?: string[] };
 export type MetaRow = { archetype: string; top32: number; top8: number; wins: number; events: number; best_tournament: number | null; best_place: number | null };
 const T_COLS = 'id,name,date,country,players,kind,status';
+
+/* Live (and just-finished) official events, from Limitless Labs; refreshed hourly while they run. */
+export type LiveStanding = { pos: number; placement: number | null; name: string; country: string; wins: number; losses: number; ties: number; points: number; deck: string; deck_name: string; dropped: boolean; day2: boolean; topcut: boolean };
+export type LiveEvent = { id: string; name: string; city: string; country: string; kind: string; date: string; live: boolean; players: number | null; round: number | null; rounds: number | null; updated_at: string | null; checked_at: string | null; finished_at: string | null; total?: number; standings: LiveStanding[] };
+export const liveEvents = (top = 8) => sb.rpc<LiveEvent[]>('live_events', { p_top: top });
+export const liveEvent = (id: string, limit = 256, offset = 0) => sb.rpc<LiveEvent | null>('live_event', { p_id: id, p_limit: limit, p_offset: offset });
 export async function tournaments(): Promise<(Tournament & { lists: number })[]> {
   const { rows } = await sb.select<Tournament & { tournament_decks: { count: number }[] }>('tournaments',
     { select: `${T_COLS},tournament_decks(count)`, 'tournament_decks.cards': 'not.is.null', status: 'neq.new', order: 'date.desc', limit: 60 });

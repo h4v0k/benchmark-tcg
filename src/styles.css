@@ -819,3 +819,14 @@ a.mu-row.mu-deck-link:hover .mu-name b { text-decoration: underline; text-underl
 @media (max-width: 760px) {
   .reg-layout { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Live events on the Tournaments page */
+.live-section { display: grid; gap: 12px; margin: 12px 0 18px; }
+.live-panel .panel-head h2 { font-size: 1.15rem; overflow-wrap: anywhere; }
+.live-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 4px; margin: 0 0 10px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); margin-right: 4px; animation: live-pulse 1.6s ease-in-out infinite; }
+@keyframes live-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+.live-standings { margin-bottom: 10px; }
+.live-standings .st-side { font-variant-numeric: tabular-nums; }
+.more-btn { display: block; margin: 12px auto; }

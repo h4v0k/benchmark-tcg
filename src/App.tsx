@@ -18,6 +18,7 @@ const MyDecks = lazy(() => import('./pages/MyDecks').then(m => ({ default: m.MyD
 const Feed = lazy(() => import('./pages/Feed').then(m => ({ default: m.Feed })));
 const RulesPage = lazy(() => import('./pages/Rules').then(m => ({ default: m.RulesPage })));
 const EventsPage = lazy(() => import('./pages/Events').then(m => ({ default: m.EventsPage })));
+const LiveEventPage = lazy(() => import('./pages/Events').then(m => ({ default: m.LiveEventPage })));
 const EventPage = lazy(() => import('./pages/Events').then(m => ({ default: m.EventPage })));
 const EventDeckPage = lazy(() => import('./pages/Events').then(m => ({ default: m.EventDeckPage })));
 const JapanPage = lazy(() => import('./pages/Japan').then(m => ({ default: m.JapanPage })));
@@ -77,6 +78,7 @@ const ROUTES: [string, (p: Record<string, string>) => ReactElement][] = [
   ['/events/japan/card/:name', p => <JapanCardPage name={p.name} />],
   ['/events/japan/:id', p => isJpId(p.id) ? <JapanEventPage id={p.id} /> : <NotFound />],
   ['/events/japan/:id/:place', p => isJpId(p.id) && isId(p.place) ? <JapanDeckPage id={p.id} place={+p.place} /> : <NotFound />],
+  ['/events/live/:id', p => /^\d{1,6}$/.test(p.id) ? <LiveEventPage id={p.id} /> : <NotFound />],
   ['/events/:id', p => isId(p.id) ? <EventPage id={+p.id} /> : <NotFound />],
   ['/events/:id/:place', p => isId(p.id) && isId(p.place) ? <EventDeckPage id={+p.id} place={+p.place} /> : <NotFound />],
   ['/matchups', () => <MatchupsPage />],
