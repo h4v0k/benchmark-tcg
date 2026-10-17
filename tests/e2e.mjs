@@ -8,7 +8,9 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = path.join(ROOT, 'dist');
-const OUT = '/tmp/claude-0/-home-claude/4df323f2-1f99-574d-acaf-99e0e324586e/scratchpad';
+// Screenshots go here (E2E_OUT, or a folder in the system temp dir); never a machine-specific path.
+const OUT = process.env.E2E_OUT || path.join((await import('node:os')).tmpdir(), 'benchmark-e2e');
+fs.mkdirSync(OUT, { recursive: true });
 fs.mkdirSync(OUT, { recursive: true });
 const DECK_ID = '11111111-1111-1111-1111-111111111111';
 const NOW = '2026-10-05T00:00:00Z';
@@ -475,7 +477,7 @@ try {
   });
   const overflowOf = p => p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   const BIG = 'body{font-size:24px}';
-  const shotP = (p, f) => p.screenshot({ path: '/home/claude/' + f, fullPage: true });
+  const shotP = (p, f) => p.screenshot({ path: path.join(OUT, f), fullPage: true });
   const noOverflow = async (p, what) => { const o = await overflowOf(p); if (o > 1) throw new Error(`${what}: horizontal overflow of ${o}px`); };
   const sec = (p, t) => p.locator('section.mu-section', { has: p.getByRole('heading', { name: t }) });
   const deckReady = async p => { await p.getByRole('heading', { name: 'Dragapult', level: 1 }).waitFor({ state: 'visible', ...T }); await sec(p, 'Other matchups').locator('li').first().waitFor({ state: 'visible', ...T }); };

@@ -957,3 +957,7 @@ a.mu-row.mu-deck-link:hover .mu-name b { text-decoration: underline; text-underl
 .icon-btn { min-width: 32px; min-height: 32px; width: auto; height: auto; }
 .error-stack { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8em; max-height: 240px; overflow-y: auto; background: var(--bg2); padding: 8px; border-radius: 6px; }
 @media (pointer: coarse) { .pager .btn { height: auto; min-height: 44px; } }
+/* Event rows: on narrow screens (or with wide/large text) the tags drop under the name instead of pushing the page sideways */
+.event-row { flex-wrap: wrap; }
+.event-side { flex: 0 1 auto; min-width: 0; }
+.event-side > * { max-width: 100%; overflow-wrap: anywhere; }
