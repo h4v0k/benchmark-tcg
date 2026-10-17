@@ -838,7 +838,10 @@ try {
     const sel = lsec(page);
     await sel.getByText('Selected list', { exact: true }).waitFor({ state: 'visible', ...T });
     await sel.getByText(DECK.cards[0].name).first().waitFor({ state: 'visible', ...T });
-    const ev = await sel.getByRole('link', { name: 'Event' }).getAttribute('href');
+    // the selected-list panel re-renders after the click; wait for the new list's link instead of reading the old one
+    const evLink = sel.getByRole('link', { name: 'Event' });
+    const ev = await page.waitForFunction(() => [...document.querySelectorAll('a')].some(a => a.textContent?.trim() === 'Event' && a.getAttribute('href') === '/events/580'), null, T)
+      .then(() => '/events/580', async () => evLink.getAttribute('href'));
     if (ev !== '/events/580') throw new Error(`official Event href: ${ev}`);
     if (await sel.getByText(/null|undefined/).count()) throw new Error('null/undefined shown');
     await noOverflow(page, 'official list');
