@@ -56,9 +56,12 @@ export function cardRow(c: any) {
   const abilities = (c.abilities || []).map((a: any) => ({ name: a.name || "", type: a.type || "", effect: a.effect || "" }));
   // Gameplay identity. Trainers and Special Energy go by name (the reprint rule);
   // Pokémon by name, HP, Abilities and attacks.
+  // The data source tags some Trainer prints with the pictured character, e.g. "Boss's Orders (Giovanni)"
+  // or "Professor's Research (Professor Oak)". That tag isn't part of the card's name, so drop it here,
+  // or those prints never match their legal reprints.
   const sig = category === "Pokemon"
     ? ["P", normName(name), c.hp || "", abilities.map((a) => normName(a.name)).join(","), attacks.map((a) => `${normName(a.name)}:${a.damage}`).join(",")].join("|")
-    : `${category === "Energy" ? "E" : "T"}|${normName(name)}`;
+    : `${category === "Energy" ? "E" : "T"}|${normName(name.replace(/\s*\([^)]*\)\s*$/, ""))}`;
   const variants = Object.entries(c.variants || {}).filter(([k, v]) => v && VARIANT_KEY[k]).map(([k]) => VARIANT_KEY[k]);
   // exact TCGplayer products per finish, from TCGdex's variant details
   const tcgp: Record<string, number> = {};

@@ -26,8 +26,10 @@ export function validateDeck(lines: Line[], format: Format, rules?: Rules | null
   const n = sum(main, l => l.qty);
   out.push(n === 60 ? { level: 'ok', msg: '60 cards' } : { level: 'bad', msg: `${n} cards`, detail: n < 60 ? `Add ${60 - n} more. A deck has exactly 60 cards.` : `Remove ${n - 60}. A deck has exactly 60 cards.` });
 
+  // Trainer prints tagged with their character ("Boss's Orders (Giovanni)") are the same card for the 4-copy rule.
+  const copyName = (l: Line) => l.card && l.card.category !== 'Pokemon' ? l.name.replace(/\s*\([^)]*\)\s*$/, '') : l.name;
   const byName = new Map<string, number>();
-  for (const l of main) if (!isBasicEnergy(l)) byName.set(l.name, (byName.get(l.name) || 0) + l.qty);
+  for (const l of main) if (!isBasicEnergy(l)) byName.set(copyName(l), (byName.get(copyName(l)) || 0) + l.qty);
   const over = [...byName].filter(([, q]) => q > 4);
   out.push(over.length
     ? { level: 'bad', msg: 'More than 4 copies', detail: over.map(([nm, q]) => `${nm} (${q})`).join(', '), cards: over.map(([nm]) => nm) }
