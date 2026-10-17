@@ -106,7 +106,8 @@ const HEAD = {
     };
   },
   async profile(r, q) {
-    const [p] = await q(`profiles?username=eq.${encodeURIComponent(r.args[0])}&select=username,bio&limit=1`);
+    // case-insensitive, same as the app (src/lib/api.ts), with wildcard characters removed
+    const [p] = await q(`profiles?username=ilike.${encodeURIComponent(r.args[0].replace(/[%_*,()]/g, ''))}&select=username,bio&limit=1`);
     if (!p) return NOT_FOUND;
     return { title: `${p.username} · Decks`, description: trunc(clean(p.bio) || `Pokémon TCG decks by ${p.username} on Benchmark.`, 200) };
   },
@@ -148,7 +149,7 @@ export async function headFor(route) {
     info = got ? { ...DEFAULT, ...got } : { ...DEFAULT };
   }
   info = info || { ...DEFAULT };
-  const title = /Benchmark/.test(info.title) ? info.title : `${info.title} · Benchmark`;
+  const title = /(^Benchmark\b|· Benchmark$)/.test(info.title) ? info.title : `${info.title} · Benchmark`;
   return { ...info, title, url: route.path === '/' ? SITE + '/' : SITE + route.path };
 }
 

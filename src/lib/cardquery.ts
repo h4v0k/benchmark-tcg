@@ -36,7 +36,7 @@ const unquote = (s: string) => s.replace(/^"/, '').replace(/"$/, '');
 const isNum = (v: string) => /^-?\d+(\.\d+)?$/.test(v);
 
 // The database enforces the same limits (search_cards_q).
-const MAX_GROUPS = 10, MAX_CLAUSES = 20, MAX_VALUE = 100;
+const MAX_GROUPS = 10, MAX_CLAUSES = 20, MAX_VALUE = 100, MAX_TEXT = 4; // same limits as search_cards_q
 
 type R = { clause: Clause } | { error: string };
 const bad = (error: string): R => ({ error });
@@ -110,6 +110,8 @@ export function parseCardQuery(q: string): CardQuery {
     if (r.clause.v) groups[groups.length - 1].push(r.clause);
   }
   const live = groups.filter(g => g.length);
+  if (live.flat().filter(c => c.f === 'text' || c.f === 'atk' || c.f === 'ab').length > MAX_TEXT)
+    return { groups: [], error: `That search is too long: use at most ${MAX_TEXT} text, attack or ability conditions.`, simple: false, empty: false };
   if (live.length > MAX_GROUPS || live.reduce((n, g) => n + g.length, 0) > MAX_CLAUSES || live.some(g => g.some(c => c.v.length > MAX_VALUE)))
     return { groups: [], error: `That search is too long: use at most ${MAX_GROUPS} "or" groups, ${MAX_CLAUSES} conditions in all, and ${MAX_VALUE} characters per value.`, simple: false, empty: false };
   return { groups: live, simple: simple && live.length === 1, empty: !live.length };

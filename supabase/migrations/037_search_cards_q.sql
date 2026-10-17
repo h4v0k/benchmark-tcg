@@ -35,7 +35,7 @@ language plpgsql immutable set search_path = public, extensions as $$
 declare
   f text; op text; v text; n numeric; lit text; nlit text; e text; arr text;
 begin
-  if jsonb_typeof(cl) <> 'object' then return 'false'; end if;
+  if jsonb_typeof(cl) <> 'object' then raise exception 'Search condition must be an object.'; end if;
   f := cl->>'f';
   op := case coalesce(cl->>'op', ':') when ':' then '=' when '=' then '=' when '!=' then '<>' when '>' then '>' when '>=' then '>='
           when '<' then '<' when '<=' then '<=' else null end;
@@ -88,7 +88,9 @@ begin
       when 'gx' then 'lower(c.suffix) = ''gx'''
       when 'v' then '(lower(c.suffix) = ''v'' or lower(c.stage) in (''vstar'', ''vmax''))'
       else 'false' end
-    else 'false' end;
+    else null end;
+  -- an unknown field is an error, not "matches nothing" (negated, that would match every card)
+  if e is null then raise exception 'Unknown search field: %', left(coalesce(f, ''), 20); end if;
   return format('coalesce(%s, false)', e);
 end $$;
 
@@ -99,7 +101,7 @@ create or replace function public.search_cards_q(p_clauses jsonb, p_fmt text def
  set search_path to 'public', 'extensions'
 as $function$
 declare
-  grp jsonb; cl jsonb; ors text[] := '{}'; ands text[]; ncl int := 0; ngrp int := 0; t text;
+  grp jsonb; cl jsonb; ors text[] := '{}'; ands text[]; ncl int := 0; ngrp int := 0; t text; ntext int := 0;
   sql text;
 begin
   if jsonb_typeof(p_clauses) is distinct from 'array' then return; end if;
@@ -114,6 +116,11 @@ begin
       ncl := ncl + 1;
       if ncl > 20 or (jsonb_typeof(cl) = 'object' and char_length(coalesce(cl->>'v', '')) > 100) then
         raise exception 'Search is too complex: use at most 10 OR groups, 20 conditions in all, and values up to 100 characters.';
+      end if;
+      -- rules-text conditions scan every card's text (~0.3 s each), so a search may have at most 4 of them
+      if jsonb_typeof(cl) = 'object' and cl->>'f' in ('text', 'atk', 'ab') then
+        ntext := ntext + 1;
+        if ntext > 4 then raise exception 'Search is too complex: use at most 4 text, attack or ability conditions.'; end if;
       end if;
       ands := ands || (case when coalesce(cl->>'neg', 'false') in ('true', 't') then 'not ' else '' end || public.card_clause_sql(cl));
     end loop;

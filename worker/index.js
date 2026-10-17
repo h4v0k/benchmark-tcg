@@ -1,3 +1,4 @@
+import { PAGE_HEADERS } from './headers.js';
 // Cloudflare Worker in front of the static site.
 // Handles /img/*, /sitemap.xml and HTML page requests (see run_worker_first in wrangler.jsonc); built files are served
 // straight from the static assets. /img/* re-serves TCGdex card art from our own domain so the deck
@@ -57,6 +58,7 @@ async function page(request, env, url) {
   // index.html's ETag/Last-Modified don't describe the rewritten page (a renamed deck would keep its old title)
   const headers = new Headers(shell.headers);
   headers.delete('ETag'); headers.delete('Last-Modified');
+  for (const [k, v] of Object.entries(PAGE_HEADERS)) headers.set(k, v);
   headers.set('Cache-Control', 'no-cache');
   const route = matchRoute(url.pathname);
   if (!route) return new Response(shell.body, { status: 404, headers });

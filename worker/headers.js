@@ -1,0 +1,11 @@
+// Security headers for HTML pages the Worker serves. Cloudflare doesn't promise to apply public/_headers to
+// Worker responses, so the Worker sets them itself. Must match the /* block of public/_headers (a unit test checks).
+export const PAGE_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "X-Frame-Options": "DENY",
+  "Strict-Transport-Security": "max-age=31536000",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+  "Content-Security-Policy": "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://assets.tcgdex.net https://tcgplayer-cdn.tcgplayer.com; connect-src 'self' https://rnujzhrfiqjfjqskekpt.supabase.co https://cloudflareinsights.com https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests",
+};

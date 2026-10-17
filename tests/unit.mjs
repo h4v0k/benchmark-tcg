@@ -260,5 +260,11 @@ t('worker route list covers every app route', () => {
     assert.ok(matchRoute(path), `worker/seo.js ROUTE_LIST has no entry for ${pat}`);
   }
 });
+const { PAGE_HEADERS } = await import('../worker/headers.js');
+t('worker page headers match public/_headers', () => {
+  const blk = fs.readFileSync(new URL('../public/_headers', import.meta.url), 'utf8').split(/^\/\*\s*$/m)[1].split(/\n\s*\n/)[0];
+  const want = Object.fromEntries(blk.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(l => [l.slice(0, l.indexOf(':')).trim(), l.slice(l.indexOf(':') + 1).trim()]));
+  assert.deepEqual(PAGE_HEADERS, want);
+});
 console.log(`unit: ${n} groups ok`);
 await import('./rules-parse.test.mjs');
