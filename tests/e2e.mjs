@@ -273,7 +273,7 @@ async function newPage(viewport) {
 async function scenario(name, fn) {
   const before = pageErrors.length;
   try { await fn(); const n = pageErrors.length - before; if (n) throw new Error(`${n} page/console error(s) during scenario`); results.push([name, true]); console.log(`PASS  ${name}`); }
-  catch (e) { results.push([name, false]); console.log(`FAIL  ${name}\n      ${String(e.message).split('\n').slice(0, 6).join('\n      ')}`); }
+  catch (e) { results.push([name, false]); console.log(`FAIL  ${name}\n      ${String(e.message).split('\n').slice(0, 6).join('\n      ')}`);  if (process.env.GITHUB_ACTIONS) console.log(`::error title=e2e failed::${name}: ${String(e.message).split('\n').slice(0, 3).join(' | ').replace(/[\r\n%]/g, ' ')}`); }
 }
 const T = { timeout: 8000 };
 const see = (page, text) => page.getByText(text, { exact: false }).first().waitFor({ state: 'visible', ...T });
@@ -1120,5 +1120,6 @@ try {
 console.log('\nCSP violations (' + cspViolations.length + '):'); cspViolations.forEach(e => console.log('  ' + e));
 if (cspViolations.length) results.push(['CSP violations', false]);
 console.log('\nPage errors (' + pageErrors.length + '):'); pageErrors.forEach(e => console.log('  ' + e));
+if (process.env.GITHUB_ACTIONS) [...cspViolations.map(v => 'CSP: ' + v), ...pageErrors.map(v => 'Page error: ' + v)].slice(0, 10).forEach(v => console.log(`::error title=e2e::${String(v).replace(/[\r\n%]/g, ' ').slice(0, 300)}`));
 console.log('\nUnexpected Supabase calls (' + unexpected.length + '):'); [...new Set(unexpected)].forEach(e => console.log('  ' + e));
 process.exit(results.some(r => !r[1]) ? 1 : 0);
