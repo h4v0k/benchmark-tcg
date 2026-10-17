@@ -1,6 +1,7 @@
 // Matchups: pick an archetype, see what it beats and what beats it.
 // Two data sets, kept apart: online tournaments (Limitless Play) and official events (Limitless Labs).
 // Built for quick use at a tournament: on a deck's page, "Who are you facing?" comes first.
+import { useTitle } from '../components/seo';
 import { useMemo, useState, type ReactElement } from 'react';
 import { Empty, ErrorBox, Icon, Segmented, Spinner, useAsync } from '../components/ui';
 import { Link, navigate, setQuery, useRoute } from '../router';
@@ -90,6 +91,7 @@ function About({ source, cover }: { source: api.MatchupSource; cover?: api.Match
 }
 
 export function MatchupsPage({ deck }: { deck?: string }) {
+  useTitle(deck ? `${deck} matchups` : 'Matchup win rates');
   const { source, days, controls } = useFilters();
   const decks = useAsync(() => api.matchupDecks(source, +days), [source, days]);
   const cover = useAsync(() => api.matchupCoverage(source, +days), [source, days]);

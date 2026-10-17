@@ -6,6 +6,8 @@ import { cardProblem } from '../../lib/legality';
 import { buyUrl } from '../../lib/tcgplayer';
 import type { Board, Card, Finish, Format } from '../../lib/types';
 import { Link } from '../../router';
+import { OwnControl } from '../CollectionControl';
+import { PriceChart } from '../PriceChart';
 import { toast, useAuth } from '../../state';
 
 type Props = {
@@ -104,6 +106,9 @@ export function CardModal({ line, format, editable, isCover, onClose, onChange, 
             </div>
             <a className="btn primary" href={buyUrl(c, finish, line.name)} target="_blank" rel="noopener noreferrer"><Icon name="cart" />Buy this printing on TCGplayer</a>
           </div>
+
+          {c && <PriceChart cardId={c.id} />}
+          {c && <OwnControl cardId={c.id} />}
 
           {editable && onChange && (
             <div className="edit-row">

@@ -1,16 +1,16 @@
 // Everything the site reads and writes, in one place.
 import * as sb from './supabase';
-import type { Card, Comment, DeckEntry, DeckRow, Folder, Format, Profile, RuleChange, Rules, SearchHit } from './types';
+import type { Card, DeckEntry, DeckRow, Folder, Format, Profile, RuleChange, Rules, SearchHit } from './types';
 import type { ParsedLine } from './decklist';
 import { TCGP_IMG } from './cards';
 
-const CARD_COLS = 'id,set_id,local_id,name,category,stage,trainer_type,energy_type,suffix,evolves_from,types,hp,retreat,rarity,reg_mark,illustrator,effect,abilities,attacks,weaknesses,resistances,variants,image,is_ace,is_radiant,is_prism,is_basic_energy,tcgp_product_id,tcgp,prices,prices_at,legal_standard,legal_expanded,standard_from,rotating,rotating_on,banned_in,detail_at,set:sets!inner(id,name,code,series,release_date,legal_date,symbol,logo,is_promo,is_classic,hidden)';
+const CARD_COLS = 'id,set_id,local_id,name,category,stage,trainer_type,energy_type,suffix,evolves_from,types,hp,retreat,rarity,reg_mark,illustrator,effect,abilities,attacks,weaknesses,resistances,variants,image,is_ace,is_radiant,is_prism,is_basic_energy,tcgp_product_id,tcgp,prices,prices_at,legal_standard,legal_expanded,standard_from,rotating,rotating_on,banned_in,detail_at,sig,set:sets!inner(id,name,code,series,release_date,legal_date,symbol,logo,is_promo,is_classic,hidden)';
 /** A printing TCGdex has no art for shows TCGplayer's photo of that same printing (its own product id). */
 const withArt = (c: Card): Card => {
   if (!c.image && c.tcgp_product_id) c.image = TCGP_IMG + c.tcgp_product_id;
   return c;
 };
-const DECK_LIST_COLS = 'id,owner,name,format,is_public,cover,price,card_count,like_count,view_count,comment_count,featured,tags,archetype,created_at,updated_at,owner_profile:profiles!decks_owner_fkey(username,avatar_card)';
+const DECK_LIST_COLS = 'id,owner,name,format,is_public,cover,price,card_count,like_count,view_count,featured,tags,archetype,created_at,updated_at,owner_profile:profiles!decks_owner_fkey(username,avatar_card)';
 const DECK_COLS = '*,owner_profile:profiles!decks_owner_fkey(username,avatar_card)';
 
 /* ---------------- cards ---------------- */
@@ -222,17 +222,6 @@ export async function setLike(uid: string, deck: string, on: boolean) {
   if (on) await sb.insert('deck_likes', { deck_id: deck, user_id: uid });
   else await sb.remove('deck_likes', { deck_id: `eq.${deck}`, user_id: `eq.${uid}` });
 }
-
-/* ---------------- comments ---------------- */
-export async function comments(deck: string): Promise<Comment[]> {
-  const { rows } = await sb.select<Comment>('deck_comments', { select: '*,author:profiles!deck_comments_user_id_fkey(username,avatar_card)', deck_id: `eq.${deck}`, order: 'created_at.asc', limit: 500 });
-  return rows;
-}
-export async function addComment(deck: string, body: string): Promise<Comment> {
-  const [c] = await sb.insert<Comment>('deck_comments', { deck_id: deck, body }, { select: '*,author:profiles!deck_comments_user_id_fkey(username,avatar_card)' });
-  return c;
-}
-export const deleteComment = (id: string) => sb.remove('deck_comments', { id: `eq.${id}` });
 
 /* ---------------- follows ---------------- */
 export async function isFollowing(me: string, them: string) {

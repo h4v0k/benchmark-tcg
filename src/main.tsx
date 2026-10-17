@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { auth } from './lib/supabase';
 import { toast } from './state';
+import { installErrorReporting } from './lib/errors';
+
+installErrorReporting();
 
 // Old links used hash routes (#/deck/<id>, #/u/<name>); send them to the new paths.
 function legacyRedirect() {

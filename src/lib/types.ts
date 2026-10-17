@@ -25,6 +25,7 @@ export type Card = {
   legal_standard: boolean; legal_expanded: boolean; standard_from: string | null;
   rotating: boolean; rotating_on: string | null; banned_in: string[];
   detail_at: string | null;
+  sig?: string;
   set?: SetInfo;
 };
 
@@ -43,14 +44,13 @@ export type Profile = {
 export type DeckRow = {
   id: string; owner: string; name: string; format: Format; description: string; primer: string;
   is_public: boolean; cards: DeckEntry[]; cover: string; price: number; card_count: number;
-  like_count: number; view_count: number; comment_count: number; featured: boolean;
+  like_count: number; view_count: number; featured: boolean;
   tags: string[]; folder_id: string | null; archetype: string; card_names?: string[];
   created_at: string; updated_at: string;
   owner_profile?: { username: string; avatar_card?: string } | null;
 };
 
 export type Folder = { id: string; owner: string; name: string; created_at: string };
-export type Comment = { id: string; deck_id: string; user_id: string; body: string; created_at: string; author?: { username: string; avatar_card?: string } | null };
 
 export type Rotation = { id: number; new_min_mark: string; season: string; effective_date: string | null; online_date: string | null; source: string };
 export type Ban = { format: 'standard' | 'expanded'; card_name: string; printings: { set: string; num: string }[]; card_ids: string[]; effective_date: string | null; source: string };

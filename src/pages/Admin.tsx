@@ -3,6 +3,7 @@ import { Avatar, Empty, ErrorBox, Icon, Spinner, Tag, useAsync } from '../compon
 import { Link } from '../router';
 import { useAuth, toast } from '../state';
 import * as api from '../lib/api';
+import { rpc } from '../lib/supabase';
 import { ago, fmtDate } from '../lib/cards';
 
 // For admins: watch the sync jobs, run them now, and correct rules by hand if a source is wrong.
@@ -37,6 +38,7 @@ export function AdminPage() {
     <div className="wrap page">
       <div className="page-head"><h1>Admin</h1></div>
       <ReportsPanel />
+      <ErrorsPanel />
       <UsersPanel />
       <div className="rules-grid">
         <section className="panel">
@@ -166,6 +168,40 @@ function ReportsPanel() {
               <p className="report-msg">{x.message}</p>
               <div className="muted small report-meta">{x.page_url}{x.user_agent ? ` · ${x.user_agent}` : ''}</div>
               <button className="btn small" style={{ marginTop: 8 }} onClick={() => toggle(x.id, !x.resolved)}><Icon name="check" size={14} />{x.resolved ? 'Reopen' : 'Mark resolved'}</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+type ClientError = { id: number; message: string; stack: string; page: string; agent: string; release: string; signed_in: boolean; count: number; first_at: string; last_at: string };
+/** Uncaught errors from visitors' browsers (src/lib/errors.ts), grouped by message; kept 30 days. */
+function ErrorsPanel() {
+  const r = useAsync(() => rpc<ClientError[]>('admin_client_errors', { p_limit: 100 }), []);
+  const [open, setOpen] = useState<number | null>(null);
+  const clear = async (id: number) => {
+    try { await rpc('admin_clear_client_error', { p_id: id }); r.reload(); } catch (e: any) { toast(e.message, 'bad'); }
+  };
+  const list = r.data || [];
+  return (
+    <section className="panel">
+      <div className="panel-head"><h2>Site errors {r.data && <span className="muted">({list.length})</span>}</h2>
+        <button className="btn small" onClick={r.reload}><Icon name="refresh" size={14} />Refresh</button></div>
+      <p className="muted small">Errors visitors' browsers hit on the live site, grouped. Clear one once it's fixed.</p>
+      {r.loading ? <Spinner /> : r.error ? <ErrorBox error={r.error} onRetry={r.reload} /> : !list.length ? <p className="muted">No errors in the last 30 days.</p> : (
+        <ul className="report-list">
+          {list.map(x => (
+            <li key={x.id}>
+              <div className="muted small">{x.count}× · last {ago(x.last_at)} · first {fmtDate(x.first_at)}{x.signed_in ? ' · signed in' : ''}{x.release ? ` · ${x.release}` : ''}</div>
+              <p className="report-msg">{x.message}</p>
+              <div className="muted small report-meta">{x.page}{x.agent ? ` · ${x.agent}` : ''}</div>
+              {open === x.id && x.stack && <pre className="error-stack">{x.stack}</pre>}
+              <div className="row-gap" style={{ marginTop: 8 }}>
+                {x.stack && <button className="btn small" onClick={() => setOpen(open === x.id ? null : x.id)}>{open === x.id ? 'Hide details' : 'Details'}</button>}
+                <button className="btn small" onClick={() => clear(x.id)}><Icon name="check" size={14} />Clear</button>
+              </div>
             </li>
           ))}
         </ul>

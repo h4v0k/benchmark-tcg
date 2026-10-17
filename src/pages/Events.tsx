@@ -1,4 +1,5 @@
 // Tournament results: Regionals, Internationals and Worlds (top 32 with lists, from Limitless).
+import { useTitle } from '../components/seo';
 import { useMemo, useState } from 'react';
 import { Empty, ErrorBox, Icon, Segmented, Spinner, Tag, useAsync } from '../components/ui';
 import { DeckView, type ViewMode } from '../components/deck/Views';
@@ -92,6 +93,7 @@ export function LiveEventPage({ id }: { id: string }) {
 }
 
 export function EventsPage() {
+  useTitle('Tournaments', 'Recent Pokémon TCG tournaments with top finishing decklists.');
   const ev = useAsync(() => api.tournaments(), []);
   const jp = useAsync(() => api.jpInfo(), []);
   const [days, setDays] = useState<'30' | '60' | '120'>('60');
@@ -155,6 +157,7 @@ export function EventsPage() {
 
 export function EventPage({ id }: { id: number }) {
   const r = useAsync(() => api.tournament(id), [id]);
+  useTitle(r.data?.t.name);
   if (r.loading) return <Spinner />;
   if (r.error) return <div className="wrap page"><ErrorBox error={r.error} onRetry={r.reload} /></div>;
   if (!r.data) return <div className="wrap page"><Empty title="Event not found" icon="list"><Link to="/events" className="btn">All tournaments</Link></Empty></div>;

@@ -9,7 +9,7 @@ select pg_temp.ok('no policy calls auth.uid() per row', not exists (
 select pg_temp.ok('helpers have a fixed search_path', (select bool_and(proconfig is not null) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public' and proname in ('card_price', 'tourney_kind', 'html_text')));
 select pg_temp.ok('foreign keys indexed', (select count(*) from pg_indexes where schemaname = 'public'
-  and indexname in ('deck_comments_user', 'deck_likes_user', 'decks_folder', 'printing_prefs_card', 'set_codes_set')) = 5);
+  and indexname in ('deck_likes_user', 'decks_folder', 'printing_prefs_card', 'set_codes_set')) = 4);  -- deck_comments removed in 033
 select pg_temp.ok('bans/rotations: one policy per action', not exists (
   select tablename, cmd from pg_policies where tablename in ('bans', 'rotations') and cmd in ('SELECT', 'ALL') group by 1, 2 having count(*) > 1)
   and (select count(*) from pg_policies where tablename in ('bans', 'rotations')) = 8);
@@ -100,12 +100,7 @@ select pg_temp.ok('deck_lists without p_majors (pages from before 019) stays onl
 -- ---------- 028: pre-launch hardening ----------
 grant usage on schema auth to anon, authenticated;
 set role authenticated; set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
-do $$ declare k int := 0; begin
-  for k in 1..7 loop
-    insert into public.deck_comments (deck_id, body, created_at) values ('aaaaaaaa-0000-0000-0000-000000000001', 'spam ' || k, '2000-01-01');
-  end loop;
-  raise notice 'FAIL | backdated comments still hit the per-minute limit';
-exception when others then raise notice 'PASS | backdated comments still hit the per-minute limit'; end $$;
+-- (the backdated-comments rate-limit check went away with comments in 033)
 insert into public.decks (id, owner, name, created_at) values ('aaaaaaaa-0000-0000-0000-0000000000b1', '22222222-2222-2222-2222-222222222222', 'backdated', '2000-01-01');
 set benchmark.counter_bump = 'on';
 update public.decks set like_count = 999, view_count = 999, featured = true, created_at = '2001-01-01',
@@ -150,8 +145,6 @@ update public.sets set legal_date = current_date - 1 where id = 'zz-new';
 select public.recompute_legality();
 select pg_temp.ok('the set goes live once it has a legal date', (select legal_standard from public.cards where id = 'zz-new-1'));
 
-insert into public.deck_comments (deck_id, user_id, body, created_at) values ('aaaaaaaa-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'restored', '2001-02-03');
-select pg_temp.ok('server-side inserts keep their own created_at', (select created_at::date = '2001-02-03' from public.deck_comments where body = 'restored'));
 
 -- tournaments: an empty standings page counts as a try; old stuck events close
 insert into public.tournaments (id, name, date, kind, status) values (990001, 'Regional Empty', current_date - 2, 'regional', 'new'),

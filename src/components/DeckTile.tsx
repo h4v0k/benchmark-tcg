@@ -23,7 +23,6 @@ export function DeckTile({ d, showAuthor = true }: { d: DeckRow; showAuthor?: bo
         <div className="deck-tile-stats">
           <span title="Likes"><Icon name="heart" size={13} />{d.like_count}</span>
           <span title="Views"><Icon name="eye" size={13} />{d.view_count}</span>
-          <span title="Comments"><Icon name="chat" size={13} />{d.comment_count}</span>
           <span className="price" title="TCGplayer market price">{money(d.price)}</span>
         </div>
       </div>

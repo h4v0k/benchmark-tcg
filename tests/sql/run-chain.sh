@@ -12,10 +12,15 @@ trap '"${AS[@]}" "$PGBIN/pg_ctl" -D "$TMP/data" -m immediate stop >/dev/null 2>&
 "${AS[@]}" "$PGBIN/pg_ctl" -D "$TMP/data" -l "$TMP/log" -w -s -o "-k $TMP -p $PORT -c listen_addresses='' -c fsync=off -c timezone=UTC" start
 P=(psql -h "$TMP" -p "$PORT" -U postgres -X -q -v ON_ERROR_STOP=1)
 "${P[@]}" -f "$HERE/stubs.sql"; PGOPTIONS="-c client_min_messages=warning" "${P[@]}" -f "$HERE/stubs-full.sql"
-for m in "$ROOT"/supabase/migrations/0*.sql; do "${P[@]}" -f "$m" >/dev/null 2>&1 || { echo "FAIL | $(basename "$m") does not apply"; "${P[@]}" -f "$m" 2>&1 | grep ERROR | head -3; exit 1; }; done
-# re-running a migration right after itself must be harmless (CI retries a failed run)
-for m in "$ROOT"/supabase/migrations/01[8-9]*.sql "$ROOT"/supabase/migrations/0[2-9][0-9]*.sql; do [ -f "$m" ] || continue
-  "${P[@]}" -f "$m" >/dev/null 2>&1 || { echo "FAIL | $(basename "$m") is not safe to run twice"; exit 1; }; done
+# Apply each migration in order; from 018 on, run it a second time straight away: re-running a migration
+# right after itself must be harmless (CI retries a failed run). (Re-running an old one after later ones
+# isn't required: e.g. 018 still names deck_comments, which 033 drops.)
+for m in "$ROOT"/supabase/migrations/0*.sql; do
+  "${P[@]}" -f "$m" >/dev/null 2>&1 || { echo "FAIL | $(basename "$m") does not apply"; "${P[@]}" -f "$m" 2>&1 | grep ERROR | head -3; exit 1; }
+  case "$(basename "$m")" in 01[0-7]_*|00*) ;; *)
+    "${P[@]}" -f "$m" >/dev/null 2>&1 || { echo "FAIL | $(basename "$m") is not safe to run twice"; "${P[@]}" -f "$m" 2>&1 | grep ERROR | head -3; exit 1; };;
+  esac
+done
 echo "PASS | all migrations apply; 018+ can run again"
 "${P[@]}" -f "$HERE/chain-test.sql" 2>&1 | sed -E 's/^psql:[^ ]+ ?//; s/^NOTICE:  //' | grep -E "PASS|FAIL|ERROR" | tee "$TMP/out"
 ! grep -qE "FAIL|ERROR" "$TMP/out"

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTitle } from '../components/seo';
 import { DeckGrid } from '../components/DeckTile';
 import { Avatar, Empty, ErrorBox, Modal, Spinner, useAsync } from '../components/ui';
 import { Markdown } from '../components/Markdown';
@@ -11,6 +12,7 @@ export function ProfilePage({ username }: { username: string }) {
   const { session, profile: me } = useAuth();
   const p = useAsync(() => api.profileByName(username), [username]);
   const user = p.data;
+  useTitle(user?.username);
   const decks = useAsync(async () => (user ? (await api.listDecks({ owner: user.id, sort: 'updated', per: 100, mine: !!session && session.user.id === user.id })).rows : []), [user?.id, session?.user?.id]);
   const [following, setFollowing] = useState(false);
   const [followers, setFollowers] = useState(0);

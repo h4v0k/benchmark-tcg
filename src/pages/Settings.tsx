@@ -6,6 +6,7 @@ import * as api from '../lib/api';
 import * as sb from '../lib/supabase';
 import { img, printLabel } from '../lib/cards';
 import type { SearchHit } from '../lib/types';
+import { AccountTools } from '../components/AccountTools';
 
 export function SettingsPage() {
   const { session, profile, refreshProfile } = useAuth();
@@ -57,6 +58,7 @@ export function SettingsPage() {
         </form>
       </section>
       <Passkeys />
+      <AccountTools />
     </div>
   );
 }

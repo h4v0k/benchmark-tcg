@@ -63,7 +63,7 @@ export function LoginPage({ mode }: { mode: 'signin' | 'signup' }) {
     <div className="wrap page narrow">
       <div className="auth-card">
         <h1>{mode === 'signin' ? 'Sign in' : 'Create your account'}</h1>
-        <p className="muted">{mode === 'signin' ? 'Welcome back.' : 'Save decks, share them, like and comment, and follow other players.'}</p>
+        <p className="muted">{mode === 'signin' ? 'Welcome back.' : 'Save decks, share them, like decks, and follow other players.'}</p>
 
         <div className="auth-quick">
           <GoogleButton onToken={google} onRedirect={() => sb.auth.oauth('google', next)} text={mode === 'signup' ? 'signup_with' : 'continue_with'}

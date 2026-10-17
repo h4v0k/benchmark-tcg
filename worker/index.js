@@ -1,7 +1,9 @@
 // Cloudflare Worker in front of the static site.
-// Only /img/* reaches this code (see run_worker_first in wrangler.jsonc); everything else is served
+// Handles /img/*, /sitemap.xml and HTML page requests (see run_worker_first in wrangler.jsonc); built files are served
 // straight from the static assets. /img/* re-serves TCGdex card art from our own domain so the deck
 // image export can draw it to a canvas and save it as a PNG (cross-origin images would block that).
+
+import { matchRoute, headFor, rewriteHead, sitemapXml } from './seo.js';
 
 const UPSTREAM = 'https://assets.tcgdex.net';
 // TCGplayer's photo of a printing that TCGdex has no art for: /img/tcgp/475431_in_1000x1000.jpg
@@ -34,10 +36,41 @@ async function cardImage(request, ctx, url) {
   return res;
 }
 
+async function sitemap(request, ctx) {
+  const key = new Request(new URL(request.url).origin + '/sitemap.xml', { method: 'GET' });
+  const cache = typeof caches !== 'undefined' ? caches.default : null;
+  const hit = cache && await cache.match(key);
+  if (hit) return hit;
+  const res = new Response(await sitemapXml(), { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } });
+  if (cache) ctx.waitUntil(cache.put(key, res.clone()));
+  return res;
+}
+
+// HTML pages: serve the app shell (index.html) with per-route head tags. Unknown routes get a real 404 status
+// but the same shell, so the app shows its NotFound page. Headers (incl. CSP) come from the asset response,
+// where public/_headers is applied, and are carried over untouched.
+async function page(request, env, url) {
+  const shell = await env.ASSETS.fetch(new Request(url.origin + '/', { method: 'GET', headers: request.headers }));
+  const ct = shell.headers.get('Content-Type') || '';
+  if (!shell.ok || !ct.includes('text/html')) return shell;
+  const route = matchRoute(url.pathname);
+  if (!route) return new Response(shell.body, { status: 404, headers: shell.headers });
+  try {
+    return rewriteHead(shell, await headFor(route));
+  } catch {
+    return env.ASSETS.fetch(new Request(url.origin + '/', { method: 'GET' }));
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/img/')) return cardImage(request, ctx, url);
-    return env.ASSETS.fetch(request);
+    if (url.pathname === '/sitemap.xml' && (request.method === 'GET' || request.method === 'HEAD')) {
+      try { return await sitemap(request, ctx); } catch { return new Response('Unavailable', { status: 503 }); }
+    }
+    // Files (anything with an extension) and non-GET requests go straight to the static assets.
+    if ((request.method !== 'GET' && request.method !== 'HEAD') || /\.[a-z0-9]{1,8}$/i.test(url.pathname)) return env.ASSETS.fetch(request);
+    try { return await page(request, env, url); } catch { return env.ASSETS.fetch(request); }
   },
 };

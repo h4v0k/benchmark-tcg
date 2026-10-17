@@ -1,13 +1,20 @@
 import { useEffect, useState } from 'react';
+import { useTitle } from '../components/seo';
 import { CardImg, Empty, ErrorBox, Icon, Spinner, Tag, useAsync, useDebounced } from '../components/ui';
 import { CardText, LegalityBadges } from '../components/deck/CardModal';
 import { Link, setQuery, useRoute } from '../router';
 import * as api from '../lib/api';
+import { runCardSearch } from '../lib/cardsearch';
+import { CardSearchTools } from '../components/CardSearchTools';
 import { FINISH_LABEL, fmtDate, legalIn, money, printLabel } from '../lib/cards';
 import { buyUrl } from '../lib/tcgplayer';
+import { OwnControl } from '../components/CollectionControl';
+import { PriceChart } from '../components/PriceChart';
+import { PriceMovers } from '../components/PriceMovers';
 import type { Card, Finish, Format, SearchHit } from '../lib/types';
 
 export function CardsPage() {
+  useTitle('Pokémon TCG card search', 'Search every Pokémon TCG card with legality, prices and exact printings.');
   const { query } = useRoute();
   const [q, setQ] = useState(query.get('q') || '');
   const fmt = (query.get('format') || 'unlimited') as Format;
@@ -20,14 +27,14 @@ export function CardsPage() {
     let alive = true;
     if (dq.trim().length < 2) { setHits(null); return; }
     setError(null);
-    api.searchCards(dq, fmt, cat, 60).then(h => alive && setHits(h)).catch(e => alive && setError(e));
+    runCardSearch(dq, fmt, cat, 60).then(r => alive && setHits(r.hits)).catch(e => alive && setError(e));
     return () => { alive = false; };
   }, [dq, fmt, cat]);
   return (
     <div className="wrap page">
       <div className="page-head"><h1>Cards</h1></div>
       <div className="filters">
-        <div className="search-field grow"><Icon name="search" /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Card name, e.g. Iono or Charizard ex" aria-label="Card name" autoFocus /></div>
+        <div className="search-field grow"><Icon name="search" /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Card name, e.g. Iono, or fields like t:fire hp>=200" aria-label="Card search" autoFocus /></div>
         <select value={fmt} onChange={e => setQuery({ format: e.target.value === 'unlimited' ? null : e.target.value })} aria-label="Legal in">
           <option value="unlimited">Any format</option><option value="standard">Standard legal</option><option value="expanded">Expanded legal</option>
         </select>
@@ -35,6 +42,7 @@ export function CardsPage() {
           <option value="">All types</option><option value="Pokemon">Pokémon</option><option value="Trainer">Trainer</option><option value="Energy">Energy</option>
         </select>
       </div>
+      <CardSearchTools q={q} onSearch={setQ} />
       {error ? <ErrorBox error={error} /> : hits === null ? <p className="muted">Type at least 2 letters to search every English card.</p> : !hits.length ? <Empty title="No cards found" icon="search" /> : (
         <div className="card-grid">
           {hits.map(h => (
@@ -46,6 +54,7 @@ export function CardsPage() {
           ))}
         </div>
       )}
+      {dq.trim().length < 2 && <PriceMovers />}
     </div>
   );
 }
@@ -58,6 +67,7 @@ export function CardPage({ id }: { id: string }) {
     return { c, prints };
   }, [id]);
   const [finish, setFinish] = useState<Finish | ''>('');
+  useTitle(r.data?.c?.name);
   if (r.loading) return <Spinner />;
   if (r.error) return <div className="wrap page"><ErrorBox error={r.error} onRetry={r.reload} /></div>;
   const c = r.data?.c;
@@ -85,6 +95,8 @@ export function CardPage({ id }: { id: string }) {
             </div>
             <a className="btn primary big" href={buyUrl(c, f)} target="_blank" rel="noopener noreferrer"><Icon name="cart" />Buy {FINISH_LABEL[f] || ''} on TCGplayer</a>
           </div>
+          <PriceChart cardId={c.id} />
+          <OwnControl cardId={c.id} />
           <p><Link to={`/decks?card=${encodeURIComponent(c.name)}`} className="btn">Decks with {c.name}</Link></p>
         </div>
       </div>

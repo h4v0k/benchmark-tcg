@@ -1,4 +1,5 @@
 import { Component, Suspense, lazy, useEffect, useState, type ErrorInfo, type ReactElement, type ReactNode } from 'react';
+import { reportError } from './lib/errors';
 import { AuthProvider, Toasts, toast, useAuth, useTheme } from './state';
 import { Link, match, navigate, useRoute } from './router';
 import { Avatar, HoverPreview, Icon, Menu, MenuItem, Modal, Spinner } from './components/ui';
@@ -15,6 +16,7 @@ import { CardsPage, CardPage } from './pages/Cards';
 const DeckPage = lazy(() => import('./pages/Deck').then(m => ({ default: m.DeckPage })));
 const ProfilePage = lazy(() => import('./pages/Profile').then(m => ({ default: m.ProfilePage })));
 const MyDecks = lazy(() => import('./pages/MyDecks').then(m => ({ default: m.MyDecks })));
+const CollectionPage = lazy(() => import('./pages/Collection').then(m => ({ default: m.CollectionPage })));
 const Feed = lazy(() => import('./pages/Feed').then(m => ({ default: m.Feed })));
 const RulesPage = lazy(() => import('./pages/Rules').then(m => ({ default: m.RulesPage })));
 const EventsPage = lazy(() => import('./pages/Events').then(m => ({ default: m.EventsPage })));
@@ -30,6 +32,8 @@ const DeckListsPage = lazy(() => import('./pages/DeckLists').then(m => ({ defaul
 const ArchetypePage = lazy(() => import('./pages/Archetype').then(m => ({ default: m.ArchetypePage })));
 const LoginPage = lazy(() => import('./pages/Login').then(m => ({ default: m.LoginPage })));
 const SettingsPage = lazy(() => import('./pages/Settings').then(m => ({ default: m.SettingsPage })));
+const PrivacyPage = lazy(() => import('./pages/Legal').then(m => ({ default: m.PrivacyPage })));
+const TermsPage = lazy(() => import('./pages/Legal').then(m => ({ default: m.TermsPage })));
 const AdminPage = lazy(() => import('./pages/Admin').then(m => ({ default: m.AdminPage })));
 const UsersPage = lazy(() => import('./pages/Users').then(m => ({ default: m.UsersPage })));
 
@@ -40,7 +44,7 @@ const isJpId = (v: string) => /^[cm][1-9]\d{0,9}$/.test(v);
 class PageBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) { return { error }; }
-  componentDidCatch(error: Error, info: ErrorInfo) { console.error(error, info.componentStack); }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error(error, info.componentStack); reportError(error, 'Page crashed'); }
   render() {
     if (!this.state.error) return this.props.children;
     const stale = /dynamically imported module|Importing a module script|ChunkLoadError|Loading chunk/i.test(String(this.state.error.message || this.state.error));
@@ -69,6 +73,7 @@ const ROUTES: [string, (p: Record<string, string>) => ReactElement][] = [
   ['/users', () => <UsersPage />],
   ['/users/:name', p => <ProfilePage username={p.name} />],
   ['/my/decks', () => <MyDecks />],
+  ['/collection', () => <CollectionPage />],
   ['/feed', () => <Feed />],
   ['/cards', () => <CardsPage />],
   ['/cards/:id', p => <CardPage id={p.id} />],
@@ -88,6 +93,8 @@ const ROUTES: [string, (p: Record<string, string>) => ReactElement][] = [
   ['/login', () => <LoginPage mode="signin" />],
   ['/signup', () => <LoginPage mode="signup" />],
   ['/settings', () => <SettingsPage />],
+  ['/privacy', () => <PrivacyPage />],
+  ['/terms', () => <TermsPage />],
   ['/admin', () => <AdminPage />],
 ];
 
@@ -133,7 +140,7 @@ function TopBar() {
     ['/events', 'Tournaments'],
     ['/matchups', 'Matchups'],
     ['/rules', 'Formats & bans'],
-    ...(session ? [['/feed', 'Following'], ['/my/decks', 'My decks']] : []),
+    ...(session ? [['/feed', 'Following'], ['/my/decks', 'My decks'], ['/collection', 'Collection']] : []),
   ];
   return (
     <header className="topbar">
@@ -151,6 +158,7 @@ function TopBar() {
             <Menu className="account-btn" label={<><Avatar card={profile?.avatar_card} name={profile?.username || session.user.email || '?'} /><span className="hide-sm">{profile?.username || 'Account'}</span><Icon name="chevron" size={14} /></>}>
               {profile && <MenuItem icon="user" onClick={() => navigate(`/users/${profile.username}`)}>Profile</MenuItem>}
               <MenuItem icon="folder" onClick={() => navigate('/my/decks')}>My decks</MenuItem>
+              <MenuItem icon="stack" onClick={() => navigate('/collection')}>My collection</MenuItem>
               <MenuItem icon="edit" onClick={() => navigate('/settings')}>Settings</MenuItem>
               {profile?.is_admin && <MenuItem icon="shield" onClick={() => navigate('/admin')}>Admin</MenuItem>}
               <MenuItem icon="back" onClick={async () => { await sb.auth.signOut(); navigate('/'); toast('Signed out'); }}>Sign out</MenuItem>
@@ -168,7 +176,7 @@ function Footer() {
   return (
     <footer className="foot">
       <div className="wrap foot-inner">
-        <div className="foot-top"><div><strong>Benchmark</strong> · build, price and share Pokémon TCG decks.</div><div className="foot-links"><a className="foot-social" href="https://x.com/benchmark_tcg" target="_blank" rel="noopener noreferrer" aria-label="Follow Benchmark on X"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>Follow on X</a><SupportButton /><ReportIssueButton /></div></div>
+        <div className="foot-top"><div><strong>Benchmark</strong> · build, price and share Pokémon TCG decks.</div><div className="foot-links"><a className="foot-social" href="https://x.com/benchmark_tcg" target="_blank" rel="noopener noreferrer" aria-label="Follow Benchmark on X"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>Follow on X</a><SupportButton /><ReportIssueButton /><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></div></div>
         <div className="muted">Card data from <a href="https://tcgdex.dev" target="_blank" rel="noopener noreferrer">TCGdex</a>, prices from TCGplayer via <a href="https://tcgcsv.com" target="_blank" rel="noopener noreferrer">TCGCSV</a>, bans from <a href="https://www.pokemon.com/us/play-pokemon/about/pokemon-tcg-banned-card-list" target="_blank" rel="noopener noreferrer">Play! Pokémon</a>. Not affiliated with The Pokémon Company, Nintendo, Creatures or Game Freak.</div>
       </div>
     </footer>

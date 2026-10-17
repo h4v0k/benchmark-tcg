@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTitle } from '../components/seo';
 import { Avatar, Empty, ErrorBox, Icon, Menu, MenuItem, Modal, Segmented, Spinner, copyText } from '../components/ui';
 import { DeckView, type GroupMode, type ViewMode } from '../components/deck/Views';
 import { BuyPanel, LegalityPanel, SampleHand, StatsPanel } from '../components/deck/Sidebar';
+import { OwnedPanel } from '../components/deck/OwnedPanel';
 import { AddCard } from '../components/deck/AddCard';
 import { CardModal } from '../components/deck/CardModal';
 import { ImportModal } from '../components/deck/ImportModal';
 import { ExportModal, SettingsModal } from '../components/deck/DeckModals';
 import { RegSheetModal } from '../components/deck/RegSheet';
-import { Comments } from '../components/deck/Comments';
+import { ProxyModal } from '../components/deck/Proxies';
+import { HistoryModal } from '../components/deck/History';
+import { Playtest } from '../components/deck/Playtest';
 import { Markdown } from '../components/Markdown';
 import { coverUrl } from '../components/DeckTile';
 import { Link, navigate, setQuery, useRoute } from '../router';
@@ -27,6 +31,7 @@ export function DeckPage({ id }: { id: string }) {
   const { session, profile } = useAuth();
   const { query } = useRoute();
   const [row, setRow] = useState<DeckRow | null>(null);
+  useTitle(row?.name, row ? `${row.name}: a Pokémon TCG deck on Benchmark.` : undefined);
   const [entries, setEntries] = useState<DeckEntry[]>([]);
   const [cards, setCards] = useState<Map<string, Card>>(new Map());
   // Latest entries/cards, updated synchronously, so an edit that awaits a card lookup builds on
@@ -39,13 +44,13 @@ export function DeckPage({ id }: { id: string }) {
   const [liked, setLiked] = useState(false);
   const [rules, setRules] = useState<Rules | null>(null);
   const [status, setStatus] = useState('');
-  const [tab, setTab] = useState<'deck' | 'primer' | 'comments'>('deck');
+  const [tab, setTab] = useState<'deck' | 'primer'>('deck');
   const [board, setBoard] = useState<Board>('main');
   const [mode, setMode] = useState<ViewMode>(pref('view', 'text'));
   const [group, setGroup] = useState<GroupMode>(pref('group', 'type'));
   const [sort, setSort] = useState<SortKey>(pref('sort', 'default'));
   const [highlight, setHighlight] = useState<Set<string>>(new Set());
-  const [modal, setModal] = useState<null | { kind: 'card'; cid: string; board: Board } | { kind: 'import' | 'bulk' | 'export' | 'settings' | 'delete' | 'reg' }>(null);
+  const [modal, setModal] = useState<null | { kind: 'card'; cid: string; board: Board } | { kind: 'import' | 'bulk' | 'export' | 'settings' | 'delete' | 'reg' | 'proxies' | 'history' | 'playtest' }>(null);
   const [editing, setEditing] = useState(query.get('edit') === '1');
   const isOwner = !!session && !!row && session.user.id === row.owner;
   const editable = isOwner && editing;
@@ -258,7 +263,6 @@ export function DeckPage({ id }: { id: string }) {
               <span>Updated {ago(row.updated_at)}</span>
               <span className="stat"><Icon name="heart" size={13} />{row.like_count}</span>
               <span className="stat"><Icon name="eye" size={13} />{row.view_count}</span>
-              <span className="stat"><Icon name="chat" size={13} />{row.comment_count}</span>
               {row.tags?.map(t => <Link key={t} to={`/decks?tag=${encodeURIComponent(t)}`} className="tag">#{t}</Link>)}
             </div>
             {row.description && <p className="deck-desc">{row.description}</p>}
@@ -272,9 +276,12 @@ export function DeckPage({ id }: { id: string }) {
               <MenuItem icon="share" onClick={share}>Copy link</MenuItem>
               <MenuItem icon="copy" onClick={async () => toast((await copyText(exportPTCGL(lines))) ? 'List copied for Pokémon TCG Live' : 'Couldn’t copy', 'ok')}>Copy for Pokémon TCG Live</MenuItem>
               <MenuItem icon="list" onClick={() => setModal({ kind: 'reg' })}>Registration sheet (PDF)</MenuItem>
+              <MenuItem icon="list" onClick={() => setModal({ kind: 'proxies' })}>Print proxies</MenuItem>
               <MenuItem icon="copy" onClick={clone}>Copy to my decks</MenuItem>
               {isOwner && <MenuItem icon="upload" onClick={() => { setEditing(true); setModal({ kind: 'import' }); }}>Import cards</MenuItem>}
               {isOwner && <MenuItem icon="list" onClick={() => { setEditing(true); setModal({ kind: 'bulk' }); }}>Edit as text</MenuItem>}
+              <MenuItem icon="shuffle" onClick={() => setModal({ kind: 'playtest' })}>Playtest</MenuItem>
+              {isOwner && <MenuItem icon="refresh" onClick={() => setModal({ kind: 'history' })}>History</MenuItem>}
               {isOwner && <MenuItem icon="edit" onClick={() => setModal({ kind: 'settings' })}>Deck settings</MenuItem>}
               {profile?.is_admin && row.is_public && <MenuItem icon="star" onClick={feature}>{row.featured ? 'Unfeature' : 'Feature on home page'}</MenuItem>}
               {isOwner && <MenuItem icon="trash" danger onClick={() => setModal({ kind: 'delete' })}>Delete deck</MenuItem>}
@@ -287,7 +294,6 @@ export function DeckPage({ id }: { id: string }) {
         <nav className="tabs" aria-label="Deck sections">
           <button className={tab === 'deck' ? 'on' : ''} onClick={() => setTab('deck')}>Deck <span className="count">{total}</span></button>
           <button className={tab === 'primer' ? 'on' : ''} onClick={() => setTab('primer')}>Primer</button>
-          <button className={tab === 'comments' ? 'on' : ''} onClick={() => setTab('comments')}>Comments <span className="count">{row.comment_count}</span></button>
         </nav>
         {isOwner && <span className={`save-state ${status === 'Not saved' ? 'bad' : ''}`} aria-live="polite">{status}{status === 'Not saved' && <button className="link-btn" onClick={flush}>Retry</button>}</span>}
       </div>
@@ -336,11 +342,11 @@ export function DeckPage({ id }: { id: string }) {
             </>
           )}
           {tab === 'primer' && <Primer row={row} editable={isOwner} cards={cardRefs} onSave={primer => patchRow({ primer })} />}
-          {tab === 'comments' && <Comments deckId={row.id} deckOwner={row.owner} onCount={n => setRow(r => r && { ...r, comment_count: Math.max(0, n) })} />}
         </div>
         <aside className="deck-side">
           <LegalityPanel lines={lines} format={row.format} rules={rules} onHighlight={showProblems} />
           <BuyPanel lines={lines} />
+          <OwnedPanel lines={lines} />
           <StatsPanel lines={lines} />
           <SampleHand lines={lines} />
         </aside>
@@ -356,13 +362,18 @@ export function DeckPage({ id }: { id: string }) {
         <ImportModal title="Edit as text" allowLink={false} format={row.format} defaultMode="replace" onClose={() => setModal(null)} onApply={applyImport}
           initialText={exportPTCGL(lines, 'main') + (maybeCount ? '\n\nConsidering:\n' + lines.filter(l => l.board === 'maybe').map(l => `${l.qty} ${l.name}${l.card ? ` ${l.card.set?.code || ''} ${/^\d+$/.test(l.card.local_id) ? parseInt(l.card.local_id, 10) : l.card.local_id}` : ''}`).join('\n') : '')} />
       )}
+      {modal?.kind === 'history' && isOwner && <HistoryModal deckId={id} current={entries} onClose={() => setModal(null)}
+        beforeRestore={() => { clearTimeout(timer.current); return flush(); }}
+        onRestored={async () => { await load(); commit(p => p); }} />}
+      {modal?.kind === 'playtest' && <Playtest lines={lines} onClose={() => setModal(null)} />}
+      {modal?.kind === 'proxies' && <ProxyModal lines={lines} deckName={row.name} onClose={() => setModal(null)} />}
       {modal?.kind === 'reg' && <RegSheetModal lines={lines} deckName={row.name} format={row.format} onClose={() => setModal(null)} />}
       {modal?.kind === 'export' && <ExportModal lines={lines} name={row.name} cover={row.cover || autoCover(lines)} onClose={() => setModal(null)}
         meta={{ name: row.name, format: FORMAT_LABEL[row.format] + (row.archetype && row.archetype !== row.name ? ` · ${row.archetype}` : ''), author: row.owner_profile?.username, updated: `Updated ${fmtDate(row.updated_at)}`, url: row.is_public ? `benchmarktcg.us/decks/${row.id}` : undefined }} />}
       {modal?.kind === 'settings' && <SettingsModal deck={row} onClose={() => setModal(null)} onSave={patchRow} />}
       {modal?.kind === 'delete' && (
         <Modal title="Delete this deck?" onClose={() => setModal(null)} footer={<><button className="btn ghost" onClick={() => setModal(null)}>Cancel</button><button className="btn danger" onClick={remove}>Delete deck</button></>}>
-          <p>“{row.name}” and its comments and likes will be deleted. This can’t be undone.</p>
+          <p>“{row.name}” and its likes will be deleted. This can’t be undone.</p>
         </Modal>
       )}
     </div>

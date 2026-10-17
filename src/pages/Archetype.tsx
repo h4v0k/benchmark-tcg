@@ -1,5 +1,6 @@
 // One archetype's finishes at Regionals, Internationals and Worlds (top 32 with lists, from Limitless),
 // best placement first, so the highest-scoring lists are at the top.
+import { useTitle } from '../components/seo';
 import { Empty, ErrorBox, Icon, Spinner, Tag, useAsync } from '../components/ui';
 import { Link, setQuery, useRoute } from '../router';
 import * as api from '../lib/api';
@@ -10,6 +11,7 @@ const KIND: Record<string, string> = { regional: 'Regional', international: 'Int
 const ord = (n: number) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
 
 export function ArchetypePage({ name }: { name: string }) {
+  useTitle(`${name} archetype`);
   const { query } = useRoute();
   const days = (DAYS as readonly string[]).includes(query.get('days') || '') ? query.get('days')! : '60';
   const r = useAsync(() => api.archetypeFinishes(name, +days), [name, days]);

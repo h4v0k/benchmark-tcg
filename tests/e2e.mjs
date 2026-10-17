@@ -51,7 +51,7 @@ const DECK = {
     { cid: id('Basic Psychic Energy'), qty: 2, board: 'main', name: 'Basic Psychic Energy', cat: 'Energy' },
     { cid: id('Night Stretcher'), qty: 1, board: 'maybe', name: 'Night Stretcher', cat: 'Trainer' },
   ],
-  cover: '', price: 12.5, card_count: 20, like_count: 3, view_count: 10, comment_count: 0, featured: false, tags: ['test'], folder_id: null,
+  cover: '', price: 12.5, card_count: 20, like_count: 3, view_count: 10, featured: false, tags: ['test'], folder_id: null,
   archetype: 'Dragapult', created_at: '2026-10-01T00:00:00Z', updated_at: NOW, owner_profile: { username: 'tester', avatar_card: '' },
 };
 const DECK_B_ID = '33333333-3333-3333-3333-333333333333';
@@ -183,6 +183,13 @@ async function handleSupabase(route) {
   if (p === '/rest/v1/rpc/resolve_decklist' || p === '/rest/v1/rpc/resolve_decklist_v2') {
     return json(route, (body.lines || []).map(l => { const c = byName(l.name); return { i: l.i, card_id: c ? c.id : null, how: c ? 'name' : 'none' }; }));
   }
+  if (p === '/rest/v1/rpc/price_movers') return json(route, { last_day: '2026-10-17', base_day: '2026-10-10', fallers: [], risers: [{ card_id: 'sv06-130', name: 'Dreepy Riser', image: '', tcgp_product_id: null, set_name: 'Twilight Masquerade', set_code: 'TWM', local_id: '130', from_price: 2, to_price: 3, pct: 50 }] });
+  if (p === '/rest/v1/rpc/card_price_history') return json(route, [{ day: '2026-10-10', market: 2 }, { day: '2026-10-17', market: 3 }]);
+  if (p === '/rest/v1/rpc/my_collection_for') return json(route, []);
+  if (p === '/rest/v1/collection') return json(route, [], { headers: { 'content-range': '*/0' } });
+  if (p === '/rest/v1/rpc/live_events') return json(route, [{ id: '0077', name: 'Regional Championship Nice', city: 'Nice', country: 'FR', kind: 'regional', date: '2026-10-17', live: true, players: 2336, round: 7, rounds: 14, updated_at: '2026-10-17T15:37:17Z', checked_at: '2026-10-17T15:38:04Z', finished_at: null,
+    standings: [{ pos: 1, placement: 1, name: 'Alex S', country: 'US', wins: 7, losses: 0, ties: 0, points: 21, deck: '', deck_name: '', dropped: false, day2: false, topcut: false }] }]);
+  if (p === '/rest/v1/rpc/live_event') return json(route, null);
   if (p === '/rest/v1/rpc/tourney_meta') return json(route, [{ archetype: 'Dragapult', top32: 41, top8: 10, wins: 1, events: 4, best_tournament: 580, best_place: 2 }, { archetype: "N's Zoroark", top32: 8, top8: 1, wins: 0, events: 3, best_tournament: 580, best_place: 4 }]);
   if (p === '/rest/v1/rpc/jp_preview_info') return json(route, JP_INFO);
   if (p === '/rest/v1/rpc/jp_preview_cards') return json(route, JP_CARDS);
@@ -237,7 +244,7 @@ async function handleSupabase(route) {
   if (p === '/rest/v1/follows') return json(route, [], { headers: { 'content-range': '*/0' } });
   if (p === '/auth/v1/passkeys/') passkeyReqs.push(Date.now());
   if (p === '/auth/v1/passkeys/') return json(route, [{ id: 'pk1', created_at: NOW }]);
-  if (['/rest/v1/rule_changes', '/rest/v1/deck_comments', '/rest/v1/profiles', '/rest/v1/folders', '/rest/v1/printing_prefs'].includes(p)) return json(route, [], { headers: { 'content-range': '*/0' } });
+  if (['/rest/v1/rule_changes', '/rest/v1/profiles', '/rest/v1/folders', '/rest/v1/printing_prefs'].includes(p)) return json(route, [], { headers: { 'content-range': '*/0' } });
   unexpected.push(`${method} ${p}${u.search}`);
   return json(route, p.startsWith('/auth/') ? {} : []);
 }
@@ -324,8 +331,6 @@ try {
     await desk.keyboard.press('Escape');
     await desk.getByRole('tab', { name: 'Primer' }).or(desk.getByRole('button', { name: 'Primer' })).first().click(T);
     await see(desk, 'Plan');
-    await desk.getByRole('tab', { name: 'Comments' }).or(desk.getByRole('button', { name: /^Comments/ })).first().click(T);
-    await see(desk, 'No comments yet');
   });
   await scenario('3v. viewing someone else’s deck never saves', async () => {
     const page = await newPage({ width: 1000, height: 800 });
@@ -387,6 +392,11 @@ try {
     await desk.goto(BASE + '/cards?q=dre');
     await see(desk, 'Dreepy');
     await see(desk, 'Drakloak');
+  });
+  await scenario('4b. /cards shows price movers', async () => {
+    await desk.goto(BASE + '/cards');
+    await see(desk, 'Dreepy Riser');
+    await see(desk, '+50%');
   });
   await scenario('5. /rules shows Red Card', async () => {
     await desk.goto(BASE + '/rules');

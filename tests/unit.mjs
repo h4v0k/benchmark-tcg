@@ -10,6 +10,8 @@ const D = await bundle('src/lib/decklist.ts');
 const L = await bundle('src/lib/legality.ts');
 const T = await bundle('src/lib/tcgplayer.ts');
 const RS = await bundle('src/lib/regsheet.ts');
+const CQ = await bundle('src/lib/cardquery.ts');
+const PP = await bundle('src/lib/pokeproxy.ts');
 let n = 0; const t = (name, fn) => { fn(); n++; };
 
 t('PTCGL export', () => {
@@ -166,6 +168,89 @@ t('registration sheet: long names shrink, then get cut, inside their column', ()
   const t1 = ops.find(o => o.t === 'text' && o.s.startsWith('Radiant'));
   assert.ok(t1.s.endsWith('…') && t1.size >= 6);
   assert.ok(RS.textWidth(t1.s, t1.size) <= 2.27 + 1e-6);
+});
+
+t('card search syntax: plain words stay a name search', () => {
+  const a = CQ.parseCardQuery('charizard ex');
+  assert.ok(a.simple && !a.error && a.groups.length === 1);
+  assert.deepEqual(a.groups[0].map(c => [c.f, c.v]), [['name', 'charizard'], ['name', 'ex']]);
+  assert.ok(CQ.parseCardQuery('').empty);
+  assert.ok(!CQ.parseCardQuery('"ultra ball"').simple);
+  assert.deepEqual(CQ.parseCardQuery('"ultra ball"').groups[0], [{ f: 'name', v: 'ultra ball' }]);
+});
+t('card search syntax: fields, comparisons, aliases', () => {
+  const g = CQ.parseCardQuery('t:fire hp>=200 retreat<=1 reg:H o:"draw a card" atk:burning set:sv04.5 usd>5 legal:standard').groups[0];
+  assert.deepEqual(g, [{ f: 'type', v: 'fire' }, { f: 'hp', op: '>=', v: '200' }, { f: 'retreat', op: '<=', v: '1' }, { f: 'reg', v: 'H' },
+    { f: 'text', v: 'draw a card' }, { f: 'atk', v: 'burning' }, { f: 'set', v: 'sv04.5' }, { f: 'usd', op: '>', v: '5' }, { f: 'legal', v: 'standard' }]);
+  assert.deepEqual(CQ.parseCardQuery('hp:120').groups[0], [{ f: 'hp', op: '=', v: '120' }]);
+  assert.deepEqual(CQ.parseCardQuery('dmg>=180 cost>=3').groups[0].map(c => c.f), ['damage', 'cost']);
+  assert.deepEqual(CQ.parseCardQuery('stage:ex is:vstar tt:supporter cat:trainer is:ace').groups[0].map(c => [c.f, c.v]),
+    [['suffix', 'ex'], ['stage', 'vstar'], ['tt', 'supporter'], ['cat', 'trainer'], ['is', 'ace']]);
+  assert.deepEqual(CQ.parseCardQuery('t:supporter').groups[0], [{ f: 'tt', v: 'supporter' }]);
+  assert.deepEqual(CQ.parseCardQuery('weak:water res:fighting').groups[0].map(c => [c.f, c.v]), [['weak', 'water'], ['res', 'fighting']]);
+});
+t('card search syntax: negation, OR and exact name', () => {
+  const q = CQ.parseCardQuery('t:fire -is:ex or t:water');
+  assert.equal(q.groups.length, 2);
+  assert.deepEqual(q.groups[0], [{ f: 'type', v: 'fire' }, { f: 'is', v: 'ex', neg: true }]);
+  assert.deepEqual(q.groups[1], [{ f: 'type', v: 'water' }]);
+  assert.deepEqual(CQ.parseCardQuery('!"Boss’s Orders"').groups[0], [{ f: 'exact', v: 'Boss’s Orders' }]);
+  assert.deepEqual(CQ.parseCardQuery('-iono').groups[0], [{ f: 'name', v: 'iono', neg: true }]);
+  assert.ok(!CQ.parseCardQuery('t:fire or water').simple);
+});
+t('card search syntax: friendly errors, never a throw', () => {
+  for (const bad of ['foo:bar', 'hp>abc', 't:banana', 'legal:modern', 'hp>=', 'stage:zzz', 'weak:xyz', 'name>3']) {
+    const r = CQ.parseCardQuery(bad);
+    assert.ok(r.error && r.groups.length === 0, bad);
+  }
+  assert.ok(CQ.parseCardQuery('foo:bar').error.includes('foo'));
+  assert.doesNotThrow(() => CQ.parseCardQuery('"unterminated t:fire ((( --- ::'));
+});
+t('card search syntax: form builds a query that parses back', () => {
+  const f = CQ.emptyCardForm();
+  Object.assign(f, { name: 'charizard ex', text: 'draw a card', types: ['fire'], stage: 'stage2', legal: 'standard', flags: ['ace'] });
+  f.hp = { op: '>=', val: '200' };
+  const q = CQ.buildCardQuery(f);
+  assert.equal(q, '"charizard ex" o:"draw a card" t:fire stage:stage2 hp>=200 legal:standard is:ace');
+  assert.ok(!CQ.parseCardQuery(q).error);
+  assert.equal(CQ.buildCardQuery(CQ.emptyCardForm()), '');
+});
+t('pokemon text proxies: content, fitting and PDF shape', () => {
+  const zard = { name: 'Charizard ex', category: 'Pokemon', stage: 'Stage2', trainer_type: '', energy_type: '', suffix: 'ex', evolves_from: 'Charmeleon', types: ['Darkness'], hp: 330, retreat: 2, reg_mark: 'G', local_id: '054', set: { code: 'PAF' },
+    effect: '', abilities: [{ name: 'Infernal Reign', type: 'Ability', effect: 'Search for up to 3 Basic {R} Energy cards.' }], attacks: [{ cost: ['Fire', 'Fire'], name: 'Burning Darkness', damage: '180+', effect: 'This attack does 30 more damage for each Prize card.' }],
+    weaknesses: [{ type: 'Grass', value: '×2' }], resistances: [], is_ace: false, is_radiant: false, is_basic_energy: false };
+  const p = PP.proxyOf(zard);
+  assert.equal(p.hp, 'HP 330 [D]');
+  assert.ok(p.head[0].text.includes('Stage 2') && p.head[0].text.includes('Charmeleon'));
+  assert.ok(p.body.some(b => b.text.startsWith('[R][R] Burning Darkness') && b.right === '180+'));
+  assert.ok(p.body.some(b => b.text.includes('Basic [R] Energy')) && p.body.some(b => b.text.includes('takes 2 Prize cards')));
+  assert.ok(p.foot[0].text.includes('[G]×2') && p.foot[0].text.includes('Retreat 2'));
+  assert.equal(p.tag, 'PAF · 54 · Mark G');
+  const ace = PP.proxyOf({ ...zard, category: 'Trainer', trainer_type: 'Tool', stage: '', suffix: '', types: [], hp: null, attacks: [], abilities: [], effect: 'Attach me.', is_ace: true });
+  assert.equal(ace.head[0].text, 'Pokémon Tool');
+  assert.ok(ace.body.some(b => b.text.startsWith('ACE SPEC rule')));
+  const en = PP.proxyOf({ ...zard, category: 'Energy', energy_type: 'Special', stage: '', suffix: '', types: [], hp: null, attacks: [], abilities: [], effect: 'Provides {C} Energy.' });
+  assert.equal(en.head[0].text, 'Special Energy');
+  const many = Array.from({ length: 10 }, () => p);
+  const pdf = Buffer.from(PP.pokeProxyPdf(many, 'Deck - Proxies')).toString('latin1');
+  assert.ok(pdf.startsWith('%PDF-1.4') && pdf.includes('/Count 2') && pdf.includes('Charizard ex') && pdf.includes('Burning Darkness'));
+  // an absurdly long card still lays out (text shrinks) without throwing
+  const long = { ...p, body: Array.from({ length: 40 }, (_, i) => ({ text: 'Lots of rules text that goes on and on ' + i })) };
+  assert.doesNotThrow(() => PP.pokeProxyPdf([long]));
+  assert.ok(PP.wrapText('aaa bbb ccc ddd eee', 0.4, 9).length > 1);
+});
+const { matchRoute } = await import('../worker/seo.js');
+t('worker route list covers every app route', () => {
+  // A page missing from worker/seo.js would be served as a 404, so the two lists must stay in step.
+  const app = fs.readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const pats = [...app.matchAll(/^\s*\['(\/[^']*)',/gm)].map(m => m[1]);
+  assert.ok(pats.length > 20, 'found the routes');
+  const sample = { id: '123', place: '2', name: 'abc', deck: 'dragapult-ex' };
+  for (const pat of pats) {
+    const path = pat.replace(/:(\w+)/g, (_, k) => sample[k] || 'x');
+    if (/\/japan\//.test(path)) continue; // japan ids have their own format; checked by its own validator
+    assert.ok(matchRoute(path), `worker/seo.js ROUTE_LIST has no entry for ${pat}`);
+  }
 });
 console.log(`unit: ${n} groups ok`);
 await import('./rules-parse.test.mjs');

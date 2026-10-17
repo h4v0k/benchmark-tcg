@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTitle } from '../components/seo';
 import { DeckGrid } from '../components/DeckTile';
 import { Empty, ErrorBox, Icon, Spinner, useDebounced } from '../components/ui';
 import { setQuery, useRoute } from '../router';
@@ -7,6 +8,7 @@ import type { DeckRow, Format } from '../lib/types';
 
 const PER = 24;
 export function Browse() {
+  useTitle('Browse decks', 'Browse public Pokémon TCG decks. Filter by format, archetype and price.');
   const { query } = useRoute();
   const format = (query.get('format') || '') as Format | '';
   const sort = (query.get('sort') || 'likes') as api.DeckQuery['sort'];

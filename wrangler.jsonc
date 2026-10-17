@@ -2,15 +2,16 @@
 {
   "name": "benchmark-tcg",
   "compatibility_date": "2026-10-01",
-  // Tiny Worker that only handles /img/* (card art re-served from our domain for the deck image export).
+  // Worker: per-page SEO tags, 404s, /sitemap.xml and /img/* (card art re-served from our domain for the deck image export).
   "main": "worker/index.js",
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
     // Single-page app: unknown paths load index.html
     "not_found_handling": "single-page-application",
-    // Everything except /img/* is served as static files without running the Worker.
-    "run_worker_first": ["/img/*"]
+    // The Worker handles page requests (per-route SEO tags, real 404s), /img/* and /sitemap.xml.
+    // Built files and static assets skip it (negated patterns) so they stay free and fast.
+    "run_worker_first": ["/*", "!/assets/*", "!/brand/*", "!/regsheet/*", "!/og-image.png", "!/favicon.ico", "!/apple-touch-icon.png", "!/site.webmanifest", "!/theme.js", "!/robots.txt"]
   },
   // Builds of branches other than main run `wrangler preview`, which needs this block (it can stay empty).
   "previews": {}

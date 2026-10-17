@@ -209,6 +209,7 @@ export const auth = {
   },
   async resetPassword(email: string) { await authFetch(`recover?redirect_to=${redirectTo()}`, { email }); },
   async setPassword(password: string) { await authFetch('user', { password }, true); },
+  async changeEmail(email: string) { await authFetch('user', { email }, true); },
   async signOut() {
     try { if (session) await fetch(`${base}/auth/v1/logout`, { method: 'POST', headers: { apikey: anon, Authorization: `Bearer ${session.access_token}` }, signal: timeoutSignal(5000) }); } catch { /* offline */ }
     // Details kept on this device for registration sheets go with the account.
