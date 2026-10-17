@@ -50,13 +50,20 @@ async function sitemap(request, ctx) {
 // but the same shell, so the app shows its NotFound page. Headers (incl. CSP) come from the asset response,
 // where public/_headers is applied, and are carried over untouched.
 async function page(request, env, url) {
-  const shell = await env.ASSETS.fetch(new Request(url.origin + '/', { method: 'GET', headers: request.headers }));
+  // Fetch the shell unconditionally: the visitor's If-None-Match must not turn a rewritten page (or a 404) into a 304.
+  const shell = await env.ASSETS.fetch(new Request(url.origin + '/', { method: 'GET' }));
   const ct = shell.headers.get('Content-Type') || '';
   if (!shell.ok || !ct.includes('text/html')) return shell;
+  // index.html's ETag/Last-Modified don't describe the rewritten page (a renamed deck would keep its old title)
+  const headers = new Headers(shell.headers);
+  headers.delete('ETag'); headers.delete('Last-Modified');
+  headers.set('Cache-Control', 'no-cache');
   const route = matchRoute(url.pathname);
-  if (!route) return new Response(shell.body, { status: 404, headers: shell.headers });
+  if (!route) return new Response(shell.body, { status: 404, headers });
   try {
-    return rewriteHead(shell, await headFor(route));
+    const h = await headFor(route);
+    // HTMLRewriter keeps the status of the response it transforms
+    return rewriteHead(new Response(shell.body, { status: h.notFound ? 404 : 200, headers }), h);
   } catch {
     return env.ASSETS.fetch(new Request(url.origin + '/', { method: 'GET' }));
   }

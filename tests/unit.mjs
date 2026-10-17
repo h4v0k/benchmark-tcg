@@ -189,6 +189,14 @@ t('card search syntax: fields, comparisons, aliases', () => {
   assert.deepEqual(CQ.parseCardQuery('t:supporter').groups[0], [{ f: 'tt', v: 'supporter' }]);
   assert.deepEqual(CQ.parseCardQuery('weak:water res:fighting').groups[0].map(c => [c.f, c.v]), [['weak', 'water'], ['res', 'fighting']]);
 });
+t('card search syntax: limits and is:old-ex', () => {
+  assert.deepEqual(CQ.parseCardQuery('is:old-ex').groups[0], [{ f: 'is', v: 'old-ex' }]);
+  assert.ok(!CQ.parseCardQuery(Array.from({ length: 10 }, (_, i) => 'hp>' + i).join(' or ')).error);
+  assert.match(CQ.parseCardQuery(Array.from({ length: 11 }, (_, i) => 'hp>' + i).join(' or ')).error, /too long/);
+  assert.match(CQ.parseCardQuery(Array.from({ length: 21 }, (_, i) => 'hp>' + i).join(' ')).error, /too long/);
+  assert.match(CQ.parseCardQuery('o:"' + 'a'.repeat(101) + '"').error, /too long/);
+  assert.ok(!CQ.parseCardQuery('o:"' + 'a'.repeat(100) + '"').error);
+});
 t('card search syntax: negation, OR and exact name', () => {
   const q = CQ.parseCardQuery('t:fire -is:ex or t:water');
   assert.equal(q.groups.length, 2);

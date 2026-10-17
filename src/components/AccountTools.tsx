@@ -73,7 +73,7 @@ export function AccountTools() {
       </form>
       {emailMsg && <p className="muted" role="status">{emailMsg}</p>}
       <div className="account-row">
-        <p className="muted grow">Download a copy of your profile, decks, likes, follows and settings as a JSON file.</p>
+        <p className="muted grow">Download a copy of your profile, decks and their saved versions, collection, likes, follows and settings as a JSON file.</p>
         <button className="btn" onClick={download} disabled={busy === 'dl'}><Icon name="download" />Download my data</button>
       </div>
       <div className="account-row">
@@ -82,7 +82,7 @@ export function AccountTools() {
       </div>
       {del && (
         <Modal title="Delete your account?" onClose={() => setDel(false)} footer={<><button className="btn ghost" onClick={() => setDel(false)}>Cancel</button><button className="btn danger" onClick={destroy} disabled={typed !== profile.username || busy === 'del'}>{busy === 'del' ? 'Deleting…' : 'Delete forever'}</button></>}>
-          <p>All your decks, folders, likes, follows and settings will be deleted. Download your data first if you want a copy.</p>
+          <p>All your decks, deck history, collection, folders, likes, follows and settings will be deleted. Download your data first if you want a copy.</p>
           <label className="field"><span>Type <b>{profile.username}</b> to confirm</span><input value={typed} onChange={e => setTyped(e.target.value)} autoComplete="off" autoCapitalize="off" spellCheck={false} /></label>
         </Modal>
       )}

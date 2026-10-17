@@ -6,6 +6,7 @@
 //   hp>=200  retreat<=1  damage>=180  cost>=3  usd>5      (comparisons: : = != > < >= <=)
 //   weak:water  res:fighting  set:sv04.5  num:54  reg:h  r:"ultra rare"  a:"5ban graphics"
 //   legal:standard  banned:expanded  is:ace  is:radiant
+//   is:ex (modern lowercase "ex" only)  is:old-ex (old EX)  is:v (V, VSTAR and VMAX)  is:gx
 //   -t:water  (leading minus negates)    fire or water    (either side)
 export type Clause = { f: string; op?: string; v: string; neg?: boolean };
 export type CardQuery = { groups: Clause[][]; error?: string; simple: boolean; empty: boolean };
@@ -15,7 +16,7 @@ const CATS: Record<string, string> = { pokemon: 'pokemon', 'pokémon': 'pokemon'
 const STAGES: Record<string, string> = { basic: 'basic', stage1: 'stage1', 'stage-1': 'stage1', '1': 'stage1', stage2: 'stage2', 'stage-2': 'stage2', '2': 'stage2', mega: 'mega', vstar: 'vstar', vmax: 'vmax', baby: 'baby', break: 'break', restored: 'restored', 'v-union': 'v-union', 'level-up': 'level-up' };
 const SUFFIXES: Record<string, string> = { ex: 'ex', gx: 'gx', v: 'v', legend: 'legend', prime: 'prime', 'tag-team': 'tag team-gx', tagteam: 'tag team-gx' };
 const TRAINERS: Record<string, string> = { item: 'item', supporter: 'supporter', stadium: 'stadium', tool: 'tool', tm: 'technical machine', 'technical-machine': 'technical machine' };
-const IS: Record<string, string> = { ace: 'ace', acespec: 'ace', radiant: 'radiant', prism: 'prism', 'basic-energy': 'basic-energy', 'special-energy': 'special-energy', rotating: 'rotating', basic: 'basic', ex: 'ex', gx: 'gx', v: 'v' };
+const IS: Record<string, string> = { ace: 'ace', acespec: 'ace', radiant: 'radiant', prism: 'prism', 'basic-energy': 'basic-energy', 'special-energy': 'special-energy', rotating: 'rotating', basic: 'basic', ex: 'ex', 'old-ex': 'old-ex', gx: 'gx', v: 'v' };
 const FORMATS: Record<string, string> = { standard: 'standard', std: 'standard', expanded: 'expanded', exp: 'expanded' };
 const NUMERIC: Record<string, string> = { hp: 'hp', retreat: 'retreat', ret: 'retreat', damage: 'damage', dmg: 'damage', cost: 'cost', usd: 'usd', price: 'usd', $: 'usd' };
 const TEXTY: Record<string, string> = {
@@ -33,6 +34,9 @@ function tokenize(q: string): string[] {
 }
 const unquote = (s: string) => s.replace(/^"/, '').replace(/"$/, '');
 const isNum = (v: string) => /^-?\d+(\.\d+)?$/.test(v);
+
+// The database enforces the same limits (search_cards_q).
+const MAX_GROUPS = 10, MAX_CLAUSES = 20, MAX_VALUE = 100;
 
 type R = { clause: Clause } | { error: string };
 const bad = (error: string): R => ({ error });
@@ -85,7 +89,7 @@ function term(raw: string): R {
       if (lv === 'mega') return ok({ f: 'stage', v: 'mega' });
       if (lv === 'pokemon' || lv === 'trainer' || lv === 'energy') return ok({ f: 'cat', v: lv });
       if (TRAINERS[lv]) return ok({ f: 'tt', v: TRAINERS[lv] });
-      return IS[lv] ? ok({ f: 'is', v: IS[lv] }) : bad(`Unknown "is:${v}". Try ace, radiant, ex, v, basic, basic-energy or special-energy.`);
+      return IS[lv] ? ok({ f: 'is', v: IS[lv] }) : bad(`Unknown "is:${v}". Try ace, radiant, ex, old-ex, v, basic, basic-energy or special-energy.`);
     }
   }
   return bad(`Unknown search field "${key}:". Open "Syntax help" for the list.`);
@@ -106,6 +110,8 @@ export function parseCardQuery(q: string): CardQuery {
     if (r.clause.v) groups[groups.length - 1].push(r.clause);
   }
   const live = groups.filter(g => g.length);
+  if (live.length > MAX_GROUPS || live.reduce((n, g) => n + g.length, 0) > MAX_CLAUSES || live.some(g => g.some(c => c.v.length > MAX_VALUE)))
+    return { groups: [], error: `That search is too long: use at most ${MAX_GROUPS} "or" groups, ${MAX_CLAUSES} conditions in all, and ${MAX_VALUE} characters per value.`, simple: false, empty: false };
   return { groups: live, simple: simple && live.length === 1, empty: !live.length };
 }
 
@@ -154,7 +160,7 @@ export const SYNTAX_HELP: { field: string; what: string; example: string }[] = [
   { field: 'atk  ab', what: 'Attack name, ability name', example: 'atk:burning   ab:"infernal reign"' },
   { field: 't  type', what: 'Energy type of the Pokémon', example: 't:fire   t:psychic   -t:colorless' },
   { field: 'cat', what: 'pokemon, trainer or energy', example: 'cat:trainer' },
-  { field: 'stage', what: 'basic, stage1, stage2, mega, vstar, vmax, ex, v, gx', example: 'stage:stage2   stage:ex' },
+  { field: 'stage', what: 'basic, stage1, stage2, mega, vstar, vmax, ex (modern), v, gx', example: 'stage:stage2   stage:ex' },
   { field: 'tt', what: 'Trainer type: item, supporter, stadium, tool', example: 'tt:supporter' },
   { field: 'hp  retreat', what: 'Numbers; compare with > < >= <= = !=', example: 'hp>=200   retreat<=1' },
   { field: 'damage  cost', what: 'Biggest attack damage; most energy in an attack cost', example: 'damage>=180   cost>=3' },
@@ -165,7 +171,7 @@ export const SYNTAX_HELP: { field: string; what: string; example: string }[] = [
   { field: 'r  rarity', what: 'Rarity words', example: 'r:"special illustration"' },
   { field: 'a  artist', what: 'Illustrator', example: 'a:"5ban graphics"' },
   { field: 'legal  banned', what: 'Format: standard or expanded', example: 'legal:standard   banned:expanded' },
-  { field: 'is', what: 'ace, radiant, ex, v, gx, basic, basic-energy, special-energy', example: 'is:ace   is:radiant   -is:basic-energy' },
+  { field: 'is', what: 'ace, radiant, ex (modern), old-ex, v (incl. VSTAR, VMAX), gx, basic, basic-energy, special-energy', example: 'is:ace   is:radiant   -is:basic-energy' },
   { field: 'usd', what: 'Price in dollars (when we have one)', example: 'usd>5   usd<=1' },
   { field: '-  or', what: 'Minus leaves matches out; or accepts either side', example: 'fire or water   -t:water   stage:basic -is:ex' },
 ];

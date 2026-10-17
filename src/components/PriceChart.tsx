@@ -5,7 +5,8 @@ import { money } from '../lib/cards';
 const W = 300, H = 84, PAD = 6;
 
 /** Small line chart of one printing's price. Inline SVG, colours from the theme. */
-export function PriceChart({ cardId, days = 90 }: { cardId: string; days?: number }) {
+/** `price` (the card's current main price) lets us explain why cheap cards have no history: only $1+ cards are tracked. */
+export function PriceChart({ cardId, days = 90, price }: { cardId: string; days?: number; price?: number | null }) {
   const [pts, setPts] = useState<PricePoint[] | null>(null);
   useEffect(() => {
     let alive = true;
@@ -14,7 +15,9 @@ export function PriceChart({ cardId, days = 90 }: { cardId: string; days?: numbe
     return () => { alive = false; };
   }, [cardId, days]);
   if (!pts) return null;
-  if (pts.length < 2) return <p className="muted small price-chart-empty">Price history starts today.</p>;
+  if (pts.length < 2) return <p className="muted small price-chart-empty">{price != null && price < 1
+    ? 'Price history is kept for cards worth $1 or more.'
+    : 'Price history is saved once a day. Check back in a couple of days for a chart.'}</p>;
   const first = pts[0], last = pts[pts.length - 1];
   const pct = first.market ? (last.market - first.market) / first.market * 100 : 0;
   const t0 = Date.parse(first.day), t1 = Date.parse(last.day) || t0 + 1;

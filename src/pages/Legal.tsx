@@ -11,9 +11,10 @@ export function PrivacyPage() {
       <h2>What we collect</h2>
       <ul>
         <li><b>Account:</b> your email address and username. If you sign in with Google, we get your email and basic profile details from Google. If you add a passkey, we store its public key (never your fingerprint or face).</li>
-        <li><b>What you make:</b> your decks, folders, likes, follows, profile bio and picture, default printings, and tournament registration details if you enter them.</li>
+        <li><b>What you make:</b> your decks (including earlier saved versions of each list), folders, collection, likes, follows, profile bio and picture, default printings, and tournament registration details if you enter them.</li>
         <li><b>Deck views:</b> we count views on each deck using an anonymous viewer ID, so one person isn’t counted twice. It isn’t linked to your name.</li>
         <li><b>Issue reports:</b> what you type in the Report an issue form, plus an optional contact email, the page you were on and your browser type. We also keep a scrambled (hashed) version of your IP address to stop spam.</li>
+        <li><b>Site errors:</b> if a page breaks in your browser, we log the error message, the page address and your browser type so we can fix it. It isn’t linked to your name; we keep it for 14 days.</li>
         <li><b>Visits:</b> Cloudflare Web Analytics gives us simple page-view counts. It doesn’t use cookies.</li>
       </ul>
       <h2>Why</h2>
@@ -25,7 +26,7 @@ export function PrivacyPage() {
       <h2>Public game data</h2>
       <p>Card, price and tournament data comes from Limitless, TCGdex and TCGplayer. It is public game data, not personal data.</p>
       <h2>Your choices</h2>
-      <p>Open <Link to="/settings">Settings</Link> to download a copy of your data, change your username or email, or delete your account. Deleting removes your profile, decks, folders, likes and follows. Issue reports you sent stay, but are no longer linked to you. Decks you set to private are visible only to you.</p>
+      <p>Open <Link to="/settings">Settings</Link> to download a copy of your data, change your username or email, or delete your account. Deleting removes your profile, decks and their history, collection, folders, likes and follows. Issue reports you sent stay, but without your contact email or any link to you. Decks you set to private are visible only to you.</p>
       <h2>Contact</h2>
       <p>Use the Report an issue link at the bottom of any page.</p>
     </div>

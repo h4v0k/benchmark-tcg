@@ -956,3 +956,4 @@ a.mu-row.mu-deck-link:hover .mu-name b { text-decoration: underline; text-underl
 .topbar-inner { height: auto; min-height: 56px; flex-wrap: wrap; }
 .icon-btn { min-width: 32px; min-height: 32px; width: auto; height: auto; }
 .error-stack { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8em; max-height: 240px; overflow-y: auto; background: var(--bg2); padding: 8px; border-radius: 6px; }
+@media (pointer: coarse) { .pager .btn { height: auto; min-height: 44px; } }

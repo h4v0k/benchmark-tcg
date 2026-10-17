@@ -23,4 +23,6 @@ for m in "$ROOT"/supabase/migrations/0*.sql; do
 done
 echo "PASS | all migrations apply; 018+ can run again"
 "${P[@]}" -f "$HERE/chain-test.sql" 2>&1 | sed -E 's/^psql:[^ ]+ ?//; s/^NOTICE:  //' | grep -E "PASS|FAIL|ERROR" | tee "$TMP/out"
+# Search speed + semantics on 24k synthetic cards (runs after chain-test, on the same database).
+"${P[@]}" -f "$HERE/perf-test.sql" 2>&1 | sed -E 's/^psql:[^ ]+ ?//; s/^NOTICE:  //' | grep -E "PASS|FAIL|ERROR" | tee -a "$TMP/out"
 ! grep -qE "FAIL|ERROR" "$TMP/out"

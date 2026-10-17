@@ -177,7 +177,7 @@ function ReportsPanel() {
 }
 
 type ClientError = { id: number; message: string; stack: string; page: string; agent: string; release: string; signed_in: boolean; count: number; first_at: string; last_at: string };
-/** Uncaught errors from visitors' browsers (src/lib/errors.ts), grouped by message; kept 30 days. */
+/** Uncaught errors from visitors' browsers (src/lib/errors.ts), grouped by message; kept 14 days. */
 function ErrorsPanel() {
   const r = useAsync(() => rpc<ClientError[]>('admin_client_errors', { p_limit: 100 }), []);
   const [open, setOpen] = useState<number | null>(null);
@@ -190,7 +190,7 @@ function ErrorsPanel() {
       <div className="panel-head"><h2>Site errors {r.data && <span className="muted">({list.length})</span>}</h2>
         <button className="btn small" onClick={r.reload}><Icon name="refresh" size={14} />Refresh</button></div>
       <p className="muted small">Errors visitors' browsers hit on the live site, grouped. Clear one once it's fixed.</p>
-      {r.loading ? <Spinner /> : r.error ? <ErrorBox error={r.error} onRetry={r.reload} /> : !list.length ? <p className="muted">No errors in the last 30 days.</p> : (
+      {r.loading ? <Spinner /> : r.error ? <ErrorBox error={r.error} onRetry={r.reload} /> : !list.length ? <p className="muted">No errors in the last 14 days.</p> : (
         <ul className="report-list">
           {list.map(x => (
             <li key={x.id}>

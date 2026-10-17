@@ -116,7 +116,8 @@ create or replace function public.delete_my_account() returns void language plpg
 declare me uuid := auth.uid();
 begin
   if me is null then raise exception 'Sign in first.'; end if;
-  update public.issue_reports set user_id = null where user_id = me;
+  -- keep the report text for fixing bugs, but nothing that identifies the person
+  update public.issue_reports set user_id = null, contact_email = null where user_id = me;
   delete from auth.users where id = me;
 end $fn$;
 revoke execute on function public.delete_my_account() from public, anon;

@@ -107,7 +107,7 @@ export function CardModal({ line, format, editable, isCover, onClose, onChange, 
             <a className="btn primary" href={buyUrl(c, finish, line.name)} target="_blank" rel="noopener noreferrer"><Icon name="cart" />Buy this printing on TCGplayer</a>
           </div>
 
-          {c && <PriceChart cardId={c.id} />}
+          {c && <PriceChart cardId={c.id} price={linePrice({ ...line, card: c })} />}
           {c && <OwnControl cardId={c.id} />}
 
           {editable && onChange && (

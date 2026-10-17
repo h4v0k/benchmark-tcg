@@ -79,38 +79,40 @@ const clean = s => String(s ?? '').replace(/\s+/g, ' ').trim();
 const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
 export const coverUrl = base => !base ? '' : base.startsWith('https://tcgplayer-cdn.tcgplayer.com/product/') ? `${base}_in_1000x1000.jpg` : base.startsWith('https://') ? `${base}/high.webp` : '';
 
-// Head builders: return { title, description, image } or null (generic tags). One REST call each.
+// Head builders: return { title, description, image }, null (generic tags; e.g. lookup failed or a deck that may be
+// private), or NOT_FOUND (the lookup worked and there's no such thing: the page gets a 404 status). One REST call each.
+export const NOT_FOUND = { notFound: true };
 const HEAD = {
   async deck(r, q) {
-    if (!/^[0-9a-f-]{8,40}$/i.test(r.args[0])) return null;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(r.args[0])) return NOT_FOUND;
     const [d] = await q(`decks?id=eq.${encodeURIComponent(r.args[0])}&is_public=eq.true&select=name,format,archetype,card_count,cover,owner_profile:profiles!decks_owner_fkey(username)&limit=1`);
-    if (!d) return null;
+    if (!d) return null; // missing and private decks look the same to us: generic tags, 200
     const owner = d.owner_profile?.username;
     const parts = [cap(clean(d.format)), clean(d.archetype)].filter(Boolean).join(' ');
     return {
       title: `${clean(d.name)} · ${cap(clean(d.format)) || 'Pokémon TCG'} deck`,
       description: trunc(`${parts ? parts + ' deck' : 'Pokémon TCG deck'}, ${d.card_count ?? 60} cards${owner ? ` by ${owner}` : ''}. View the list, price and matchups on Benchmark.`, 200),
-      image: coverUrl(d.cover),
+      image: coverUrl(d.cover) || undefined,
     };
   },
   async card(r, q) {
     const [c] = await q(`cards?id=eq.${encodeURIComponent(r.args[0])}&select=name,set_id,local_id,category,hp,rarity,image&limit=1`);
-    if (!c) return null;
+    if (!c) return NOT_FOUND;
     const bits = [c.category, c.hp ? `${c.hp} HP` : '', c.rarity].filter(Boolean).join(' · ');
     return {
       title: `${clean(c.name)} (${String(c.set_id || '').toUpperCase()} ${c.local_id ?? ''}) · Card`.replace(' ) ', ') '),
       description: trunc(`${clean(c.name)}${bits ? ': ' + bits : ''}. Legality, prices and every printing on Benchmark.`, 200),
-      image: coverUrl(c.image),
+      image: coverUrl(c.image) || undefined,
     };
   },
   async profile(r, q) {
     const [p] = await q(`profiles?username=eq.${encodeURIComponent(r.args[0])}&select=username,bio&limit=1`);
-    if (!p) return null;
+    if (!p) return NOT_FOUND;
     return { title: `${p.username} · Decks`, description: trunc(clean(p.bio) || `Pokémon TCG decks by ${p.username} on Benchmark.`, 200) };
   },
   async event(r, q) {
     const [t] = await q(`tournaments?id=eq.${encodeURIComponent(r.args[0])}&select=name,date,country,players,format&limit=1`);
-    if (!t) return null;
+    if (!t) return NOT_FOUND;
     const place = r.args[1] ? ` · Place ${r.args[1]}` : '';
     return {
       title: `${clean(t.name)}${place} · Results`,
@@ -140,10 +142,13 @@ export async function headFor(route) {
   if (HEAD[route.kind]) {
     let got = null;
     try { got = await HEAD[route.kind](route, p => sbFetch(p)); } catch { got = null; }
+    if (got === NOT_FOUND) return { ...DEFAULT, title: DEFAULT.title, notFound: true, noindex: true, url: SITE + route.path };
+    // empty fields (e.g. a deck with no cover) keep the defaults instead of blanking the tag
+    if (got) for (const k of Object.keys(got)) if (got[k] == null || got[k] === '') delete got[k];
     info = got ? { ...DEFAULT, ...got } : { ...DEFAULT };
   }
   info = info || { ...DEFAULT };
-  const title = /Benchmark$/.test(info.title) ? info.title : `${info.title} · Benchmark`;
+  const title = /Benchmark/.test(info.title) ? info.title : `${info.title} · Benchmark`;
   return { ...info, title, url: route.path === '/' ? SITE + '/' : SITE + route.path };
 }
 

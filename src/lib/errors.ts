@@ -16,13 +16,13 @@ const IGNORE = /ResizeObserver loop|Script error\.?$|chrome-extension:|moz-exten
 export function reportError(err: unknown, where = '') {
   try {
     const e = err instanceof Error ? err : new Error(typeof err === 'string' ? err : JSON.stringify(err));
-    const message = `${where ? where + ': ' : ''}${e.name && e.name !== 'Error' ? e.name + ': ' : ''}${e.message || String(err)}`.slice(0, 500);
+    const message = `${where ? where + ': ' : ''}${e.name && e.name !== 'Error' ? e.name + ': ' : ''}${e.message || String(err)}`.slice(0, 300);
     const stack = String(e.stack || '');
     if (IGNORE.test(message) || IGNORE.test(stack.split('\n').slice(0, 3).join('\n'))) return;
     if (seen.has(message) || sent >= 5) return;
     seen.add(message); sent++;
     rpc('log_client_error', {
-      p_message: message, p_stack: stack.slice(0, 4000), p_page: location.pathname + location.search,
+      p_message: message, p_stack: stack.slice(0, 1000), p_page: location.pathname, // never the query string: sign-in links can carry codes there
       p_agent: navigator.userAgent.slice(0, 300), p_release: release,
     }).catch(() => { /* reporting must never cause more errors */ });
   } catch { /* ignore */ }

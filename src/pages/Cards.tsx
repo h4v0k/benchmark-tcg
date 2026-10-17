@@ -6,7 +6,7 @@ import { Link, setQuery, useRoute } from '../router';
 import * as api from '../lib/api';
 import { runCardSearch } from '../lib/cardsearch';
 import { CardSearchTools } from '../components/CardSearchTools';
-import { FINISH_LABEL, fmtDate, legalIn, money, printLabel } from '../lib/cards';
+import { FINISH_LABEL, fmtDate, legalIn, linePrice, money, printLabel, type Line } from '../lib/cards';
 import { buyUrl } from '../lib/tcgplayer';
 import { OwnControl } from '../components/CollectionControl';
 import { PriceChart } from '../components/PriceChart';
@@ -95,7 +95,7 @@ export function CardPage({ id }: { id: string }) {
             </div>
             <a className="btn primary big" href={buyUrl(c, f)} target="_blank" rel="noopener noreferrer"><Icon name="cart" />Buy {FINISH_LABEL[f] || ''} on TCGplayer</a>
           </div>
-          <PriceChart cardId={c.id} />
+          <PriceChart cardId={c.id} price={linePrice({ qty: 1, name: c.name, cid: c.id, board: 'main', card: c } as Line)} />
           <OwnControl cardId={c.id} />
           <p><Link to={`/decks?card=${encodeURIComponent(c.name)}`} className="btn">Decks with {c.name}</Link></p>
         </div>
