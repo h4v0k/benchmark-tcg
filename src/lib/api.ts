@@ -275,22 +275,22 @@ export const setBanActive = (id: number, active: boolean) => sb.update('bans', {
 
 export type { DeckEntry };
 
-/* ---------------- Tournaments (Regionals, Internationals, Worlds; from Limitless) ---------------- */
-export type Tournament = { id: number; name: string; date: string; country: string; players: number | null; kind: 'regional' | 'international' | 'worlds'; status: string };
+/* ---------------- Tournaments (this season's majors; from Limitless) ---------------- */
+export type TourneyKind = 'regional' | 'special' | 'international' | 'worlds' | 'league';
+export type Tournament = { id: number; name: string; date: string; country: string; players: number | null; kind: TourneyKind; status: string; non_us?: boolean };
+/* One row of the season's event list: US-feed majors (src 'us') and Japan's majors (src 'jp', kind 'japan').
+   label: 'japan' for a Japanese event, 'non_us' when lists use cards that weren't legal in the US then. */
+export type SeasonEvent = { id: string; src: 'us' | 'jp'; name: string; date: string; country: string; players: number | null; kind: TourneyKind | 'japan'; status: string; lists: number; label: 'japan' | 'non_us' | null };
+export const seasonEvents = () => sb.rpc<SeasonEvent[]>('season_events');
 export type TourneyDeck = { tournament_id: number; place: number; player: string; country: string; archetype: string; list_id: number | null; card_count: number | null; price: number | null; cards?: DeckEntry[] | null; missing?: string[] };
 export type MetaRow = { archetype: string; top32: number; top8: number; wins: number; events: number; best_tournament: number | null; best_place: number | null };
-const T_COLS = 'id,name,date,country,players,kind,status';
+const T_COLS = 'id,name,date,country,players,kind,status,non_us';
 
 /* Live (and just-finished) official events, from Limitless Labs; refreshed hourly while they run. */
 export type LiveStanding = { pos: number; placement: number | null; name: string; country: string; wins: number; losses: number; ties: number; points: number; deck: string; deck_name: string; dropped: boolean; day2: boolean; topcut: boolean };
 export type LiveEvent = { id: string; name: string; city: string; country: string; kind: string; date: string; live: boolean; players: number | null; round: number | null; rounds: number | null; updated_at: string | null; checked_at: string | null; finished_at: string | null; total?: number; standings: LiveStanding[] };
 export const liveEvents = (top = 8) => sb.rpc<LiveEvent[]>('live_events', { p_top: top });
 export const liveEvent = (id: string, limit = 256, offset = 0) => sb.rpc<LiveEvent | null>('live_event', { p_id: id, p_limit: limit, p_offset: offset });
-export async function tournaments(): Promise<(Tournament & { lists: number })[]> {
-  const { rows } = await sb.select<Tournament & { tournament_decks: { count: number }[] }>('tournaments',
-    { select: `${T_COLS},tournament_decks(count)`, 'tournament_decks.cards': 'not.is.null', status: 'neq.new', order: 'date.desc', limit: 60 });
-  return rows.map(r => ({ ...r, lists: r.tournament_decks?.[0]?.count || 0 }));
-}
 export async function tournament(id: number): Promise<{ t: Tournament; decks: TourneyDeck[] } | null> {
   const [{ rows: ts }, { rows: decks }] = await Promise.all([
     sb.select<Tournament>('tournaments', { select: T_COLS, id: `eq.${id}` }),

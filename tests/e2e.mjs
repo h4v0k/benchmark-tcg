@@ -201,6 +201,11 @@ async function handleSupabase(route) {
   if (p === '/rest/v1/rpc/jp_card_partners') return json(route, body.p_name === 'Mega Rayquaza ex' ? JP_PARTNERS : []);
   if (p === '/rest/v1/jp_tournaments') return json(route, [JP_T]);
   if (p === '/rest/v1/jp_decks') return json(route, u.searchParams.get('place') ? [JP_DECKS[1]] : JP_DECKS);
+  if (p === '/rest/v1/rpc/season_events') return json(route, [
+    { id: '580', src: 'us', name: 'Regional Recife', date: '2026-10-03', country: 'BR', players: 1074, kind: 'regional', status: 'lists', lists: 32, label: null },
+    { id: '578', src: 'us', name: 'Regional Brisbane', date: '2026-09-26', country: 'AU', players: 817, kind: 'regional', status: 'new', lists: 0, label: null },
+    { id: 'm569', src: 'jp', name: 'Champions League Yokohama', date: '2026-09-20', country: 'JP', players: 5000, kind: 'japan', status: 'done', lists: 24, label: 'japan' },
+    { id: '590', src: 'us', name: 'Indonesia Premier Ball League', date: '2026-09-19', country: 'ID', players: 1384, kind: 'league', status: 'done', lists: 0, label: 'non_us' }]);
   if (p === '/rest/v1/tournaments') return json(route, [{ id: 580, name: 'Regional Recife', date: '2026-10-03', country: 'BR', players: 1074, kind: 'regional', status: 'lists', tournament_decks: [{ count: 32 }] }]);
   if (p === '/rest/v1/tournament_decks' && (u.searchParams.get('select') || '').includes('tournaments!inner')) return json(route, u.searchParams.get('archetype') === 'eq.Dragapult' ? ARCH_ROWS : []);
   if (p === '/rest/v1/tournament_decks') {
@@ -443,6 +448,22 @@ try {
       if (over > 1) throw new Error(`${url}: ${over}px sideways overflow`);
       if (w === 260) await page.screenshot({ path: path.join(OUT, `events${url.replace(/\//g, '_')}-${w}.png`), fullPage: false });
     }
+    await page.context().close();
+  });
+  await scenario('9s. season events: labels, Japan links, list status', async () => {
+    const page = await newPage({ width: 390, height: 900 });
+    await page.goto(BASE + '/events');
+    await page.locator('.event-row').first().waitFor({ timeout: 8000 });
+    const rows = page.locator('.event-row');
+    if ((await rows.count()) !== 4) throw new Error(`expected 4 events, got ${await rows.count()}`);
+    if (await rows.nth(2).getAttribute('href') !== '/events/japan/m569') throw new Error('Japan event should link to its Japan page');
+    if (!(await rows.nth(2).getByText('Japan format').isVisible())) throw new Error('Japan label missing');
+    if (!(await rows.nth(3).getByText('Non-US cards').isVisible())) throw new Error('non-US label missing');
+    if (!(await rows.nth(1).getByText('Lists coming').isVisible())) throw new Error('pending event should say Lists coming');
+    if (!(await rows.nth(3).getByText('No lists').isVisible())) throw new Error('finished event without lists should say No lists');
+    if (await rows.nth(0).locator('.tag.warn').count()) throw new Error('US event should have no region label');
+    await page.getByRole('radio', { name: 'Asia' }).click();
+    if ((await rows.count()) !== 2) throw new Error('Asia filter should show 2 events');
     await page.context().close();
   });
   for (const w of [260, 390, 1280]) await scenario(`9j. Japan preview pages at ${w}px`, async () => {
