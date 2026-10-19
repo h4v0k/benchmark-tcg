@@ -173,7 +173,7 @@ export function JapanEventPage({ id }: { id: string }) {
       <p className="crumbs"><Link to="/events">Tournaments</Link> › <Link to="/events/japan">Japan</Link></p>
       <SyncNote info={info.data} />
       <div className="page-head"><h1>{t.name}</h1></div>
-      <p className="muted">{[fmtDate(t.date), t.shop, t.players ? `${t.players.toLocaleString()} players` : ''].filter(Boolean).join(' · ')} · <Tag tone={t.kind === 'major' ? 'ok' : 'info'}>{KIND[t.kind]}</Tag></p>
+      <p className="muted">{[fmtDate(t.date), t.shop, t.players ? `${t.players.toLocaleString()} players` : ''].filter(Boolean).join(' · ')} · <Tag tone={t.kind === 'major' ? 'ok' : 'info'}>{KIND[t.kind]}</Tag> <Tag tone="warn">Japan format</Tag></p>
       <PreviewNotice info={info.data} />
       {!decks.length ? <Empty title="Standings coming soon" icon="list"><p>They’re added automatically once Limitless posts them.</p></Empty> : (
         <ol className="standings">

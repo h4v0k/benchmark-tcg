@@ -1,4 +1,5 @@
-// Tournament results: Regionals, Internationals and Worlds (top 32 with lists, from Limitless).
+// Tournament results: this season's majors — Regionals, Special Events, Internationals, Worlds, Asian league events
+// and Japan's majors (top 32 with lists, from Limitless). Events with cards not legal in the US are labeled.
 import { useTitle } from '../components/seo';
 import { useMemo, useState } from 'react';
 import { Empty, ErrorBox, Icon, Segmented, Spinner, Tag, useAsync } from '../components/ui';
@@ -14,8 +15,22 @@ import { autoCover, fmtDate, money, type Line } from '../lib/cards';
 import { RegionSwitch, SyncNote } from './Japan';
 import type { Card, Rules } from '../lib/types';
 
-const KIND: Record<string, string> = { regional: 'Regional', international: 'International', worlds: 'Worlds' };
-const KIND_TONE: Record<string, 'info' | 'accent' | 'ok'> = { regional: 'info', international: 'accent', worlds: 'ok' };
+const KIND: Record<string, string> = { regional: 'Regional', special: 'Special Event', international: 'International', worlds: 'Worlds', league: 'League', japan: 'Japan major' };
+const KIND_TONE: Record<string, 'info' | 'accent' | 'ok'> = { regional: 'info', special: 'info', international: 'accent', worlds: 'ok', league: 'info', japan: 'ok' };
+const FILTERS = [
+  { value: 'all', label: 'All', kinds: [] as string[] },
+  { value: 'regional', label: 'Regionals', kinds: ['regional'] },
+  { value: 'special', label: 'Specials', kinds: ['special'] },
+  { value: 'intl', label: 'Intl & Worlds', kinds: ['international', 'worlds'] },
+  { value: 'asia', label: 'Asia', kinds: ['japan', 'league'] },
+] as const;
+type Filter = typeof FILTERS[number]['value'];
+/* Label for events whose lists aren't US Standard: Japanese events and ones using cards not yet legal in the US. */
+export function RegionLabel({ label }: { label: 'japan' | 'non_us' | null | undefined }) {
+  if (label === 'japan') return <Tag tone="warn">Japan format</Tag>;
+  if (label === 'non_us') return <Tag tone="warn">Non-US cards</Tag>;
+  return null;
+}
 const ord = (n: number) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
 const LimitlessCredit = () => <p className="muted small credit">Results and lists from <a href="https://limitlesstcg.com" target="_blank" rel="noopener noreferrer">Limitless</a>. Prices from TCGplayer.</p>;
 
@@ -94,18 +109,20 @@ export function LiveEventPage({ id }: { id: string }) {
 
 export function EventsPage() {
   useTitle('Tournaments', 'Recent Pokémon TCG tournaments with top finishing decklists.');
-  const ev = useAsync(() => api.tournaments(), []);
+  const ev = useAsync(() => api.seasonEvents(), []);
   const jp = useAsync(() => api.jpInfo(), []);
   const [days, setDays] = useState<'30' | '60' | '120'>('60');
   const meta = useAsync(() => api.tourneyMeta(+days), [days]);
-  const [kind, setKind] = useState<'all' | 'regional' | 'international' | 'worlds'>('all');
-  const list = (ev.data || []).filter(t => kind === 'all' || t.kind === kind);
+  const [kind, setKind] = useState<Filter>('all');
+  const filters = FILTERS.filter(f => f.value === 'all' || (ev.data || []).some(t => (f.kinds as readonly string[]).includes(t.kind)));
+  const active = filters.find(f => f.value === kind) || FILTERS[0];
+  const list = (ev.data || []).filter(t => active.value === 'all' || (active.kinds as readonly string[]).includes(t.kind));
   const maxTop32 = Math.max(1, ...(meta.data || []).map(m => m.top32));
   return (
     <div className="wrap page">
       <div className="page-head"><h1>Tournaments</h1><RegionSwitch value="world" /></div>
       <SyncNote info={jp.data} compact />
-      <p className="muted lede">Top 32 from Regionals, Internationals and Worlds. Open any list to test it, check prices, or copy it to your decks. To see what each deck beats and loses to, open <Link to="/matchups">Matchups</Link>.</p>
+      <p className="muted lede">This season’s majors, with top 32 lists: Regionals, Special Events, Internationals and Worlds, plus Japan’s and Asia’s majors (labeled when they use cards that aren’t legal in the US). Open any list to test it, check prices, or copy it to your decks. To see what each deck beats and loses to, open <Link to="/matchups">Matchups</Link>.</p>
       <LiveSection />
 
       <section className="panel meta-panel">
@@ -130,20 +147,20 @@ export function EventsPage() {
 
       <div className="events-head">
         <h2>Events</h2>
-        <Segmented label="Type" value={kind} onChange={setKind} options={[{ value: 'all', label: 'All' }, { value: 'regional', label: 'Regionals' }, { value: 'international', label: 'Internationals' }, { value: 'worlds', label: 'Worlds' }]} />
+        {filters.length > 2 && <Segmented label="Type" value={active.value} onChange={setKind} options={filters.map(f => ({ value: f.value, label: f.label }))} />}
       </div>
-      {ev.loading ? <Spinner /> : ev.error ? <ErrorBox error={ev.error} onRetry={ev.reload} /> : !list.length ? <Empty title="No events yet" icon="list"><p>New results are added automatically each day.</p></Empty> : (
+      {ev.loading ? <Spinner /> : ev.error ? <ErrorBox error={ev.error} onRetry={ev.reload} /> : !list.length ? <Empty title="No events yet this season" icon="list"><p>New results are added automatically each day.</p></Empty> : (
         <ul className="event-list">
           {list.map(t => (
-            <li key={t.id}>
-              <Link to={`/events/${t.id}`} className="event-row">
+            <li key={t.src + t.id}>
+              <Link to={t.src === 'jp' ? `/events/japan/${t.id}` : `/events/${t.id}`} className="event-row">
                 <div className="grow">
                   <div className="event-name">{t.name}</div>
                   <div className="muted small">{fmtDate(t.date)}{t.players ? ` · ${t.players.toLocaleString()} players` : ''}{t.country ? ` · ${t.country}` : ''}</div>
                 </div>
                 <div className="event-side">
-                  <Tag tone={KIND_TONE[t.kind]}>{KIND[t.kind]}</Tag>
-                  <span className="muted small">{t.lists ? `${t.lists} lists` : 'Lists coming'}</span>
+                  <span className="event-tags"><RegionLabel label={t.label} /><Tag tone={KIND_TONE[t.kind]}>{KIND[t.kind]}</Tag></span>
+                  <span className="muted small">{t.lists ? `${t.lists} lists` : t.status === 'done' ? 'No lists' : 'Lists coming'}</span>
                 </div>
               </Link>
             </li>
@@ -166,7 +183,8 @@ export function EventPage({ id }: { id: number }) {
     <div className="wrap page">
       <p className="crumbs"><Link to="/events">Tournaments</Link></p>
       <div className="page-head"><h1>{t.name}</h1></div>
-      <p className="muted">{fmtDate(t.date)}{t.players ? ` · ${t.players.toLocaleString()} players` : ''} · <Tag tone={KIND_TONE[t.kind]}>{KIND[t.kind]}</Tag></p>
+      <p className="muted">{fmtDate(t.date)}{t.players ? ` · ${t.players.toLocaleString()} players` : ''} · <Tag tone={KIND_TONE[t.kind]}>{KIND[t.kind]}</Tag>{t.non_us && <> <RegionLabel label="non_us" /></>}</p>
+      {t.non_us && <p className="muted small">Some lists from this event use cards that weren’t legal in the US on the event date.</p>}
       {!decks.length ? <Empty title="Standings coming soon" icon="list"><p>They’re added automatically once Limitless posts them.</p></Empty> : (
         <ol className="standings">
           {decks.map(d => {

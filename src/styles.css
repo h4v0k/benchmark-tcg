@@ -628,6 +628,7 @@ a.event-row:hover, a.st-row:hover { border-color: var(--accent); }
 .event-row .grow, .st-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .event-name { font-weight: 700; font-size: 15px; }
 .event-side { display: grid; justify-items: end; gap: 4px; flex: none; text-align: right; }
+.event-tags { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
 .st-place { flex: none; width: 3.2em; font-weight: 800; color: var(--muted); }
 .st-side { flex: none; display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
 .st-side .icon { transform: rotate(-90deg); color: var(--muted); }
