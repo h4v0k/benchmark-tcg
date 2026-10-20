@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as sb from './lib/supabase';
 import * as api from './lib/api';
+import { signupThen } from './router';
 import type { Profile } from './lib/types';
 
 type AuthState = {
@@ -68,4 +69,25 @@ export function useTheme(): [string, (t: string) => void] {
   const [t, set] = useState(() => document.documentElement.dataset.theme || 'dark');
   const apply = (v: string) => { document.documentElement.dataset.theme = v; try { localStorage.setItem('bm:theme', v); } catch {} set(v); };
   return [t, apply];
+}
+
+/** "Copy to my decks" for signed-out visitors: send them to sign up with a way back (?copy=1), then finish the
+ *  copy once they return signed in. `ready` is when the list has loaded; returns the click handler. */
+export function useCopyAfterSignup(ready: boolean, copy: () => void, back: string) {
+  const { session, profile } = useAuth();
+  const run = useRef(copy);
+  run.current = copy;
+  const pending = typeof location !== 'undefined' && new URLSearchParams(location.search).get('copy') === '1';
+  useEffect(() => {
+    if (!pending || !ready || !session || !profile) return;
+    const p = new URLSearchParams(location.search); p.delete('copy');
+    const q = p.toString();
+    history.replaceState(null, '', location.pathname + (q ? '?' + q : ''));
+    run.current();
+  }, [pending, ready, session, profile]);
+  return () => {
+    if (session && profile) { copy(); return; }
+    const u = new URL(back, location.origin); u.searchParams.set('copy', '1');
+    signupThen(u.pathname + u.search);
+  };
 }

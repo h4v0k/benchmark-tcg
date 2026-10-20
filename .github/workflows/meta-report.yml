@@ -1,0 +1,27 @@
+# Weekly meta report drafts for Reddit, X and Discord, from the site's public data.
+# Nothing is posted: the drafts land in the run summary and as a downloadable artifact for a person to review and post.
+name: Meta report drafts
+on:
+  schedule:
+    - cron: '0 15 * * 1' # Mondays 15:00 UTC, after the weekend's events are in
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  drafts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build drafts
+        run: node tools/meta-report.mjs meta-report
+      - name: Show drafts in the run summary
+        run: for f in meta-report/*.md; do printf '## %s\n\n```markdown\n' "$(basename "$f")"; cat "$f"; printf '```\n\n'; done >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meta-report
+          path: meta-report/
+          retention-days: 30

@@ -23,7 +23,7 @@ export function Home() {
     api.rules().then(setRules).catch(() => {});
     api.ruleChanges(6).then(setChanges).catch(() => {});
   }, []);
-  const start = () => (session && profile ? setImportOpen(true) : navigate('/signup'));
+  const start = () => (session && profile ? setImportOpen(true) : navigate('/signup?next=new'));
   return (
     <div className="home">
       <section className="hero">

@@ -780,6 +780,9 @@ try {
     await listsReady(out);
     await lsec(out).getByRole('button', { name: 'Copy to my decks' }).click(T);
     await out.waitForURL(u => new URL(u).pathname === '/signup', T);
+    // ...and signing up brings them back to this list, which then copies itself
+    const next = new URL(out.url()).searchParams.get('next') || '';
+    if (!/^\/matchups\/dragapult-ex\/lists\?list=[^&]+&copy=1$/.test(next)) throw new Error(`signup next: ${next}`);
     await out.context().close();
     const page = await newPage({ width: 390, height: 844 });
     await page.addInitScript(([me]) => {
@@ -800,6 +803,10 @@ try {
     if (JSON.stringify(qty) !== JSON.stringify({ Dreepy: 4, Drakloak: 3, 'Dragapult ex': 2, 'Ultra Ball': 4 })) throw new Error(`cards: ${JSON.stringify(qty)}`);
     if (b.cards.some(c => /Mystery/.test(c.name))) throw new Error('unmatched card was included');
     if (!/8-0-0/.test(b.name) || !/Dragapult/.test(b.name)) throw new Error(`deck name: ${b.name}`);
+    // back from sign-up with ?copy=1: copied without another click, once
+    await page.goto(BASE + next);
+    await page.waitForURL(u => new URL(u).pathname === `/decks/${DECK_ID}`, T);
+    if (posts.length !== 2) throw new Error(`expected 2 POST /decks after the return trip, got ${posts.length}`);
     await page.context().close();
   });
   for (const [w, h] of sizes) for (const big of [false, true]) await scenario(`18. winning lists at ${w}x${h}${big ? ' with large text (24px)' : ''}`, async () => {

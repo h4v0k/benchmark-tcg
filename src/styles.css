@@ -567,6 +567,9 @@ td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: mid
 .passkey-nudge > div:first-child { display: grid; gap: 4px; }
 @media (max-width: 520px) { .passkey-nudge { left: 16px; right: 16px; max-width: none; } }
 
+/* Sign-up line for signed-out visitors on data pages */
+.signup-nudge { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 8px; margin-bottom: 24px; padding-top: 14px; padding-bottom: 14px; border-top: 1px solid var(--line, rgba(127,127,127,.25)); font-size: 14px; }
+
 /* Back to top (phones) */
 .to-top { display: none; position: fixed; right: 14px; bottom: 18px; z-index: 45; width: 44px; height: 44px; border-radius: 50%; align-items: center; justify-content: center; background: var(--panel2); color: var(--text); border: 1px solid var(--line2); box-shadow: var(--shadow); }
 
@@ -613,6 +616,11 @@ input[type=checkbox], input[type=radio] { width: 16px; height: 16px; margin: 0; 
 .lede { margin: -4px 0 16px; }
 .credit { margin-top: 18px; }
 .crumbs { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
+/* Server-rendered page content (worker/seo.js), shown until the app replaces it */
+.ssr h2 { font-size: 16px; margin: 18px 0 6px; }
+.ssr ul, .ssr ol { padding-left: 20px; line-height: 1.7; }
+.ssr table { border-collapse: collapse; margin-top: 10px; }
+.ssr th, .ssr td { text-align: left; padding: 4px 14px 4px 0; border-bottom: 1px solid var(--line, #2a2d35); }
 .meta-panel { margin-bottom: 22px; }
 .meta-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 12px; }
 .meta-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; align-items: baseline; }

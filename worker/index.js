@@ -4,7 +4,7 @@ import { PAGE_HEADERS } from './headers.js';
 // straight from the static assets. /img/* re-serves TCGdex card art from our own domain so the deck
 // image export can draw it to a canvas and save it as a PNG (cross-origin images would block that).
 
-import { matchRoute, headFor, rewriteHead, sitemapXml } from './seo.js';
+import { matchRoute, headFor, rewriteHead, sitemapIndex, sitemapPages, sitemapCards, SITEMAPS } from './seo.js';
 
 const UPSTREAM = 'https://assets.tcgdex.net';
 // TCGplayer's photo of a printing that TCGdex has no art for: /img/tcgp/475431_in_1000x1000.jpg
@@ -37,12 +37,14 @@ async function cardImage(request, ctx, url) {
   return res;
 }
 
-async function sitemap(request, ctx) {
-  const key = new Request(new URL(request.url).origin + '/sitemap.xml', { method: 'GET' });
+const SITEMAP_BUILDERS = { '/sitemap.xml': async () => sitemapIndex(), [SITEMAPS[0]]: sitemapPages, [SITEMAPS[1]]: sitemapCards };
+
+async function sitemap(request, ctx, path) {
+  const key = new Request(new URL(request.url).origin + path, { method: 'GET' });
   const cache = typeof caches !== 'undefined' ? caches.default : null;
   const hit = cache && await cache.match(key);
   if (hit) return hit;
-  const res = new Response(await sitemapXml(), { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } });
+  const res = new Response(await SITEMAP_BUILDERS[path](), { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } });
   if (cache) ctx.waitUntil(cache.put(key, res.clone()));
   return res;
 }
@@ -75,8 +77,8 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/img/')) return cardImage(request, ctx, url);
-    if (url.pathname === '/sitemap.xml' && (request.method === 'GET' || request.method === 'HEAD')) {
-      try { return await sitemap(request, ctx); } catch { return new Response('Unavailable', { status: 503 }); }
+    if (SITEMAP_BUILDERS[url.pathname] && (request.method === 'GET' || request.method === 'HEAD')) {
+      try { return await sitemap(request, ctx, url.pathname); } catch { return new Response('Unavailable', { status: 503 }); }
     }
     // Files (anything with an extension) and non-GET requests go straight to the static assets.
     if ((request.method !== 'GET' && request.method !== 'HEAD') || /\.[a-z0-9]{1,8}$/i.test(url.pathname)) return env.ASSETS.fetch(request);
