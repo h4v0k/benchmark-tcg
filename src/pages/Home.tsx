@@ -39,7 +39,7 @@ export function Home() {
           </div>
           {rules && (
             <div className="hero-card">
-              <h3><Icon name="shield" />Current formats</h3>
+              <h2><Icon name="shield" />Current formats</h2>
               <dl>
                 <dt>Standard</dt><dd>Regulation mark <b>{rules.standard_min_mark}</b> and later</dd>
                 <dt>Next rotation</dt><dd>{rules.next_rotation ? <>Mark {rules.next_rotation.new_min_mark}+ {rules.next_rotation.effective_date ? `on ${fmtDate(rules.next_rotation.effective_date)}` : '(date TBA)'}</> : 'Not announced yet'}</dd>

@@ -34,6 +34,9 @@ const LoginPage = lazy(() => import('./pages/Login').then(m => ({ default: m.Log
 const SettingsPage = lazy(() => import('./pages/Settings').then(m => ({ default: m.SettingsPage })));
 const PrivacyPage = lazy(() => import('./pages/Legal').then(m => ({ default: m.PrivacyPage })));
 const TermsPage = lazy(() => import('./pages/Legal').then(m => ({ default: m.TermsPage })));
+const CopyrightPage = lazy(() => import('./pages/Legal').then(m => ({ default: m.CopyrightPage })));
+const AccessibilityPage = lazy(() => import('./pages/Legal').then(m => ({ default: m.AccessibilityPage })));
+const CreditsPage = lazy(() => import('./pages/Legal').then(m => ({ default: m.CreditsPage })));
 const AdminPage = lazy(() => import('./pages/Admin').then(m => ({ default: m.AdminPage })));
 const UsersPage = lazy(() => import('./pages/Users').then(m => ({ default: m.UsersPage })));
 
@@ -95,6 +98,9 @@ const ROUTES: [string, (p: Record<string, string>) => ReactElement][] = [
   ['/settings', () => <SettingsPage />],
   ['/privacy', () => <PrivacyPage />],
   ['/terms', () => <TermsPage />],
+  ['/copyright', () => <CopyrightPage />],
+  ['/accessibility', () => <AccessibilityPage />],
+  ['/credits', () => <CreditsPage />],
   ['/admin', () => <AdminPage />],
 ];
 
@@ -177,15 +183,17 @@ function Footer() {
   return (
     <footer className="foot">
       <div className="wrap foot-inner">
-        <div className="foot-top"><div><strong>Benchmark</strong> · build, price and share Pokémon TCG decks.</div><div className="foot-links"><a className="foot-social" href="https://x.com/benchmark_tcg" target="_blank" rel="noopener noreferrer" aria-label="Follow Benchmark on X"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>Follow on X</a><SupportButton /><ReportIssueButton /><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></div></div>
-        <div className="muted">Card data from <a href="https://tcgdex.dev" target="_blank" rel="noopener noreferrer">TCGdex</a>, prices from TCGplayer via <a href="https://tcgcsv.com" target="_blank" rel="noopener noreferrer">TCGCSV</a>, bans from <a href="https://www.pokemon.com/us/play-pokemon/about/pokemon-tcg-banned-card-list" target="_blank" rel="noopener noreferrer">Play! Pokémon</a>. Not affiliated with The Pokémon Company, Nintendo, Creatures or Game Freak.</div>
+        <div className="foot-top"><div><strong>Benchmark</strong> · build, price and share Pokémon TCG decks.</div><div className="foot-links"><a className="foot-social" href="https://x.com/benchmark_tcg" target="_blank" rel="noopener noreferrer" aria-label="Follow Benchmark on X"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>Follow on X</a><SupportButton /><ReportIssueButton /></div></div>
+        <nav className="foot-links foot-legal" aria-label="Legal"><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/copyright">Copyright</Link><Link to="/accessibility">Accessibility</Link><Link to="/credits">Data credits</Link></nav>
+        <p className="muted foot-credit">Card data from <a href="https://tcgdex.dev" target="_blank" rel="noopener noreferrer">TCGdex</a>, prices from TCGplayer via <a href="https://tcgcsv.com" target="_blank" rel="noopener noreferrer">TCGCSV</a>, tournament and matchup data from <a href="https://limitlesstcg.com" target="_blank" rel="noopener noreferrer">Limitless TCG</a>, bans from <a href="https://www.pokemon.com/us/play-pokemon/about/pokemon-tcg-banned-card-list" target="_blank" rel="noopener noreferrer">Play! Pokémon</a>. <Link to="/credits">All data credits</Link>.</p>
+        <p className="muted foot-credit">Benchmark is an unofficial fan project, not affiliated with, endorsed by or sponsored by The Pokémon Company, Nintendo, Creatures or GAME FREAK. Pokémon and Pokémon card names, text and images are © and ™ their respective owners.</p>
       </div>
     </footer>
   );
 }
 
 function NotFound() {
-  return <div className="wrap page"><div className="empty"><h2>Page not found</h2><p>That link doesn't go anywhere.</p><Link to="/" className="btn primary">Go home</Link></div></div>;
+  return <div className="wrap page"><div className="empty"><h1>Page not found</h1><p>That link doesn't go anywhere.</p><Link to="/" className="btn primary">Go home</Link></div></div>;
 }
 
 function UsernameModal() {

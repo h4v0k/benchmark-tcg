@@ -246,7 +246,7 @@ export function JapanDeckPage({ id, place }: { id: string; place: number }) {
         <div className="text-view jp-list">
           {groups.map(g => (
             <section key={g.sec} className="group">
-              <h3 className="group-head"><span>{SEC[g.sec]}</span><span className="count">{sum(g.lines, l => l.qty)}</span></h3>
+              <h2 className="group-head"><span>{SEC[g.sec]}</span><span className="count">{sum(g.lines, l => l.qty)}</span></h2>
               <ul>
                 {g.lines.map(l => {
                   const c = l.cid ? cards.get(l.cid) : undefined;

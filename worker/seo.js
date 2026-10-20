@@ -37,6 +37,9 @@ export const ROUTE_LIST = [
   [/^\/admin$/, 'private'],
   [/^\/privacy$/, 'privacy'],
   [/^\/terms$/, 'terms'],
+  [/^\/copyright$/, 'copyright'],
+  [/^\/accessibility$/, 'accessibility'],
+  [/^\/credits$/, 'credits'],
 ];
 
 export function matchRoute(pathname) {
@@ -72,6 +75,9 @@ const STATIC = {
   private: { title: 'Benchmark', noindex: true },
   privacy: { title: 'Privacy Policy · Benchmark', description: 'What Benchmark collects, why, and how to download or delete your data.' },
   terms: { title: 'Terms of Use · Benchmark', description: 'The rules for using Benchmark.' },
+  copyright: { title: 'Copyright Policy · Benchmark', description: 'How to report copyright infringement on Benchmark.' },
+  accessibility: { title: 'Accessibility · Benchmark', description: 'How Benchmark supports keyboard, screen reader, large text and reduced motion users, and how to report a problem.' },
+  credits: { title: 'Data Credits · Benchmark', description: 'Where Benchmark gets its card, price and tournament data.' },
 };
 
 const trunc = (s, n) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { img } from '../lib/cards';
 
@@ -54,15 +54,27 @@ export function Icon({ name, size = 16, className = '' }: { name: keyof typeof P
 export const Spinner = ({ label = 'Loading…' }: { label?: string }) => <div className="spinner-wrap" role="status"><span className="spinner" aria-hidden="true" />{label}</div>;
 
 export function Empty({ title, children, icon = 'info' }: { title: string; children?: ReactNode; icon?: string }) {
-  return <div className="empty"><Icon name={icon} size={28} /><h3>{title}</h3>{children}</div>;
+  return <div className="empty"><Icon name={icon} size={28} /><h2>{title}</h2>{children}</div>;
 }
 
 /* ---------------- modal ---------------- */
 export function Modal({ title, onClose, children, wide = false, footer }: { title: ReactNode; onClose: () => void; children: ReactNode; wide?: boolean | 'xl'; footer?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
+  const titleId = useId();
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); return; }
+      if (e.key !== 'Tab' || !ref.current) return;
+      // Keep Tab / Shift+Tab inside the dialog (WCAG 2.4.3).
+      const items = Array.from(ref.current.querySelectorAll<HTMLElement>('a[href],button,input,select,textarea,[tabindex]'))
+        .filter(el => el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled && el.offsetParent !== null);
+      if (!items.length) { e.preventDefault(); ref.current.focus(); return; }
+      const first = items[0], last = items[items.length - 1], cur = document.activeElement;
+      if (!ref.current.contains(cur)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && cur === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && cur === last) { e.preventDefault(); first.focus(); }
+    };
     document.addEventListener('keydown', onKey, true);
     document.body.classList.add('modal-open');
     setTimeout(() => (ref.current?.querySelector('input,textarea,select,button.primary') as HTMLElement | null)?.focus(), 30);
@@ -72,8 +84,8 @@ export function Modal({ title, onClose, children, wide = false, footer }: { titl
   // otherwise trap the popup inside its own box.
   return createPortal(
     <div className="modal-back" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={`modal ${wide === 'xl' ? 'xl' : wide ? 'wide' : ''}`} role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined} ref={ref}>
-        <div className="modal-head"><h2>{title}</h2><button className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button></div>
+      <div className={`modal ${wide === 'xl' ? 'xl' : wide ? 'wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} ref={ref}>
+        <div className="modal-head"><h2 id={titleId}>{title}</h2><button className="icon-btn" onClick={onClose} aria-label="Close"><Icon name="x" /></button></div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
@@ -207,7 +219,7 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): { data: T | 
 }
 
 export function ErrorBox({ error, onRetry }: { error: Error; onRetry?: () => void }) {
-  return <div className="empty error"><Icon name="warn" size={28} /><h3>Couldn't load this</h3><p>{error.message}</p>{onRetry && <button className="btn" onClick={onRetry}>Try again</button>}</div>;
+  return <div className="empty error"><Icon name="warn" size={28} /><h2>Couldn't load this</h2><p>{error.message}</p>{onRetry && <button className="btn" onClick={onRetry}>Try again</button>}</div>;
 }
 
 export async function copyText(text: string) {

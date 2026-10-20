@@ -61,7 +61,7 @@ function QtyControls({ l, onQty }: { l: Line; onQty: (l: Line, q: number) => voi
 }
 
 const GroupHead = ({ name, lines, extra }: { name: string; lines: Line[]; extra?: ReactNode }) => (
-  <h3 className="group-head"><span>{name}</span><span className="count">{sum(lines, l => l.qty)}</span>{extra}</h3>
+  <h2 className="group-head"><span>{name}</span><span className="count">{sum(lines, l => l.qty)}</span>{extra}</h2>
 );
 
 export function TextView(p: ViewProps) {

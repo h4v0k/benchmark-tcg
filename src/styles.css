@@ -2,10 +2,10 @@
 :root, [data-theme="dark"] {
   --bg: #15171c; --bg2: #1b1e24; --panel: #20242c; --panel2: #262b34; --hover: #2c323d;
   --line: #313845; --line2: #3b4352;
-  --text: #e7e9ee; --muted: #9aa3b2; --faint: #6e7787;
-  --accent: #4b8cf7; --accent2: #3a78e0; --accent-soft: rgba(75, 140, 247, .14);
+  --text: #e7e9ee; --muted: #9aa3b2; --faint: #8f99aa;
+  --accent: #6ba1fa; --accent2: #2560c8; --accent-soft: rgba(75, 140, 247, .14); --accent-fill: #2f6fe0; /* text accent is lighter; filled buttons are darker so white text passes WCAG AA */
   --ok: #34c77b; --ok-soft: rgba(52, 199, 123, .14);
-  --bad: #f26363; --bad-soft: rgba(242, 99, 99, .14);
+  --bad: #f67d7d; --bad-soft: rgba(242, 99, 99, .14);
   --warn: #f1b33c; --warn-soft: rgba(241, 179, 60, .15);
   --info: #6aa8ff; --info-soft: rgba(106, 168, 255, .14);
   --p: #e06a4b; --t: #4b8cf7; --e: #e8b931;
@@ -16,12 +16,12 @@
 [data-theme="light"] {
   --bg: #f4f5f8; --bg2: #eceef2; --panel: #ffffff; --panel2: #f6f7f9; --hover: #eef1f6;
   --line: #e1e4ea; --line2: #d2d7df;
-  --text: #1b1f27; --muted: #5d6676; --faint: #8b93a1;
-  --accent: #2f6fe0; --accent2: #2560c8; --accent-soft: rgba(47, 111, 224, .1);
-  --ok: #107a3f; --ok-soft: rgba(16, 122, 63, .1);
-  --bad: #d43b3b; --bad-soft: rgba(212, 59, 59, .09);
-  --warn: #b97800; --warn-soft: rgba(185, 120, 0, .11);
-  --info: #2f6fe0; --info-soft: rgba(47, 111, 224, .1);
+  --text: #1b1f27; --muted: #5d6676; --faint: #626b7b;
+  --accent: #2560c8; --accent2: #1f55b8; --accent-soft: rgba(47, 111, 224, .1); --accent-fill: #2560c8;
+  --ok: #0a6634; --ok-soft: rgba(16, 122, 63, .1);
+  --bad: #b42828; --bad-soft: rgba(212, 59, 59, .09);
+  --warn: #8a5a00; --warn-soft: rgba(185, 120, 0, .11);
+  --info: #2560c8; --info-soft: rgba(47, 111, 224, .1);
   --shadow: 0 10px 30px rgba(20, 30, 50, .14);
   color-scheme: light;
 }
@@ -59,7 +59,7 @@ img { max-width: 100%; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); font-weight: 600; font-size: 13px; cursor: pointer; white-space: nowrap; text-decoration: none !important; transition: background .12s, border-color .12s; }
 .btn:hover { background: var(--hover); border-color: var(--faint); }
 .btn:disabled, .btn[aria-disabled="true"] { opacity: .5; cursor: default; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary { background: var(--accent-fill); border-color: var(--accent-fill); color: #fff; }
 .btn.primary:hover { background: var(--accent2); border-color: var(--accent2); }
 .btn.ghost { background: transparent; border-color: transparent; }
 .btn.ghost:hover { background: var(--hover); }
@@ -71,11 +71,11 @@ img { max-width: 100%; }
 .btn.block { width: 100%; }
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--radius-sm); border: 0; background: transparent; color: var(--muted); cursor: pointer; }
 .icon-btn:hover { background: var(--hover); color: var(--text); }
-.link-btn { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; font-size: inherit; display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; }
+.link-btn { border: 0; background: none; padding: 0; min-height: 24px; color: var(--accent); cursor: pointer; font-size: inherit; display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; }
 .link-btn:hover { text-decoration: underline; }
 .link-btn.danger { color: var(--bad); }
 .mini { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--line2); background: var(--panel2); color: var(--text); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
-.mini:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.mini:hover { background: var(--accent-fill); border-color: var(--accent-fill); color: #fff; }
 .chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 99px; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--text); cursor: pointer; font-weight: 600; font-size: 12px; }
 
 /* ---------- forms ---------- */
@@ -153,7 +153,7 @@ select { cursor: pointer; width: auto; }
 .fmt-badge.private { background: #3b4352; } .fmt-badge.featured { background: #b8860b; }
 
 /* ---------- avatars ---------- */
-.avatar { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; flex: none; }
+.avatar { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--accent-fill); color: #fff; font-weight: 700; flex: none; }
 .avatar.art { background-size: 220%; background-position: 50% 22%; background-color: var(--panel2); border: 1px solid var(--line2); }
 .author { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-weight: 600; }
 
@@ -162,7 +162,7 @@ select { cursor: pointer; width: auto; }
 .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line2); border-top-color: var(--accent); animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .empty { text-align: center; padding: 48px 20px; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.empty h2, .empty h3 { color: var(--text); margin: 4px 0 0; }
+.empty h1, .empty h2, .empty h3 { font-size: 1em;  color: var(--text); margin: 4px 0 0; }
 .empty.error .icon { color: var(--bad); }
 
 /* ---------- toasts / modal ---------- */
@@ -213,7 +213,7 @@ body.modal-open { overflow: hidden; }
 .hero h1 { font-size: 34px; line-height: 1.12; letter-spacing: -.025em; max-width: 18ch; }
 .hero .lead { margin: 12px 0 20px; }
 .hero-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
-.hero-card h3 { display: flex; gap: 8px; align-items: center; font-size: 15px; }
+.hero-card h2 { margin: 0 0 .5em; } .hero-card h2, .hero-card h3 { display: flex; gap: 8px; align-items: center; font-size: 15px; }
 .hero-card dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 12px 0; font-size: 13px; }
 .hero-card dt { color: var(--muted); }
 .hero-card dd { margin: 0; }
@@ -640,7 +640,7 @@ a.event-row:hover, a.st-row:hover { border-color: var(--accent); }
 .st-place { flex: none; width: 3.2em; font-weight: 800; color: var(--muted); }
 .st-side { flex: none; display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
 .st-side .icon { transform: rotate(-90deg); color: var(--muted); }
-.st-row.off { opacity: .7; }
+.st-row.off { opacity: 1; } /* rows without a list are labelled; dimming them failed text contrast */
 @media (max-width: 440px) { .st-place { width: 2.6em; } }
 
 /* Matchups */
@@ -713,11 +713,11 @@ a.mu-link:hover { border-color: var(--accent); }
 /* Archetype finishes */
 .mu-place { flex: none; min-width: 3.2em; font-weight: 800; font-variant-numeric: tabular-nums; }
 .mu-side { display: grid; justify-items: end; gap: 3px; flex: none; }
-.mu-link.off { opacity: .7; }
+.mu-link.off { opacity: 1; }
 
 /* Japan preview: cards from the set Japan plays before the US (e.g. Delta Reign). Never shown as Standard legal. */
 :root, [data-theme="dark"] { --dr: #2fd08f; --dr-soft: rgba(47, 208, 143, .13); }
-[data-theme="light"] { --dr: #0b7a50; --dr-soft: rgba(11, 122, 80, .1); }
+[data-theme="light"] { --dr: #075c3c; --dr-soft: rgba(11, 122, 80, .1); }
 .tag.dr { background: var(--dr-soft); color: var(--dr); border-color: color-mix(in srgb, var(--dr) 35%, transparent); }
 .dr-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--dr); vertical-align: middle; flex: none; }
 .dr-text { color: var(--dr); font-weight: 600; }
@@ -925,7 +925,7 @@ a.mu-row.mu-deck-link:hover .mu-name b { text-decoration: underline; text-underl
 .sf-pair input { flex: 1 1 70px; min-width: 0; }
 .sf-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .sf-toggle { min-height: 32px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line2); background: var(--panel2); color: var(--text); font-size: 13px; cursor: pointer; }
-.sf-toggle[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sf-toggle[aria-pressed="true"] { background: var(--accent-fill); border-color: var(--accent-fill); color: #fff; }
 .sf-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .sf-used code, .syntax-help code { overflow-wrap: anywhere; }
 .syntax-tools { display: flex; gap: 8px; flex-wrap: wrap; margin: -6px 0 12px; }
@@ -970,3 +970,14 @@ a.mu-row.mu-deck-link:hover .mu-name b { text-decoration: underline; text-underl
 .event-row { flex-wrap: wrap; }
 .event-side { flex: 0 1 auto; min-width: 0; }
 .event-side > * { max-width: 100%; overflow-wrap: anywhere; }
+
+/* WCAG 2.5.8: stand-alone text links get at least a 24px-tall target. */
+.foot-links > a, .crumbs a, .section-head > a, .deck-byline > a, .meta-name { padding-block: 4px; }
+/* WCAG 2.3.3 / user preference: no decorative motion when the system asks for less. Spinners keep turning, slowly. */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  *:not(.spinner), ::before, ::after { animation: none !important; }
+  .spinner { animation-duration: 2s !important; }
+}
+.foot-credit { margin: 0; }
+.legal-nav { margin: 4px 0 18px; }
