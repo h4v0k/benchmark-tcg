@@ -1,6 +1,8 @@
 // Weekly meta report: reads the public site data and writes ready-to-review drafts for Reddit, X and Discord.
 // Nothing is posted; a person reviews the drafts and posts them. Run: node tools/meta-report.mjs [out-dir]
 // The scheduled workflow (.github/workflows/meta-report.yml) runs it every Monday and attaches the drafts.
+// Event mode: node tools/meta-report.mjs [out-dir] --events [hours] writes Top 8 drafts for each major whose
+// lists landed in the last `hours` (default 24); .github/workflows/event-drafts.yml runs it daily.
 import fs from 'node:fs';
 import path from 'node:path';
 import { SITE, SUPABASE_URL, SUPABASE_ANON_KEY } from '../worker/config.js';
@@ -30,7 +32,7 @@ export async function loadData(now = new Date()) {
 const pct = (a, b) => (b ? (100 * a) / b : 0);
 const wr = x => (x.win_pct == null ? '?' : Number(x.win_pct).toFixed(1));
 const signed = n => (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(1);
-const url = (p, campaign) => `${SITE}${p}?utm_source=${campaign.source}&utm_medium=social&utm_campaign=meta-${campaign.date}`;
+const url = (p, campaign) => `${SITE}${p}?utm_source=${campaign.source}&utm_medium=social&utm_campaign=${campaign.campaign || `meta-${campaign.date}`}`;
 
 /** Builds the meta numbers once, then formats them per channel. Pure: no network, so it can be tested. */
 export function renderReport(d) {
@@ -80,11 +82,68 @@ export function renderReport(d) {
   return out;
 }
 
+/** Majors whose decklists landed recently, each with its standings (at least a full top 8 of lists). */
+export async function loadEvents(hours = 24, now = new Date()) {
+  const since = new Date(now.getTime() - hours * 36e5).toISOString();
+  const fresh = await rest(`tournament_decks?select=tournament_id&card_count=not.is.null&fetched_at=gte.${since}`);
+  const ids = [...new Set(fresh.map(r => r.tournament_id))];
+  if (!ids.length) return [];
+  const [ts, decks] = await Promise.all([
+    rest(`tournaments?select=id,name,date,country,players,kind&id=in.(${ids.join(',')})`),
+    rest(`tournament_decks?select=tournament_id,place,player,country,archetype,card_count,price&tournament_id=in.(${ids.join(',')})&order=place.asc`),
+  ]);
+  return ts.map(t => ({ t, decks: decks.filter(d => d.tournament_id === t.id) }))
+    .filter(e => e.decks.filter(d => d.place <= 8 && d.card_count != null).length >= 8);
+}
+
+const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+
+/** Top 8 and archetype breakdown for one event, per channel. Pure, like renderReport. */
+export function renderEvent({ t, decks }, date = t.date) {
+  const top8 = decks.filter(d => d.place <= 8).sort((a, b) => a.place - b.place);
+  const counts = new Map();
+  for (const d of decks) if (d.archetype) counts.set(d.archetype, (counts.get(d.archetype) || 0) + 1);
+  const field = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const win = top8[0];
+  const slug = t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const out = {};
+  for (const source of ['reddit', 'x', 'discord']) {
+    const c = { source, campaign: `event-${date}-${slug}` };
+    const L = (p, text) => `[${text}](${url(p, c)})`;
+    const lines = [];
+    if (source === 'reddit') {
+      lines.push(`# ${t.name}${t.players ? ` (${t.players.toLocaleString('en-US')} players)` : ''}: Top 8 decklists`, '',
+        `${win.player} won with **${win.archetype}**. Every list below opens with prices, legality and a one-click TCGplayer cart.`, '',
+        '| Place | Player | Deck | List |', '|---|---|---|---|',
+        ...top8.map(d => `| ${ord(d.place)} | ${d.player}${d.country ? ` (${d.country})` : ''} | ${d.archetype} | ${d.card_count != null ? L(`/events/${t.id}/${d.place}`, 'View list') : 'coming'} |`), '');
+      if (field.length) lines.push(`## Most played in the top ${decks.length}`, '', ...field.map(([a, n]) => `- ${L(`/archetype/${encodeURIComponent(a)}`, a)}: ${n}`), '');
+      lines.push(`Full standings: ${L(`/events/${t.id}`, t.name)}`, '', '---', '', 'Lists from Limitless. I build Benchmark; questions about the data welcome.');
+    } else if (source === 'x') {
+      const t1 = [`🏆 ${t.name}${t.players ? ` (${t.players.toLocaleString('en-US')} players)` : ''}`, '', ...top8.map(d => `${ord(d.place)} ${d.archetype}`)].join('\n');
+      const t2 = field.length ? [`Top ${decks.length} breakdown:`, ...field.slice(0, 6).map(([a, n]) => `${a}: ${n}`)].join('\n') : '';
+      const t3 = `Winning list (${win.player}), priced and buyable:\n${url(`/events/${t.id}/1`, c)}`;
+      lines.push(...[t1, t2, t3].filter(Boolean).flatMap((x, i, a) => [`--- tweet ${i + 1}/${a.length} (${x.length} chars) ---`, x, '']));
+    } else {
+      lines.push(`**${t.name} Top 8**${t.players ? ` (${t.players.toLocaleString('en-US')} players)` : ''}`,
+        ...top8.map(d => `${ord(d.place)} ${d.archetype}: ${d.player}`), '', `Lists: <${url(`/events/${t.id}`, c)}>`);
+    }
+    out[source] = lines.join('\n').trim() + '\n';
+  }
+  return out;
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const dir = process.argv[2] || 'meta-report';
+  fs.mkdirSync(dir, { recursive: true });
+  const ev = process.argv.indexOf('--events');
+  if (ev > 0) {
+    const events = await loadEvents(+process.argv[ev + 1] || 24);
+    for (const e of events) for (const [k, v] of Object.entries(renderEvent(e))) fs.writeFileSync(path.join(dir, `event-${e.t.id}-${k}.md`), v);
+    console.log(`wrote drafts for ${events.length} event(s) to ${dir}/`);
+    process.exit(0);
+  }
   const data = await loadData();
   const out = renderReport(data);
-  fs.mkdirSync(dir, { recursive: true });
   for (const [k, v] of Object.entries(out)) fs.writeFileSync(path.join(dir, `${data.date}-${k}.md`), v);
   console.log(`wrote ${Object.keys(out).length} drafts to ${dir}/`);
 }

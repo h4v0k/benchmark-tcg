@@ -1,0 +1,36 @@
+# Top 8 drafts for Reddit, X and Discord when a major's decklists land (checked daily).
+# Nothing is posted: the drafts land in the run summary and as a downloadable artifact for a person to review and post.
+name: Event drafts
+on:
+  schedule:
+    - cron: '0 6 * * *' # daily; US events finish Sunday night UTC, lists follow within hours
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: Draft events whose lists landed in the last N hours
+        default: '24'
+permissions:
+  contents: read
+jobs:
+  drafts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build drafts
+        run: node tools/meta-report.mjs event-drafts --events "${{ github.event.inputs.hours || '24' }}"
+      - name: Show drafts in the run summary
+        run: |
+          shopt -s nullglob
+          files=(event-drafts/*.md)
+          if [ ${#files[@]} -eq 0 ]; then echo "No new event lists in this window." >> "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          for f in "${files[@]}"; do printf '## %s\n\n```markdown\n' "$(basename "$f")"; cat "$f"; printf '```\n\n'; done >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: event-drafts
+          path: event-drafts/
+          if-no-files-found: ignore
+          retention-days: 30

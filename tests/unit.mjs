@@ -331,6 +331,16 @@ t('worker page headers match public/_headers', () => {
     for (const tw of r.x.split(/--- tweet .*---\n/).filter(s => s.trim())) assert.ok(tw.trim().length <= 280, 'tweet fits');
     assert.match(r.discord, /<https:\/\/benchmarktcg\.us\/matchups\?utm_source=discord/);
   });
+  const { renderEvent } = await import('../tools/meta-report.mjs');
+  const ev = renderEvent({ t: { id: 582, name: 'Regional Nice', date: '2026-10-17', players: 2336 },
+    decks: Array.from({ length: 12 }, (_, i) => ({ place: i + 1, player: 'P' + i, country: 'FR', archetype: ['Basic Box', 'Dragapult', 'Slowking'][i % 3], card_count: i === 7 ? null : 60 })) });
+  t('event drafts', () => {
+    assert.match(ev.reddit, /^# Regional Nice \(2,336 players\): Top 8 decklists/);
+    assert.match(ev.reddit, /\| 1st \| P0 \(FR\) \| Basic Box \| \[View list\]\(https:\/\/benchmarktcg\.us\/events\/582\/1\?utm_source=reddit&utm_medium=social&utm_campaign=event-2026-10-17-regional-nice\) \|/);
+    assert.match(ev.reddit, /\| 8th \| P7 \(FR\) \| Dragapult \| coming \|/);
+    assert.doesNotMatch(ev.reddit, /9th/);
+    for (const tw of ev.x.split(/--- tweet .*---\n/).filter(s => s.trim())) assert.ok(tw.trim().length <= 280, 'tweet fits');
+  });
 }
 console.log(`unit: ${n} groups ok`);
 await import('./rules-parse.test.mjs');

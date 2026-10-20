@@ -19,6 +19,11 @@ export const setQuery = (patch: Record<string, string | number | null | undefine
   navigate(location.pathname + (s ? '?' + s : ''), { replace: true });
 };
 
+/** A same-site path ("/x?y") or '' for anything else (other hosts, "//host", backslashes), for ?next= links. */
+export const safePath = (p: string | null) => (p && /^\/(?![/\\])[^\\\s]*$/.test(p) ? p : '');
+/** Send a signed-out visitor to sign up, then back to `path` (e.g. the list they wanted to copy). */
+export const signupThen = (path: string) => navigate('/signup?next=' + encodeURIComponent(path));
+
 export function useRoute() {
   const [, set] = useState(0);
   useEffect(() => { const f = () => set(x => x + 1); listeners.add(f); return () => { listeners.delete(f); }; }, []);

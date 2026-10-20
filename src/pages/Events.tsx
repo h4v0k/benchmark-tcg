@@ -9,7 +9,7 @@ import { CardModal } from '../components/deck/CardModal';
 import { ExportModal } from '../components/deck/DeckModals';
 import { RegSheetModal } from '../components/deck/RegSheet';
 import { Link, navigate } from '../router';
-import { useAuth, toast } from '../state';
+import { toast, useCopyAfterSignup } from '../state';
 import * as api from '../lib/api';
 import { autoCover, fmtDate, money, type Line } from '../lib/cards';
 import { RegionSwitch, SyncNote } from './Japan';
@@ -209,7 +209,6 @@ export function EventPage({ id }: { id: number }) {
 }
 
 export function EventDeckPage({ id, place }: { id: number; place: number }) {
-  const { session, profile } = useAuth();
   const r = useAsync(async () => {
     const x = await api.tournamentDeck(id, place);
     if (!x?.d.cards) return x ? { ...x, cards: new Map<string, Card>() } : null;
@@ -222,13 +221,13 @@ export function EventDeckPage({ id, place }: { id: number; place: number }) {
   const [reg, setReg] = useState(false);
   const [busy, setBusy] = useState(false);
   const lines: Line[] = useMemo(() => (r.data?.d.cards || []).map(e => ({ ...e, card: r.data!.cards.get(e.cid) })), [r.data]);
+  const onCopy = useCopyAfterSignup(!r.loading && !!r.data?.d.cards, () => copy(), `/events/${id}/${place}`);
   if (r.loading) return <Spinner />;
   if (r.error) return <div className="wrap page"><ErrorBox error={r.error} onRetry={r.reload} /></div>;
   if (!r.data || !r.data.d.cards) return <div className="wrap page"><Empty title="List not available yet" icon="list"><Link to={`/events/${id}`} className="btn">Back to the event</Link></Empty></div>;
   const { t, d } = r.data;
   const title = `${d.archetype || 'Deck'}: ${ord(d.place)} at ${t.name}`;
   const copy = async () => {
-    if (!session || !profile) { navigate('/signup'); return; }
     setBusy(true);
     try {
       const deck = await api.createDeck({ name: `${d.archetype || 'Deck'} (${d.player}, ${ord(d.place)} ${t.name})`.slice(0, 80), format: 'standard', cards: d.cards!, cover: autoCover(lines), archetype: d.archetype, description: `${ord(d.place)} place at ${t.name} (${fmtDate(t.date)}) by ${d.player}. List from Limitless.`, is_public: false });
@@ -244,7 +243,7 @@ export function EventDeckPage({ id, place }: { id: number; place: number }) {
         {d.archetype && <p className="small"><Link to={`/archetype/${encodeURIComponent(d.archetype)}`}>More {d.archetype} lists<Icon name="forward" size={12} /></Link></p>}
         <p className="muted">{d.player}{d.country ? ` (${d.country})` : ''} · {t.name} · {fmtDate(t.date)}</p>
         <div className="deck-actions">
-          <button className="btn primary" onClick={copy} disabled={busy}><Icon name="copy" />{busy ? 'Copying…' : 'Copy to my decks'}</button>
+          <button className="btn primary" onClick={onCopy} disabled={busy}><Icon name="copy" />{busy ? 'Copying…' : 'Copy to my decks'}</button>
           <button className="btn" onClick={() => setExporting(true)}><Icon name="download" />Export</button>
           <button className="btn" onClick={() => setReg(true)}><Icon name="list" />Registration sheet</button>
           {d.list_id && <a className="btn" href={`https://limitlesstcg.com/decks/list/${d.list_id}`} target="_blank" rel="noopener noreferrer"><Icon name="link" />Limitless</a>}

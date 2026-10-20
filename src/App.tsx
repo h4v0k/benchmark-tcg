@@ -117,6 +117,7 @@ function Shell({ authLink }: { authLink: { type?: string; error?: string } | nul
       <main id="main" tabIndex={-1}>
         {!ready ? <Spinner /> : <PageBoundary key={path}><Suspense fallback={<Spinner />}>{page || <NotFound />}</Suspense></PageBoundary>}
       </main>
+      {ready && !session && <SignupNudge path={path} />}
       <Footer />
       {needsUsername && <UsernameModal />}
       {!needsUsername && session && <PasskeyNudge />}
@@ -236,6 +237,20 @@ function NewPasswordModal({ onDone }: { onDone: () => void }) {
 }
 
 // After someone signs in, offer once to save a passkey so next time is one tap.
+// Signed-out visitors reading meta and tournament data: one quiet line at the end of the page, dismissible.
+const NUDGE_PATHS = /^\/(matchups|archetype|events|cards\/)/;
+function SignupNudge({ path }: { path: string }) {
+  const [off, setOff] = useState(() => { try { return !!localStorage.getItem('bm-signup-nudge-off'); } catch { return false; } });
+  if (off || !NUDGE_PATHS.test(path)) return null;
+  const hide = () => { try { localStorage.setItem('bm-signup-nudge-off', '1'); } catch { /* ignore */ } setOff(true); };
+  return (
+    <aside className="wrap signup-nudge" aria-label="Create an account">
+      <div><b>Keep your decks next to the meta.</b> <span className="muted">Copy any winning list, check legality as sets rotate, and buy the exact printings. Free.</span></div>
+      <div className="row-gap"><button className="btn small ghost" onClick={hide}>No thanks</button><Link to={'/signup?next=' + encodeURIComponent(path)} className="btn small primary">Sign up free</Link></div>
+    </aside>
+  );
+}
+
 function PasskeyNudge() {
   const { session } = useAuth();
   const key = `bm-passkey-nudge-${session?.user.id}`;

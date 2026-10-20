@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, navigate, useRoute } from '../router';
+import { Link, navigate, safePath, useRoute } from '../router';
 import { useAuth, toast } from '../state';
 import * as sb from '../lib/supabase';
 import { GoogleButton } from '../components/GoogleButton';
@@ -22,7 +22,7 @@ export function LoginPage({ mode }: { mode: 'signin' | 'signup' }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [sent, setSent] = useState<'' | 'link' | 'confirm' | 'reset'>('');
-  const next = query.get('next') === 'new' ? '/my/decks' : '/';
+  const next = query.get('next') === 'new' ? '/my/decks' : safePath(query.get('next')) || '/';
   if (session && profile) { setTimeout(() => navigate(next), 0); return null; }
 
   const validEmail = () => { if (!/^\S+@\S+\.\S+$/.test(email)) { setErr('Enter a valid email address.'); return false; } return true; };

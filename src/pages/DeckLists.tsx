@@ -8,7 +8,7 @@ import { CardModal } from '../components/deck/CardModal';
 import { ExportModal } from '../components/deck/DeckModals';
 import { RegSheetModal } from '../components/deck/RegSheet';
 import { Link, navigate, setQuery, useRoute } from '../router';
-import { useAuth, toast } from '../state';
+import { toast, useCopyAfterSignup } from '../state';
 import * as api from '../lib/api';
 import { parseDeckText } from '../lib/decklist';
 import { autoCover, fmtDate, type Line } from '../lib/cards';
@@ -84,7 +84,6 @@ export function DeckListsPage({ deck }: { deck: string }) {
 }
 
 function ListView({ id, best, title }: { id: string; best: boolean; title: string }) {
-  const { session, profile } = useAuth();
   const r = useAsync(async () => {
     const l = await api.deckList(id);
     if (!l) return null;
@@ -113,6 +112,7 @@ function ListView({ id, best, title }: { id: string; best: boolean; title: strin
   const [reg, setReg] = useState(false);
   const [busy, setBusy] = useState(false);
   const lines = useMemo(() => r.data?.lines || [], [r.data]);
+  const onCopy = useCopyAfterSignup(!r.loading && lines.length > 0, () => copy(), `${location.pathname}?list=${encodeURIComponent(id)}`);
 
   if (r.loading) return <section className="mu-section"><Spinner label="Loading the list…" /></section>;
   if (r.error) return <ErrorBox error={r.error} onRetry={r.reload} />;
@@ -122,7 +122,6 @@ function ListView({ id, best, title }: { id: string; best: boolean; title: strin
   const eventHref = l.tier === 'online' ? `https://play.limitlesstcg.com/tournament/${encodeURIComponent(l.event_id)}/standings` : null;
 
   const copy = async () => {
-    if (!session || !profile) { navigate('/signup'); return; }
     setBusy(true);
     try {
       const d = await api.createDeck({ name: label, format: 'standard', cards: lines.map(({ card, ...e }) => e), cover: autoCover(lines), archetype: title,
@@ -137,7 +136,7 @@ function ListView({ id, best, title }: { id: string; best: boolean; title: strin
       <p className="mu-record"><span className="mu-pct">{headline(l)}</span> <Tag tone={TIER_TONE[l.tier]}>{TIER[l.tier]}</Tag>
         <span className="muted small">{[...details(l), `by ${l.player}`].filter(Boolean).join(' · ')}</span></p>
       <div className="deck-actions">
-        <button className="btn primary" onClick={copy} disabled={busy || !lines.length}><Icon name="copy" />{busy ? 'Copying…' : 'Copy to my decks'}</button>
+        <button className="btn primary" onClick={onCopy} disabled={busy || !lines.length}><Icon name="copy" />{busy ? 'Copying…' : 'Copy to my decks'}</button>
         <button className="btn" onClick={() => setExporting(true)} disabled={!lines.length}><Icon name="download" />Export</button>
         <button className="btn" onClick={() => setReg(true)} disabled={!lines.length}><Icon name="list" />Registration sheet</button>
         {eventHref ? <a className="btn" href={eventHref} target="_blank" rel="noopener noreferrer"><Icon name="external" />Event</a>
