@@ -277,6 +277,7 @@ t('worker page headers match public/_headers', () => {
     [/tournament_decks\?archetype=eq/, [{ tournament_id: 515, place: 1, player: 'A', card_count: 60, tournaments: { name: 'Some Regional', date: '2026-10-11' } }, { tournament_id: 516, place: 12, player: 'B', card_count: null, tournaments: { name: 'Other', date: '2026-10-12' } }]],
     [/tournament_decks\?select=tournament_id,place/, [{ tournament_id: 515, place: 1 }, { tournament_id: 999, place: 1 }]],
     [/tournament_decks\?select=archetype/, [{ archetype: 'Dragapult' }, { archetype: 'Dragapult' }]],
+    [/cards\?id=eq\.sv06-130&select=image/, [{ image: 'https://assets.tcgdex.net/en/sv/sv06/130' }]],
     [/v1\/tournaments\?select=id,date/, [{ id: 515, date: '2026-10-11' }]],
     [/jp_tournaments/, [{ id: 'c5075', date: '2026-10-16' }, { id: 'bad', date: '' }]],
     [/cards\?legal_standard=is\.true.*offset=0/, [{ id: 'sv06-130', updated_at: '2026-10-01T00:00:00Z' }]],
@@ -302,6 +303,7 @@ t('worker page headers match public/_headers', () => {
     assert.match(deck.body, /3 <a href="\/cards\/sv06-130">Dragapult ex<\/a>/);
     assert.doesNotMatch(deck.body, /<script>/, 'user text is escaped');
     assert.match(deck.body, /&lt;script&gt;/);
+    assert.equal(deck.image, 'https://assets.tcgdex.net/en/sv/sv06/130/high.webp', 'share image is the main Pokémon');
   });
   t('worker sitemaps', () => {
     assert.match(idx, /<sitemapindex[\s\S]*sitemap-pages\.xml[\s\S]*sitemap-cards\.xml/);

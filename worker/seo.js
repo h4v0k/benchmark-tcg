@@ -138,9 +138,13 @@ const HEAD = {
       const title = `${clean(d.archetype)} deck list · ${ord(d.place)} at ${clean(t.name)}`;
       const main = (Array.isArray(d.cards) ? d.cards : []).filter(c => c && c.board !== 'side');
       const sections = ['Pokemon', 'Trainer', 'Energy'].map(cat => [cat, main.filter(c => c.cat === cat)]).filter(([, l]) => l.length);
+      // Share image: art of the Pokémon the list plays most copies of (link previews show it)
+      const star = main.filter(c => c.cat === 'Pokemon' && c.cid).sort((a, b) => (+b.qty || 0) - (+a.qty || 0))[0];
+      const [art] = star ? await q(`cards?id=eq.${encodeURIComponent(star.cid)}&select=image&limit=1`).catch(() => []) : [];
       const list = sections.map(([cat, l]) => `<h2>${esc(cat === 'Pokemon' ? 'Pokémon' : cat)} (${l.reduce((n, c) => n + (+c.qty || 0), 0)})</h2><ul>${l.map(c => `<li>${+c.qty || 0} ${c.cid ? link(`/cards/${encodeURIComponent(c.cid)}`, c.name) : esc(c.name)}</li>`).join('')}</ul>`).join('');
       return {
         title,
+        image: coverUrl(art?.image) || undefined,
         description: trunc(`${who} finished ${ord(d.place)} at ${clean(t.name)}${t.date ? ` (${t.date})` : ''} with ${clean(d.archetype)}. Full 60-card list, prices and one-click TCGplayer buy on Benchmark.`, 200),
         body: page([['Tournaments', '/events'], [clean(t.name), `/events/${r.args[0]}`]], title,
           `<p>${esc(who)} placed ${ord(d.place)}${t.players ? ` of ${t.players} players` : ''} at ${esc(clean(t.name))}${t.date ? ` on ${esc(t.date)}` : ''}.</p>${list}
