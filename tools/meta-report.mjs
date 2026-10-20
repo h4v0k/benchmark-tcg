@@ -28,6 +28,7 @@ export async function loadData(now = new Date()) {
 }
 
 const pct = (a, b) => (b ? (100 * a) / b : 0);
+const wr = x => (x.win_pct == null ? '?' : Number(x.win_pct).toFixed(1));
 const signed = n => (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(1);
 const url = (p, campaign) => `${SITE}${p}?utm_source=${campaign.source}&utm_medium=social&utm_campaign=meta-${campaign.date}`;
 
@@ -55,22 +56,22 @@ export function renderReport(d) {
       lines.push(`# Weekly Standard meta snapshot (${d.date})`, '',
         `Numbers from ${total.toLocaleString('en-US')} games in Limitless online tournaments this week, plus this week's major results. Full matchup tables are free on ${L('/matchups', 'Benchmark')}.`, '',
         '## Most played', '', '| Deck | Share | Change vs 30 days | Win rate |', '|---|---|---|---|',
-        ...top.map(x => `| ${L(`/matchups/${encodeURIComponent(x.deck)}`, x.name)} | ${x.share.toFixed(1)}% | ${signed(x.delta)} pts | ${x.win_pct ?? '?'}% |`), '');
+        ...top.map(x => `| ${L(`/matchups/${encodeURIComponent(x.deck)}`, x.name)} | ${x.share.toFixed(1)}% | ${signed(x.delta)} pts | ${wr(x)}% |`), '');
       if (risers.length) lines.push('## On the rise', '', ...risers.map(x => `- **${x.name}**: ${signed(x.delta)} pts of the field (now ${x.share.toFixed(1)}%)`), '');
-      if (bestWr.length) lines.push('## Best win rates (300+ games)', '', ...bestWr.map(x => `- **${x.name}**: ${x.win_pct}% over ${x.games.toLocaleString('en-US')} games`), '');
-      if (results.length) lines.push('## Major results', '', ...results.map(e => `- ${L(`/events/${e.id}`, e.name)}${e.players ? ` (${e.players} players)` : ''}: won by ${e.win.player} with ${e.win.card_count != null ? L(`/events/${e.id}/1`, e.win.archetype) : e.win.archetype}`), '');
+      if (bestWr.length) lines.push('## Best win rates (300+ games)', '', ...bestWr.map(x => `- **${x.name}**: ${wr(x)}% over ${x.games.toLocaleString('en-US')} games`), '');
+      if (results.length) lines.push('## Major results', '', ...results.map(e => `- ${L(`/events/${e.id}`, e.name)}${e.players ? ` (${e.players.toLocaleString('en-US')} players)` : ''}: won by ${e.win.player} with ${e.win.card_count != null ? L(`/events/${e.id}/1`, e.win.archetype) : e.win.archetype}`), '');
       if (jp.length) lines.push("## What's winning in Japan", '', ...jp.map(x => `- ${x.archetype}: ${x.wins} win${x.wins === 1 ? '' : 's'}, ${x.top8} top 8`), '', `More on the ${L('/events/japan', 'Japan page')}.`, '');
       if (up.length) lines.push('## Price risers', '', ...up.map(m => `- ${m.name} (${m.set_code} ${m.local_id}): $${m.from_price} → $${m.to_price} (${signed(m.pct)}%)`), '');
       lines.push('---', '', "I build Benchmark, a free deck builder that prices lists, checks legality and pulls these matchup numbers. Happy to answer questions about the data or take requests for next week's post.");
     } else if (source === 'x') {
-      const t1 = [`Standard meta this week (${total.toLocaleString('en-US')} games):`, '', ...top.slice(0, 5).map((x, i) => `${i + 1}. ${x.name} ${x.share.toFixed(1)}% (${x.win_pct ?? '?'}% WR)`)].join('\n');
+      const t1 = [`Standard meta this week (${total.toLocaleString('en-US')} games):`, '', ...top.slice(0, 5).map((x, i) => `${i + 1}. ${x.name} ${x.share.toFixed(1)}% (${wr(x)}% WR)`)].join('\n');
       const t2 = risers.length ? ['Rising:', ...risers.map(x => `📈 ${x.name} ${signed(x.delta)} pts`)].join('\n') : '';
       const t3 = results.length ? ['Major winners:', ...results.slice(0, 4).map(e => `🏆 ${e.name}: ${e.win.archetype}`)].join('\n') : '';
       const t4 = `Full matchup tables, free:\n${url('/matchups', c)}`;
       lines.push(...[t1, t2, t3, t4].filter(Boolean).flatMap((t, i, a) => [`--- tweet ${i + 1}/${a.length} (${t.length} chars) ---`, t, '']));
     } else {
       lines.push(`**Weekly meta snapshot, ${d.date}** (${total.toLocaleString('en-US')} online games)`,
-        ...top.slice(0, 6).map(x => `• ${x.name}: ${x.share.toFixed(1)}% of the field, ${x.win_pct ?? '?'}% WR (${signed(x.delta)})`));
+        ...top.slice(0, 6).map(x => `• ${x.name}: ${x.share.toFixed(1)}% of the field, ${wr(x)}% WR (${signed(x.delta)})`));
       if (results.length) lines.push('', ...results.slice(0, 4).map(e => `🏆 ${e.name}: ${e.win.archetype}`));
       lines.push('', `Matchups: <${url('/matchups', c)}>`);
     }
