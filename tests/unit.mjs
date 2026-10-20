@@ -266,5 +266,71 @@ t('worker page headers match public/_headers', () => {
   const want = Object.fromEntries(blk.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(l => [l.slice(0, l.indexOf(':')).trim(), l.slice(l.indexOf(':') + 1).trim()]));
   assert.deepEqual(PAGE_HEADERS, want);
 });
+// Worker SEO: crawlable bodies, JSON-LD and sitemaps, against a stubbed Supabase.
+{
+  const seo = await import('../worker/seo.js');
+  const FIX = [
+    [/rpc\/matchup_decks/, [{ deck: 'dragapult-ex', name: 'Dragapult', games: 17449, win_pct: 53.3 }, { deck: 'n-zoroark', name: "N's Zoroark", games: 8986, win_pct: 48.1 }]],
+    [/rpc\/matchups\?/, [{ opp: 'n-zoroark', name: "N's Zoroark", games: 1112, wins: 555, losses: 539, ties: 18, win_pct: 50.4 }, { opp: 'tiny', name: 'Tiny', games: 3, wins: 3, losses: 0, ties: 0, win_pct: 100 }]],
+    [/tournament_decks\?tournament_id=eq\.515&place=eq\.1/, [{ place: 1, player: '<script>x</script>', country: 'US', archetype: 'Dragapult', cards: [{ cat: 'Pokemon', cid: 'sv06-130', qty: 3, name: 'Dragapult ex' }, { cat: 'Energy', cid: null, qty: 8, name: 'Basic {P} Energy' }] }]],
+    [/tournaments\?id=eq\.515/, [{ name: 'Some Regional', date: '2026-10-11', players: 900 }]],
+    [/tournament_decks\?archetype=eq/, [{ tournament_id: 515, place: 1, player: 'A', card_count: 60, tournaments: { name: 'Some Regional', date: '2026-10-11' } }, { tournament_id: 516, place: 12, player: 'B', card_count: null, tournaments: { name: 'Other', date: '2026-10-12' } }]],
+    [/tournament_decks\?select=tournament_id,place/, [{ tournament_id: 515, place: 1 }, { tournament_id: 999, place: 1 }]],
+    [/tournament_decks\?select=archetype/, [{ archetype: 'Dragapult' }, { archetype: 'Dragapult' }]],
+    [/v1\/tournaments\?select=id,date/, [{ id: 515, date: '2026-10-11' }]],
+    [/jp_tournaments/, [{ id: 'c5075', date: '2026-10-16' }, { id: 'bad', date: '' }]],
+    [/cards\?legal_standard=is\.true.*offset=0/, [{ id: 'sv06-130', updated_at: '2026-10-01T00:00:00Z' }]],
+  ];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async u => {
+    const hit = FIX.find(([re]) => re.test(String(u)));
+    return new Response(JSON.stringify(hit ? hit[1] : []), { status: 200 });
+  };
+  const head = p => seo.headFor(seo.matchRoute(p));
+  const [mu, arch, deck, idx, pages, cards] = await Promise.all([head('/matchups/dragapult-ex'), head('/archetype/Dragapult'), head('/events/515/1'), seo.sitemapIndex(), seo.sitemapPages(), seo.sitemapCards()]);
+  globalThis.fetch = realFetch;
+  t('worker SEO pages carry real content', () => {
+    assert.equal(mu.title, 'Dragapult Matchups & Win Rate · Benchmark');
+    assert.match(mu.description, /53\.3% win rate over 17,449/);
+    assert.match(mu.body, /href="\/matchups\/n-zoroark"/);
+    assert.doesNotMatch(mu.body, /Tiny/, 'matchups under the games floor are left out');
+    assert.equal(mu.jsonld['@type'], 'BreadcrumbList');
+    assert.match(arch.body, /href="\/events\/515\/1"/);
+    assert.match(arch.body, /href="\/matchups\/dragapult-ex"/);
+    assert.match(arch.description, /1 win/);
+    assert.match(deck.title, /^Dragapult deck list · 1st at Some Regional/);
+    assert.match(deck.body, /3 <a href="\/cards\/sv06-130">Dragapult ex<\/a>/);
+    assert.doesNotMatch(deck.body, /<script>/, 'user text is escaped');
+    assert.match(deck.body, /&lt;script&gt;/);
+  });
+  t('worker sitemaps', () => {
+    assert.match(idx, /<sitemapindex[\s\S]*sitemap-pages\.xml[\s\S]*sitemap-cards\.xml/);
+    for (const u of ['/events/515', '/events/515/1', '/archetype/Dragapult', '/matchups/dragapult-ex', '/matchups/dragapult-ex/lists', '/events/japan/c5075']) assert.ok(pages.includes(`https://benchmarktcg.us${u}<`), u);
+    assert.ok(!pages.includes('/events/999/1'), 'lists only for events in the sitemap');
+    assert.ok(!pages.includes('/japan/bad'));
+    assert.match(cards, /<loc>https:\/\/benchmarktcg\.us\/cards\/sv06-130<\/loc><lastmod>2026-10-01<\/lastmod>/);
+  });
+}
+// Weekly meta report drafts (tools/meta-report.mjs): formatting only, no network.
+{
+  const { renderReport } = await import('../tools/meta-report.mjs');
+  const d = {
+    date: '2026-10-20',
+    week: [{ deck: 'dragapult-ex', name: 'Dragapult', games: 4000, win_pct: 53.3 }, { deck: 'n-zoroark', name: "N's Zoroark", games: 1000, win_pct: 48.1 }, { deck: 'rare', name: 'Rare', games: 10, win_pct: 90 }],
+    month: [{ deck: 'dragapult-ex', name: 'Dragapult', games: 9000 }, { deck: 'n-zoroark', name: "N's Zoroark", games: 1000 }],
+    events: [{ id: 515, name: 'Some Regional', date: '2026-10-18', players: 900 }],
+    winners: [{ tournament_id: 515, player: 'A', archetype: 'Dragapult', card_count: 60 }],
+    meta: [], jp: [{ archetype: 'Hydrapple', wins: 3, top8: 9 }], movers: null,
+  };
+  const r = renderReport(d);
+  t('meta report drafts', () => {
+    assert.match(r.reddit, /\| \[Dragapult\]\(https:\/\/benchmarktcg\.us\/matchups\/dragapult-ex\?utm_source=reddit&utm_medium=social&utm_campaign=meta-2026-10-20\) \| 79\.8% \| −10\.2 pts \| 53\.3% \|/);
+    assert.match(r.reddit, /N's Zoroark\*\*: \+10\.0 pts/);
+    assert.doesNotMatch(r.reddit, /Rare/, 'decks under 50 games are left out');
+    assert.match(r.reddit, /won by A with \[Dragapult\]/);
+    for (const tw of r.x.split(/--- tweet .*---\n/).filter(s => s.trim())) assert.ok(tw.trim().length <= 280, 'tweet fits');
+    assert.match(r.discord, /<https:\/\/benchmarktcg\.us\/matchups\?utm_source=discord/);
+  });
+}
 console.log(`unit: ${n} groups ok`);
 await import('./rules-parse.test.mjs');
