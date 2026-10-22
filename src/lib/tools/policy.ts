@@ -10,7 +10,6 @@ export const SOURCES = {
   leagueCp: 'https://championships.pokemon.com/en-us/about/league-challenges-and-league-cup?pillar=tcg',
   regionalCp: 'https://championships.pokemon.com/en-us/about/pokemon-regional-and-special-championships?pillar=tcg',
   internationalCp: 'https://championships.pokemon.com/en-us/about/international-championships?pillar=tcg',
-  eventLocator: 'https://events.pokemon.com/EventLocator/',
 };
 
 export const POLICY = {
