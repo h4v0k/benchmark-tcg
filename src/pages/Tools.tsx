@@ -11,7 +11,7 @@ import { fmtDate } from '../lib/cards';
 import { calcDamage, fewestKOs, prizePaths, prizeValue, printedDamage, type Mod } from '../lib/tools/damage';
 import { POLICY, SEASON, type CpEventType } from '../lib/tools/policy';
 import { cpFor, divisionFor, gainFrom, seasonTotals, type Finish } from '../lib/tools/cp';
-import { flipCoin, type Side } from '../lib/tools/coin';
+import { flipCoin, type CoinSide } from '../lib/tools/coin';
 
 const load = <T,>(k: string, fallback: T): T => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; } };
 const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private window */ } };
@@ -233,7 +233,7 @@ const newGame = (): Game => ({ turn: 1, who: 0, sides: [blankSide(), blankSide()
 
 export function TrackerTool() {
   const [g, setG] = useState<Game>(() => load('bm:tracker', newGame()));
-  const [flip, setFlip] = useState<{ side: Side; n: number; spinning: boolean } | null>(null);
+  const [flip, setFlip] = useState<{ side: CoinSide; n: number; spinning: boolean } | null>(null);
   const [checkup, setCheckup] = useState(false);
   const [armed, setArmed] = useState(false); // New game needs a second tap so a stray tap mid-game doesn't wipe it
   useEffect(() => save('bm:tracker', g), [g]);
