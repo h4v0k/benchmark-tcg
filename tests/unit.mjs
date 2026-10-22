@@ -349,6 +349,7 @@ t('worker page headers match public/_headers', () => {
 {
   const DM = await bundle('src/lib/tools/damage.ts');
   const CP = await bundle('src/lib/tools/cp.ts');
+  const COIN = await bundle('src/lib/tools/coin.ts');
   t('damage order: attacker effects, Weakness, Resistance, defender effects', () => {
     const r = DM.calcDamage({ base: 120, attackerMods: [{ label: 'Belt', amount: 30 }], weakness: '×2', resistance: '', defenderMods: [{ label: 'Shield', amount: -30 }] });
     assert.equal(r.total, 270); // (120 + 30) × 2 − 30
@@ -379,6 +380,14 @@ t('worker page headers match public/_headers', () => {
     assert.equal(DM.fewestKOs([1, 1], 6), null);
     const p = DM.prizePaths([2, 2, 2, 1, 1], 6).map(x => x.join('+'));
     assert.deepEqual(p, ['2+2+2', '2+2+1+1']);
+  });
+  t('coin flip uses one crypto byte, exactly 50/50', () => {
+    const CN = COIN;
+    let heads = 0;
+    for (let v = 0; v < 256; v++) if (CN.flipCoin(a => { a[0] = v; return a; }) === 'Heads') heads++;
+    assert.equal(heads, 128, 'every byte value maps to one side, half each');
+    const seen = new Set(); for (let i = 0; i < 200; i++) seen.add(CN.flipCoin()); // real crypto source
+    assert.deepEqual([...seen].sort(), ['Heads', 'Tails']);
   });
   t('championship points', () => {
     assert.equal(CP.cpFor('cup', 1, 10), 50);

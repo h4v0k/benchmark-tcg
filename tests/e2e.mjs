@@ -1179,6 +1179,12 @@ try {
     await page.getByRole('button', { name: 'Asleep' }).first().click();
     await page.getByRole('button', { name: 'Confused' }).first().click();
     if (await page.getByRole('button', { name: 'Asleep', pressed: true }).count()) throw new Error('Confused should replace Asleep');
+    await page.getByRole('button', { name: 'Flip a coin' }).click();
+    await see(page, 'Flipping…');
+    await page.locator('.flip-result').waitFor(T);
+    if (!/^(Heads|Tails)$/.test(await page.locator('.flip-result').textContent())) throw new Error('coin result');
+    await page.getByRole('button', { name: 'Flip a coin' }).click();
+    await see(page, 'Flip #2');
     const sup = page.getByRole('button', { name: 'Supporter played' }).first();
     await sup.click();
     if (await sup.getAttribute('aria-pressed') !== 'true') throw new Error('Supporter played did not toggle on');
