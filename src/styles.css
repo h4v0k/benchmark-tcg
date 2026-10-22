@@ -1051,7 +1051,9 @@ a.mu-row.mu-deck-link:hover .mu-name b { text-decoration: underline; text-underl
 .mini-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
 .mini-table th, .mini-table td { text-align: left; padding: 5px 4px; border-top: 1px solid var(--line); }
 .mini-table th:not(:first-child), .mini-table td:not(:first-child) { text-align: right; }
-.ev-search { display: flex; flex-direction: column; gap: 10px; }
-.ev-search .field { margin: 0; max-width: 14em; }
-.ev-go { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
-.ev-go p { margin: 0; }
+.flag-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5em), 1fr)); gap: 8px; }
+.flag-btn { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); font: inherit; font-weight: 600; font-size: 14px; text-align: left; cursor: pointer; transition: background .12s, border-color .12s; }
+.flag-btn:hover { background: var(--hover); }
+.flag-btn.on { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+.flag-mark { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; border: 2px solid currentColor; opacity: .55; }
+.flag-btn.on .flag-mark { opacity: 1; background: var(--ok); border-color: var(--ok); color: #fff; }

@@ -1179,8 +1179,14 @@ try {
     await page.getByRole('button', { name: 'Asleep' }).first().click();
     await page.getByRole('button', { name: 'Confused' }).first().click();
     if (await page.getByRole('button', { name: 'Asleep', pressed: true }).count()) throw new Error('Confused should replace Asleep');
+    const sup = page.getByRole('button', { name: 'Supporter played' }).first();
+    await sup.click();
+    if (await sup.getAttribute('aria-pressed') !== 'true') throw new Error('Supporter played did not toggle on');
+    await page.getByRole('button', { name: 'VSTAR Power used' }).first().click();
     await page.getByRole('button', { name: 'End turn' }).click();
     await see(page, 'Pokémon Checkup');
+    if (await sup.getAttribute('aria-pressed') !== 'false') throw new Error('per-turn reminders should clear at End turn');
+    if (await page.getByRole('button', { name: 'VSTAR Power used' }).first().getAttribute('aria-pressed') !== 'true') throw new Error('per-game reminders should stay');
     await page.reload();
     await see(page, '5 Prize cards left');
     const dmg = await page.locator('.dmg b').first().textContent();
@@ -1202,20 +1208,6 @@ try {
     await see(page, 'You play in Senior');
     const total = await page.locator('.big-num').first().textContent();
     if (!/^50/.test(total)) throw new Error('total: ' + total);
-    await page.context().close();
-  });
-  await scenario('53. event finder turns a ZIP into an official locator search', async () => {
-    const page = await newPage({ width: 1280, height: 900 });
-    await page.route(BASE + '/api/geo*', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ lat: 27.9477, lng: -82.4584, place: 'Tampa, FL' }) }));
-    await page.goto(BASE + '/tools/events');
-    await page.getByLabel('ZIP code').fill('33602');
-    await page.getByRole('button', { name: 'Use this ZIP code' }).click();
-    const link = page.getByRole('link', { name: /Show events/ });
-    await link.waitFor(T);
-    const href = await link.getAttribute('href');
-    if (!href.startsWith('https://events.pokemon.com/EventLocator/?') || !href.includes('latitude=27.95') || !href.includes('filters=league_cup,league_challenge')) throw new Error('href: ' + href);
-    await page.getByRole('button', { name: '100 mi' }).click().catch(() => page.getByRole('radio', { name: '100 mi' }).click());
-    await see(page, 'within 100 miles of Tampa, FL');
     await page.context().close();
   });
 } finally {

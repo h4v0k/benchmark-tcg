@@ -349,7 +349,6 @@ t('worker page headers match public/_headers', () => {
 {
   const DM = await bundle('src/lib/tools/damage.ts');
   const CP = await bundle('src/lib/tools/cp.ts');
-  const EVT = await bundle('src/lib/tools/events.ts');
   t('damage order: attacker effects, Weakness, Resistance, defender effects', () => {
     const r = DM.calcDamage({ base: 120, attackerMods: [{ label: 'Belt', amount: 30 }], weakness: '×2', resistance: '', defenderMods: [{ label: 'Shield', amount: -30 }] });
     assert.equal(r.total, 270); // (120 + 30) × 2 − 30
@@ -395,10 +394,6 @@ t('worker page headers match public/_headers', () => {
     assert.equal(CP.divisionFor(2016), 'Junior');
     assert.equal(CP.divisionFor(2012), 'Senior');
     assert.equal(CP.divisionFor(1990), 'Masters');
-  });
-  t('event finder links into the official locator', () => {
-    const u = EVT.locatorUrl({ lat: 27.951689, lng: -82.458752, miles: 50, filters: ['league_cup', 'league_challenge'], today: '2026-10-21' });
-    assert.equal(u, 'https://events.pokemon.com/EventLocator/?locale=en-US&range=50&iskm=false&latitude=27.95&longitude=-82.46&startdate=2026-10-21&filters=league_cup,league_challenge');
   });
 }
 console.log(`unit: ${n} groups ok`);

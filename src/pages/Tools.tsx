@@ -1,4 +1,4 @@
-// Toolbox: damage & prize-trade calculator, in-game tracker, Championship Points tracker, event finder.
+// Toolbox: damage & prize-trade calculator, in-game tracker, Championship Points tracker.
 // Every rule and organized-play number comes from src/lib/tools/policy.ts (checked monthly against the official sources).
 import { useEffect, useMemo, useState } from 'react';
 import { CardImg, ErrorBox, Icon, Segmented, Spinner, Tag, useDebounced } from '../components/ui';
@@ -9,9 +9,8 @@ import * as sb from '../lib/supabase';
 import type { Card, SearchHit } from '../lib/types';
 import { fmtDate } from '../lib/cards';
 import { calcDamage, fewestKOs, prizePaths, prizeValue, printedDamage, type Mod } from '../lib/tools/damage';
-import { POLICY, SEASON, SOURCES, type CpEventType } from '../lib/tools/policy';
+import { POLICY, SEASON, type CpEventType } from '../lib/tools/policy';
 import { cpFor, divisionFor, gainFrom, seasonTotals, type Finish } from '../lib/tools/cp';
-import { EVENT_FILTERS, locatorUrl, type EventFilter } from '../lib/tools/events';
 
 const load = <T,>(k: string, fallback: T): T => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; } };
 const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private window */ } };
@@ -20,7 +19,6 @@ export const TOOLS = [
   { to: '/tools/damage', icon: 'bolt', title: 'Damage & prize trade', blurb: 'Work out exact damage with Weakness, Resistance and every modifier in the right order, and map the fewest Knock Outs to take your Prize cards.' },
   { to: '/tools/tracker', icon: 'list', title: 'Game tracker', blurb: 'Damage counters, Special Conditions, Prize cards and once-per-turn reminders for the table, with Pokémon Checkup built in.' },
   { to: '/tools/cp', icon: 'star', title: 'Championship Points', blurb: 'Log your finishes, see which ones count under the best-finish limits, and check your age division.' },
-  { to: '/tools/events', icon: 'search', title: 'Event finder', blurb: 'Jump straight to League Cups, League Challenges and prereleases within 25, 50 or 100 miles of you.' },
 ];
 
 function ToolHead({ title, children }: { title: string; children?: React.ReactNode }) {
@@ -315,12 +313,17 @@ function SidePanel({ title, side, active, set }: { title: string; side: Side; ac
       {side.slots.length < 1 + POLICY.benchSize + 3 && <button className="btn small" onClick={() => set(s => ({ ...s, slots: [...s.slots, { name: '', hp: 0, dmg: 0 }] }))}><Icon name="plus" />Bench a Pokémon</button>}
       <div className="flags">
         <span className="muted small">This turn</span>
-        {POLICY.perTurn.map(f => <label key={f} className="check"><input type="checkbox" checked={!!side.turn[f]} onChange={e => set(s => ({ ...s, turn: { ...s.turn, [f]: e.target.checked } }))} />{f}</label>)}
+        <div className="flag-grid">{POLICY.perTurn.map(f => <FlagButton key={f} label={f} on={!!side.turn[f]} toggle={() => set(s => ({ ...s, turn: { ...s.turn, [f]: !s.turn[f] } }))} />)}</div>
         <span className="muted small">This game</span>
-        {POLICY.perGame.map(f => <label key={f} className="check"><input type="checkbox" checked={!!side.game[f]} onChange={e => set(s => ({ ...s, game: { ...s.game, [f]: e.target.checked } }))} />{f}</label>)}
+        <div className="flag-grid">{POLICY.perGame.map(f => <FlagButton key={f} label={f} on={!!side.game[f]} toggle={() => set(s => ({ ...s, game: { ...s.game, [f]: !s.game[f] } }))} />)}</div>
       </div>
     </section>
   );
+}
+
+/** A big tap target that stays lit once used, instead of a tiny checkbox. */
+function FlagButton({ label, on, toggle }: { label: string; on: boolean; toggle: () => void }) {
+  return <button type="button" className={`flag-btn ${on ? 'on' : ''}`} aria-pressed={on} onClick={toggle}><span className="flag-mark" aria-hidden="true">{on ? <Icon name="check" size={16} /> : null}</span>{label}</button>;
 }
 
 /* ---------------- Championship Points ---------------- */
@@ -428,66 +431,5 @@ function AddFinish({ list, onAdd }: { list: Finish[]; onAdd: (f: Finish) => void
       {place && <p className="small">{auto === 0 && cpEdit == null ? 'That placement doesn’t earn CP at this event size.' : gain > 0 ? `Adds ${gain} CP to your total.` : 'Wouldn’t raise your total: your counted finishes of this kind are already higher.'}</p>}
       <button className="btn primary block">Add finish</button>
     </form>
-  );
-}
-
-/* ---------------- event finder ---------------- */
-// The official locator has no public API, so this picks the spot, distance and event types here and opens the
-// locator already searched. One tap from ZIP code to the list, instead of fighting its autocomplete.
-export function EventFinder() {
-  const [zip, setZip] = useState<string>(() => load('bm:ev-zip', ''));
-  const [mi, setMi] = useState<'25' | '50' | '100'>(() => load('bm:ev-mi', '50'));
-  const [kinds, setKinds] = useState<EventFilter[]>(() => load('bm:ev-kinds', ['league_cup', 'league_challenge']));
-  const [where, setWhere] = useState<{ lat: number; lng: number; place: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  useEffect(() => { save('bm:ev-mi', mi); save('bm:ev-kinds', kinds); }, [mi, kinds]);
-  const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in the visitor's own time zone
-  const url = where ? locatorUrl({ lat: where.lat, lng: where.lng, miles: +mi, filters: kinds, today }) : '';
-  const lookup = async () => {
-    setErr('');
-    if (!/^\d{5}$/.test(zip)) { setErr('Enter a 5-digit ZIP code or use your location.'); return; }
-    setBusy(true);
-    try {
-      const r = await fetch(`/api/geo?zip=${zip}`); const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'That ZIP code wasn’t found.');
-      setWhere(d); save('bm:ev-zip', zip);
-    } catch (e: any) { setErr(e.message); setWhere(null); } finally { setBusy(false); }
-  };
-  const locate = () => {
-    setErr('');
-    if (!navigator.geolocation) return setErr('This browser can’t share your location. Enter a ZIP code instead.');
-    setBusy(true);
-    navigator.geolocation.getCurrentPosition(
-      pos => { setBusy(false); setWhere({ lat: pos.coords.latitude, lng: pos.coords.longitude, place: 'your location' }); },
-      () => { setBusy(false); setErr('Location wasn’t shared. Enter a ZIP code instead.'); },
-      { maximumAge: 600000, timeout: 10000 },
-    );
-  };
-  const toggle = (k: EventFilter) => setKinds(ks => ks.includes(k) ? ks.filter(x => x !== k) : [...ks, k]);
-  return (
-    <div className="wrap page narrow-wide">
-      <ToolHead title="Event finder">League Cups, League Challenges and prereleases near you. Pick a spot and we open the official Play! Pokémon event locator already searched, with the map and every event’s details.</ToolHead>
-      <form className="panel ev-search" onSubmit={e => { e.preventDefault(); lookup(); }}>
-        <div className="field-row">
-          <label className="field"><span>ZIP code</span><input inputMode="numeric" autoComplete="postal-code" maxLength={5} value={zip} onChange={e => { setZip(e.target.value.replace(/\D/g, '').slice(0, 5)); setWhere(null); }} placeholder="33602" /></label>
-        </div>
-        <div className="row-gap"><button className="btn primary" disabled={busy}>Use this ZIP code</button><button type="button" className="btn" onClick={locate} disabled={busy}>Use my location</button></div>
-        <Segmented label="Distance" value={mi} onChange={setMi} options={[{ value: '25', label: '25 mi' }, { value: '50', label: '50 mi' }, { value: '100', label: '100 mi' }]} />
-        <div className="conds" role="group" aria-label="Event types">
-          {EVENT_FILTERS.map(f => <button type="button" key={f.key} className={`chip-toggle ${kinds.includes(f.key) ? 'on' : ''}`} aria-pressed={kinds.includes(f.key)} onClick={() => toggle(f.key)}>{f.label}</button>)}
-        </div>
-      </form>
-      {busy && <Spinner label="Finding that spot…" />}
-      {err && <p className="form-error" role="alert">{err}</p>}
-      {where && !busy && (
-        <section className="panel ev-go" aria-live="polite">
-          <p><b>{kinds.length ? EVENT_FILTERS.filter(f => kinds.includes(f.key)).map(f => f.label).join(', ') : 'All events'}</b> within {mi} miles of {where.place}</p>
-          <a className="btn primary big" href={url} target="_blank" rel="noopener noreferrer">Show events<Icon name="external" size={14} /></a>
-          <p className="muted small">Opens events.pokemon.com in a new tab. Your spot is rounded to about half a mile.</p>
-        </section>
-      )}
-      <p className="muted small">Event data belongs to the <a href={SOURCES.eventLocator} target="_blank" rel="noopener noreferrer">Play! Pokémon event locator</a>. Always confirm times and fees with the store.</p>
-    </div>
   );
 }
