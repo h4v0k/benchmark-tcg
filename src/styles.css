@@ -981,3 +981,77 @@ a.mu-row.mu-deck-link:hover .mu-name b { text-decoration: underline; text-underl
 }
 .foot-credit { margin: 0; }
 .legal-nav { margin: 4px 0 18px; }
+
+/* ---------------- Toolbox ---------------- */
+.tool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; }
+.tool-card { display: flex; gap: 12px; align-items: flex-start; color: var(--text); margin: 0; }
+.tool-card:hover { border-color: var(--accent); }
+.tool-card > span:last-child { display: flex; flex-direction: column; gap: 4px; }
+.tool-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.tool-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; align-items: start; margin-top: 14px; }
+.tool-cols .panel { margin: 0; }
+.tool-cols h2 { margin-top: 0; }
+.picked { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+.picked img { width: 56px; border-radius: 4px; flex: none; }
+.picked > div { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.picker { position: relative; }
+.picker-list { list-style: none; margin: 4px 0 0; padding: 4px; border: 1px solid var(--line2); border-radius: var(--radius); background: var(--panel); max-height: 50vh; overflow-y: auto; }
+.picker-list button { display: flex; gap: 8px; align-items: center; width: 100%; padding: 6px; border: 0; background: none; color: var(--text); text-align: left; cursor: pointer; border-radius: var(--radius-sm); font: inherit; }
+.picker-list button:hover, .picker-list button:focus-visible { background: var(--hover); }
+.picker-list img { width: 32px; border-radius: 3px; flex: none; }
+.mods { border: 0; padding: 0; }
+.mod-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.mod-row input:first-child { flex: 1; min-width: 0; }
+.mod-row input[type="number"] { width: 6.5em; flex: none; }
+.attack-text { margin-top: -6px; }
+.result .big-num { font-size: 2.6rem; font-weight: 800; line-height: 1.1; }
+.result .big-num span { font-size: 1rem; font-weight: 600; color: var(--muted); }
+.result.ko { border-color: var(--ok); }
+.result-line { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.steps { list-style: none; padding: 0; margin: 10px 0; }
+.steps li { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+.steps li small { grid-column: 1 / -1; }
+.kv { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+.target-list, .paths, .cp-pools, .finish-list { list-style: none; padding: 0; margin: 8px 0; }
+.target-list li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.target-list li span:first-child { flex: 1; min-width: 0; }
+.paths li { padding: 3px 0; }
+.tracker-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.tracker-bar .flip { width: 100%; margin: 0; }
+.checkup { display: flex; gap: 8px; align-items: flex-start; }
+.checkup > div { flex: 1; }
+.checkup ul { margin: 4px 0 0; padding-left: 18px; }
+.tracker-sides { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 14px; }
+.side { margin: 0; }
+.side.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.prizes { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 8px 0 12px; }
+.prize { min-height: 44px; border-radius: var(--radius-sm); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); font-weight: 700; font-size: 1rem; cursor: pointer; }
+.prize.taken { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+.slot { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; margin-bottom: 10px; }
+.slot.active { border-color: var(--line2); background: var(--bg2); }
+.slot-head { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.slot-head input:not(.hp) { flex: 1; min-width: 8em; }
+.slot-head .hp { width: 5.5em; flex: none; }
+.dmg-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.dmg-row .btn { min-height: 44px; min-width: 3.4em; font-size: 1rem; }
+.dmg { flex: 1; min-width: 7em; text-align: center; display: flex; flex-direction: column; }
+.dmg b { font-size: 1.6rem; line-height: 1.1; }
+.dmg.dead b { color: var(--bad); }
+.small-gap { gap: 6px; }
+.conds { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.chip-toggle { min-height: 36px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--line2); background: var(--panel2); color: var(--text); font-weight: 600; font-size: 13px; cursor: pointer; }
+.chip-toggle.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.flags { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.flags .check { min-height: 32px; align-items: center; }
+.cp-pools li, .finish-list li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.cp-pools li span:first-child { flex: 1 1 12em; }
+.finish-list li > span:first-child { flex: 1 1 14em; display: flex; flex-direction: column; min-width: 0; }
+.finish-list li.dim > span:first-child, .finish-list li.dim > b { opacity: .6; }
+.add-finish { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.mini-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
+.mini-table th, .mini-table td { text-align: left; padding: 5px 4px; border-top: 1px solid var(--line); }
+.mini-table th:not(:first-child), .mini-table td:not(:first-child) { text-align: right; }
+.ev-search { display: flex; flex-direction: column; gap: 10px; }
+.ev-search .field { margin: 0; max-width: 14em; }
+.ev-go { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.ev-go p { margin: 0; }

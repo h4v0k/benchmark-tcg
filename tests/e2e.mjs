@@ -1146,6 +1146,78 @@ try {
     pageErrors.length = before; // that 400 is the point of this test
     await page.context().close();
   });
+
+  await scenario('50. Toolbox menu opens each tool; damage calculator finds a Knock Out', async () => {
+    const page = await newPage({ width: 1280, height: 900 });
+    await page.goto(BASE + '/');
+    await page.getByRole('button', { name: 'Toolbox' }).click();
+    await page.getByRole('menuitem', { name: 'Damage & prize trade' }).click();
+    await page.getByRole('heading', { name: 'Damage & prize trade' }).waitFor(T);
+    await page.getByLabel('Attacking Pokémon').fill('Dragapult');
+    await page.locator('.picker-list button').first().click();
+    await page.locator('.picked').first().waitFor(T);
+    await page.getByLabel(/^Base damage/).fill('200');
+    await page.getByLabel('Defending Pokémon').fill('Dreepy');
+    await page.locator('.picker-list button', { hasText: 'Dreepy' }).first().click();
+    await see(page, 'Knock Out');
+    await see(page, 'takes 1 Prize card');
+    await page.getByRole('radio', { name: 'Prize trade' }).click();
+    await page.getByRole('button', { name: '2-Prize' }).first().click();
+    await page.getByRole('button', { name: '2-Prize' }).first().click();
+    await page.getByRole('button', { name: '2-Prize' }).first().click();
+    await see(page, '3 KOs: 2-Prize + 2-Prize + 2-Prize');
+    await page.screenshot({ path: path.join(OUT, 'tools-damage.png') });
+    await page.context().close();
+  });
+  await scenario('51. game tracker keeps damage and Prize cards across a reload', async () => {
+    const page = await newPage({ width: 390, height: 844 });
+    await page.goto(BASE + '/tools/tracker');
+    await page.getByRole('button', { name: 'Add 50 damage' }).first().click();
+    await page.getByRole('button', { name: 'Add 10 damage' }).first().click();
+    await page.getByRole('button', { name: 'Prize 1' }).first().click();
+    await page.getByRole('button', { name: 'Poisoned' }).first().click();
+    await page.getByRole('button', { name: 'Asleep' }).first().click();
+    await page.getByRole('button', { name: 'Confused' }).first().click();
+    if (await page.getByRole('button', { name: 'Asleep', pressed: true }).count()) throw new Error('Confused should replace Asleep');
+    await page.getByRole('button', { name: 'End turn' }).click();
+    await see(page, 'Pokémon Checkup');
+    await page.reload();
+    await see(page, '5 Prize cards left');
+    const dmg = await page.locator('.dmg b').first().textContent();
+    if (dmg !== '60') throw new Error('damage after reload: ' + dmg);
+    await page.screenshot({ path: path.join(OUT, 'tools-tracker-phone.png'), fullPage: true });
+    await page.context().close();
+  });
+  await scenario('52. CP tracker applies the event-size kicker and saves on this device', async () => {
+    const page = await newPage({ width: 1280, height: 900 });
+    await page.goto(BASE + '/tools/cp');
+    await page.getByLabel('Placement').fill('1');
+    await page.getByLabel('Players in your division').fill('10');
+    await page.getByRole('button', { name: 'Add finish' }).click();
+    await see(page, 'Counts');
+    await page.getByLabel('Placement').fill('7');
+    await page.getByLabel('Players in your division').fill('12');
+    await see(page, 'doesn’t earn CP at this event size');
+    await page.getByLabel('Birth year').fill('2012');
+    await see(page, 'You play in Senior');
+    const total = await page.locator('.big-num').first().textContent();
+    if (!/^50/.test(total)) throw new Error('total: ' + total);
+    await page.context().close();
+  });
+  await scenario('53. event finder turns a ZIP into an official locator search', async () => {
+    const page = await newPage({ width: 1280, height: 900 });
+    await page.route(BASE + '/api/geo*', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ lat: 27.9477, lng: -82.4584, place: 'Tampa, FL' }) }));
+    await page.goto(BASE + '/tools/events');
+    await page.getByLabel('ZIP code').fill('33602');
+    await page.getByRole('button', { name: 'Use this ZIP code' }).click();
+    const link = page.getByRole('link', { name: /Show events/ });
+    await link.waitFor(T);
+    const href = await link.getAttribute('href');
+    if (!href.startsWith('https://events.pokemon.com/EventLocator/?') || !href.includes('latitude=27.95') || !href.includes('filters=league_cup,league_challenge')) throw new Error('href: ' + href);
+    await page.getByRole('button', { name: '100 mi' }).click().catch(() => page.getByRole('radio', { name: '100 mi' }).click());
+    await see(page, 'within 100 miles of Tampa, FL');
+    await page.context().close();
+  });
 } finally {
   await browser.close();
   server.close();

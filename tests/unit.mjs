@@ -344,5 +344,62 @@ t('worker page headers match public/_headers', () => {
     for (const tw of ev.x.split(/--- tweet .*---\n/).filter(s => s.trim())) assert.ok(tw.trim().length <= 280, 'tweet fits');
   });
 }
+
+/* ---------- Toolbox ---------- */
+{
+  const DM = await bundle('src/lib/tools/damage.ts');
+  const CP = await bundle('src/lib/tools/cp.ts');
+  const EVT = await bundle('src/lib/tools/events.ts');
+  t('damage order: attacker effects, Weakness, Resistance, defender effects', () => {
+    const r = DM.calcDamage({ base: 120, attackerMods: [{ label: 'Belt', amount: 30 }], weakness: '×2', resistance: '', defenderMods: [{ label: 'Shield', amount: -30 }] });
+    assert.equal(r.total, 270); // (120 + 30) × 2 − 30
+    assert.deepEqual(r.steps.map(s => s.value), [120, 150, 300, 270]);
+    assert.equal(DM.calcDamage({ base: 60, attackerMods: [], weakness: '', resistance: '-30', defenderMods: [] }).total, 30);
+    assert.equal(DM.calcDamage({ base: 20, attackerMods: [], weakness: '', resistance: '-30', defenderMods: [] }).total, 0, 'never below 0');
+    assert.equal(DM.calcDamage({ base: 100, attackerMods: [], weakness: '×2', resistance: '', defenderMods: [], benched: true }).total, 100, 'no Weakness on the Bench');
+    assert.equal(DM.calcDamage({ base: 50, attackerMods: [{ label: '', amount: 30 }], weakness: '×2', resistance: '', defenderMods: [], counters: true }).total, 50, 'damage counters skip everything');
+    assert.equal(DM.calcDamage({ base: 0, attackerMods: [], weakness: '×2', resistance: '', defenderMods: [] }).total, 0);
+    assert.equal(DM.calcDamage({ base: 30, attackerMods: [], weakness: '+20', resistance: '', defenderMods: [] }).total, 50, 'old +20 Weakness');
+    assert.equal(DM.printedDamage('30×'), 30);
+  });
+  t('prize values', () => {
+    const pv = (suffix, name) => DM.prizeValue({ suffix, name, category: 'Pokemon' });
+    assert.equal(pv('', 'Dreepy'), 1);
+    assert.equal(pv('ex', 'Dragapult ex'), 2);
+    assert.equal(pv('ex', 'Mega Lucario ex'), 3);
+    assert.equal(pv('V', 'Lugia V'), 2);
+    assert.equal(pv('V', 'Arceus VSTAR'), 2);
+    assert.equal(pv('V', 'Charizard VMAX'), 3);
+    assert.equal(pv('TAG TEAM-GX', 'Pikachu & Zekrom GX'), 3);
+    assert.equal(pv('GX', 'Zygarde-GX'), 2);
+    assert.equal(pv('EX', 'M Rayquaza-EX'), 2);
+  });
+  t('prize paths', () => {
+    assert.equal(DM.fewestKOs([2, 2, 2, 1, 1], 6), 3);
+    assert.equal(DM.fewestKOs([3, 3], 6), 2);
+    assert.equal(DM.fewestKOs([1, 1], 6), null);
+    const p = DM.prizePaths([2, 2, 2, 1, 1], 6).map(x => x.join('+'));
+    assert.deepEqual(p, ['2+2+2', '2+2+1+1']);
+  });
+  t('championship points', () => {
+    assert.equal(CP.cpFor('cup', 1, 10), 50);
+    assert.equal(CP.cpFor('cup', 7, 12), 0, 'top 8 bracket needs 17 players');
+    assert.equal(CP.cpFor('cup', 7, null), 25, 'unknown attendance assumes it unlocked');
+    assert.equal(CP.cpFor('cup', 200, 300), 0);
+    const f = (event_type, cp) => ({ event_type, cp, event_name: '', event_date: null, players: null, placement: 1 });
+    const list = [f('cup', 50), f('cup', 40), f('cup', 32), f('cup', 25), f('cup', 50), f('regional', 200)];
+    const tot = CP.seasonTotals(list);
+    assert.equal(tot.total, 50 + 50 + 40 + 32 + 200, 'only the best 4 Cups count');
+    assert.equal(tot.byType.cup.counted, 4);
+    assert.equal(CP.gainFrom(list, f('cup', 25)), 0);
+    assert.equal(CP.divisionFor(2016), 'Junior');
+    assert.equal(CP.divisionFor(2012), 'Senior');
+    assert.equal(CP.divisionFor(1990), 'Masters');
+  });
+  t('event finder links into the official locator', () => {
+    const u = EVT.locatorUrl({ lat: 27.951689, lng: -82.458752, miles: 50, filters: ['league_cup', 'league_challenge'], today: '2026-10-21' });
+    assert.equal(u, 'https://events.pokemon.com/EventLocator/?locale=en-US&range=50&iskm=false&latitude=27.95&longitude=-82.46&startdate=2026-10-21&filters=league_cup,league_challenge');
+  });
+}
 console.log(`unit: ${n} groups ok`);
 await import('./rules-parse.test.mjs');

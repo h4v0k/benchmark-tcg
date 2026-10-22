@@ -4,6 +4,7 @@ import { PAGE_HEADERS } from './headers.js';
 // straight from the static assets. /img/* re-serves TCGdex card art from our own domain so the deck
 // image export can draw it to a canvas and save it as a PNG (cross-origin images would block that).
 
+import { handleApi } from './events.js';
 import { matchRoute, headFor, rewriteHead, sitemapIndex, sitemapPages, sitemapCards, SITEMAPS } from './seo.js';
 
 const UPSTREAM = 'https://assets.tcgdex.net';
@@ -77,6 +78,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/img/')) return cardImage(request, ctx, url);
+    if (url.pathname.startsWith('/api/')) { try { return await handleApi(request, ctx, url); } catch { return new Response('{"error":"Something went wrong."}', { status: 500, headers: { 'Content-Type': 'application/json' } }); } }
     if (SITEMAP_BUILDERS[url.pathname] && (request.method === 'GET' || request.method === 'HEAD')) {
       try { return await sitemap(request, ctx, url.pathname); } catch { return new Response('Unavailable', { status: 503 }); }
     }
