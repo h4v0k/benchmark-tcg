@@ -41,6 +41,7 @@ const P: Record<string, string> = {
   chevron: 'M6 9l6 6 6-6',
   back: 'M15 18l-6-6 6-6',
   forward: 'M9 6l6 6-6 6',
+  tool: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z',
   external: 'M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5',
 };
 export function Icon({ name, size = 16, className = '' }: { name: keyof typeof P | string; size?: number; className?: string }) {

@@ -38,6 +38,11 @@ const CopyrightPage = lazy(() => import('./pages/Legal').then(m => ({ default: m
 const AccessibilityPage = lazy(() => import('./pages/Legal').then(m => ({ default: m.AccessibilityPage })));
 const CreditsPage = lazy(() => import('./pages/Legal').then(m => ({ default: m.CreditsPage })));
 const AdminPage = lazy(() => import('./pages/Admin').then(m => ({ default: m.AdminPage })));
+const ToolsHome = lazy(() => import('./pages/Tools').then(m => ({ default: m.ToolsHome })));
+const DamageTool = lazy(() => import('./pages/Tools').then(m => ({ default: m.DamageTool })));
+const TrackerTool = lazy(() => import('./pages/Tools').then(m => ({ default: m.TrackerTool })));
+const CpTool = lazy(() => import('./pages/Tools').then(m => ({ default: m.CpTool })));
+const EventFinder = lazy(() => import('./pages/Tools').then(m => ({ default: m.EventFinder })));
 const UsersPage = lazy(() => import('./pages/Users').then(m => ({ default: m.UsersPage })));
 
 const isId = (v: string) => /^[1-9]\d{0,14}$/.test(v);
@@ -102,6 +107,11 @@ const ROUTES: [string, (p: Record<string, string>) => ReactElement][] = [
   ['/accessibility', () => <AccessibilityPage />],
   ['/credits', () => <CreditsPage />],
   ['/admin', () => <AdminPage />],
+  ['/tools', () => <ToolsHome />],
+  ['/tools/damage', () => <DamageTool />],
+  ['/tools/tracker', () => <TrackerTool />],
+  ['/tools/cp', () => <CpTool />],
+  ['/tools/events', () => <EventFinder />],
 ];
 
 function Shell({ authLink }: { authLink: { type?: string; error?: string } | null }) {
@@ -159,6 +169,13 @@ function TopBar() {
         </nav>
         <GlobalSearch />
         <div className="topbar-actions">
+          <Menu className="btn ghost toolbox-btn" title="Toolbox" label={<><Icon name="tool" /><span className="hide-sm">Toolbox</span></>}>
+            <MenuItem icon="bolt" onClick={() => navigate('/tools/damage')}>Damage & prize trade</MenuItem>
+            <MenuItem icon="list" onClick={() => navigate('/tools/tracker')}>Game tracker</MenuItem>
+            <MenuItem icon="star" onClick={() => navigate('/tools/cp')}>Championship Points</MenuItem>
+            <MenuItem icon="search" onClick={() => navigate('/tools/events')}>Event finder</MenuItem>
+            <MenuItem icon="tool" onClick={() => navigate('/tools')}>All tools</MenuItem>
+          </Menu>
           <NewDeckButton />
           <button className="icon-btn theme-btn" aria-label={theme === 'dark' ? 'Use light theme' : 'Use dark theme'} title="Theme" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}><Icon name={theme === 'dark' ? 'sun' : 'moon'} /></button>
           {session ? (

@@ -19,6 +19,11 @@ export const ROUTE_LIST = [
   [/^\/cards$/, 'cards'],
   [/^\/cards\/([^/]+)$/, 'card'],
   [/^\/rules$/, 'rules'],
+  [/^\/tools$/, 'tools'],
+  [/^\/tools\/damage$/, 'toolDamage'],
+  [/^\/tools\/tracker$/, 'toolTracker'],
+  [/^\/tools\/cp$/, 'toolCp'],
+  [/^\/tools\/events$/, 'toolEvents'],
   [/^\/events$/, 'events'],
   [/^\/events\/japan$/, 'japan'],
   [/^\/events\/japan\/card\/([^/]+)$/, 'japanCard'],
@@ -64,6 +69,11 @@ const STATIC = {
   feed: { title: 'Feed · Benchmark', description: 'New decks from the players you follow.' },
   cards: { title: 'Pokémon TCG Card Search · Benchmark', description: 'Search every Pokémon TCG card with legality, prices and exact printings.' },
   rules: { title: 'Pokémon TCG Rules · Benchmark', description: 'Deck building and format rules for Standard, Expanded and Unlimited.' },
+  tools: { title: 'Pokémon TCG Toolbox · Benchmark', description: 'Damage and prize-trade calculator, game tracker, Championship Points tracker and an event finder for Pokémon TCG players.' },
+  toolDamage: { title: 'Pokémon TCG Damage & Prize Trade Calculator · Benchmark', description: 'Exact damage with Weakness, Resistance and modifiers in rulebook order, plus the fewest Knock Outs to take your Prize cards.' },
+  toolTracker: { title: 'Pokémon TCG Game Tracker · Benchmark', description: 'Track damage counters, Special Conditions, Prize cards and once-per-turn actions at the table.' },
+  toolCp: { title: 'Championship Points Tracker · Benchmark', description: 'Log your Play! Pokémon finishes and see your season CP with best-finish limits applied.' },
+  toolEvents: { title: 'Pokémon TCG Event Finder · Benchmark', description: 'Find League Cups, League Challenges and prereleases near you.' },
   events: { title: 'Tournaments · Benchmark', description: 'Recent Pokémon TCG tournaments with top finishing decklists.' },
   japan: { title: 'Japan Tournaments · Benchmark', description: "See what's winning in Japanese Pokémon TCG tournaments." },
   japanCard: { title: 'Japan Card Usage · Benchmark', description: 'How a card is being played in Japanese tournament decks.' },
@@ -310,7 +320,7 @@ export function rewriteHead(res, h) {
 // ---- sitemaps ----
 // /sitemap.xml is an index of the two below, so the card list (thousands of URLs) can grow on its own.
 const xmlEsc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const SITEMAP_STATIC = ['/', '/decks', '/cards', '/events', '/events/japan', '/matchups', '/rules', '/users'];
+const SITEMAP_STATIC = ['/', '/decks', '/cards', '/events', '/events/japan', '/matchups', '/rules', '/users', '/tools', '/tools/damage', '/tools/tracker', '/tools/cp', '/tools/events'];
 export const SITEMAPS = ['/sitemap-pages.xml', '/sitemap-cards.xml'];
 
 const urlset = urls => `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${

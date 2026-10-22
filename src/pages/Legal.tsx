@@ -26,7 +26,8 @@ export function PrivacyPage() {
       <h2>What we collect</h2>
       <ul>
         <li><b>Account:</b> your email address and username. If you sign in with Google, we get your email and basic profile details (name and picture) from Google. If you add a passkey, we store its public key (never your fingerprint or face).</li>
-        <li><b>What you make:</b> your decks (including earlier saved versions of each list), folders, collection, likes, follows, profile bio and picture, default printings, and tournament registration details (player name and Player ID) if you enter them. Registration details are only used to fill in your registration sheet and are never shown to anyone else. Your date of birth and age division stay on your device and are never sent to us.</li>
+        <li><b>What you make:</b> your decks (including earlier saved versions of each list), folders, collection, likes, follows, profile bio and picture, default printings, tournament registration details (player name and Player ID) if you enter them, and the Championship Points finishes you log in the Toolbox. Registration details are only used to fill in your registration sheet and are never shown to anyone else. Your date of birth and age division stay on your device and are never sent to us.</li>
+        <li><b>Event finder:</b> a ZIP code you enter is looked up through our server to find its coordinates (we don’t store it), and the spot is rounded to about half a mile before it goes into the link to the official Play! Pokémon event locator. Your browser remembers your last ZIP code on your device.</li>
         <li><b>Imports:</b> if you import a deck from a YouTube video or Limitless link, our server fetches that public page to read the list.</li>
         <li><b>Deck views:</b> we count views on each deck using an anonymous viewer ID kept in your browser, so one person isn’t counted twice. It isn’t linked to your name.</li>
         <li><b>Issue reports:</b> what you type in the Report an issue form, plus an optional contact email, the page you were on and your browser type. We also keep a scrambled (hashed) version of your IP address to stop spam.</li>
@@ -58,7 +59,7 @@ export function PrivacyPage() {
       <p>Account data and your decks stay until you delete them or your account. Error logs are kept for 14 days. Copies in our hosts’ backups are removed as those backups expire.</p>
 
       <h2>Your choices and rights</h2>
-      <p>Open <Link to="/settings">Settings</Link> to download a copy of your data, change your username or email, or delete your account. Deleting removes your profile, decks and their history, collection, folders, likes and follows. Issue reports you sent stay, but without your contact email or any link to you. Decks you set to private are visible only to you.</p>
+      <p>Open <Link to="/settings">Settings</Link> to download a copy of your data, change your username or email, or delete your account. Deleting removes your profile, decks and their history, collection, Championship Points finishes, folders, likes and follows. Issue reports you sent stay, but without your contact email or any link to you. Decks you set to private are visible only to you.</p>
       <p>Depending on where you live (for example the EU, UK or California), you may also have the right to access, correct, delete or move your data, to object to or restrict how we use it, and to complain to your local data-protection authority. To make any privacy request, use <Contact />, and we’ll answer within 30 days.</p>
 
       <h2>Children</h2>
