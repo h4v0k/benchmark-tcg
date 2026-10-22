@@ -11,6 +11,7 @@ import { fmtDate } from '../lib/cards';
 import { calcDamage, fewestKOs, prizePaths, prizeValue, printedDamage, type Mod } from '../lib/tools/damage';
 import { POLICY, SEASON, type CpEventType } from '../lib/tools/policy';
 import { cpFor, divisionFor, gainFrom, seasonTotals, type Finish } from '../lib/tools/cp';
+import { flipCoin, type Side } from '../lib/tools/coin';
 
 const load = <T,>(k: string, fallback: T): T => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; } };
 const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private window */ } };
@@ -232,7 +233,7 @@ const newGame = (): Game => ({ turn: 1, who: 0, sides: [blankSide(), blankSide()
 
 export function TrackerTool() {
   const [g, setG] = useState<Game>(() => load('bm:tracker', newGame()));
-  const [flip, setFlip] = useState<string>('');
+  const [flip, setFlip] = useState<{ side: Side; n: number; spinning: boolean } | null>(null);
   const [checkup, setCheckup] = useState(false);
   const [armed, setArmed] = useState(false); // New game needs a second tap so a stray tap mid-game doesn't wipe it
   useEffect(() => save('bm:tracker', g), [g]);
@@ -241,7 +242,15 @@ export function TrackerTool() {
     setCheckup(true);
     setG(x => ({ ...x, who: x.who === 0 ? 1 : 0, turn: x.who === 1 ? x.turn + 1 : x.turn, sides: x.sides.map(s => ({ ...s, turn: {} })) as [Side, Side] }));
   };
-  const coin = () => setFlip(Math.random() < 0.5 ? 'Heads' : 'Tails');
+  const coin = () => {
+    if (flip?.spinning) return;
+    const side = flipCoin();
+    const n = (flip?.n || 0) + 1;
+    setFlip({ side, n, spinning: true });
+    // The result is decided before the spin; the animation only reveals it. Reduced motion skips the spin.
+    const ms = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 900;
+    setTimeout(() => setFlip(f => (f && f.n === n ? { ...f, spinning: false } : f)), ms);
+  };
   const anyCond = g.sides.some(s => s.cond.length);
   return (
     <div className="wrap page tracker">
@@ -249,11 +258,21 @@ export function TrackerTool() {
       <div className="tracker-bar panel">
         <span><b>Turn {g.turn}</b> · {g.who === 0 ? 'Your' : 'Opponent’s'} turn</span>
         <div className="row-gap">
-          <button className="btn" onClick={coin}>Flip a coin</button>
+          <button className="btn" onClick={coin} disabled={!!flip?.spinning}>Flip a coin</button>
           <button className="btn primary" onClick={endTurn}>End turn</button>
-          <button className={`btn ${armed ? 'danger' : 'ghost'}`} onClick={() => { if (!armed) { setArmed(true); setTimeout(() => setArmed(false), 3000); return; } setG(newGame()); setFlip(''); setCheckup(false); setArmed(false); }}>{armed ? 'Tap again to reset' : 'New game'}</button>
+          <button className={`btn ${armed ? 'danger' : 'ghost'}`} onClick={() => { if (!armed) { setArmed(true); setTimeout(() => setArmed(false), 3000); return; } setG(newGame()); setFlip(null); setCheckup(false); setArmed(false); }}>{armed ? 'Tap again to reset' : 'New game'}</button>
         </div>
-        {flip && <p className="flip" aria-live="polite"><b>{flip}</b> <span className="muted small">For casual play. At sanctioned events, use a physical coin or die.</span></p>}
+        {flip && (
+          <div className="flip">
+            <div className="coin-stage" aria-hidden="true">
+              <div key={flip.n} className={`coin ${flip.side === 'Heads' ? 'land-heads' : 'land-tails'}`}>
+                <span className="coin-face heads">H</span><span className="coin-face tails">T</span>
+              </div>
+            </div>
+            <p aria-live="polite">{flip.spinning ? <span className="muted">Flipping…</span> : <><b className="flip-result">{flip.side}</b> <span className="muted small">Flip #{flip.n}</span></>}</p>
+            <p className="muted small">For casual play. At sanctioned events, use a physical coin or die.</p>
+          </div>
+        )}
       </div>
       {checkup && anyCond && (
         <div className="notice warn checkup" role="status"><Icon name="warn" size={15} /><div><b>Pokémon Checkup</b><ul>{POLICY.checkup.filter(c => g.sides.some(s => s.cond.includes(c.condition))).map(c => <li key={c.condition}>{c.text}</li>)}</ul></div><button className="btn small" onClick={() => setCheckup(false)}>Done</button></div>
