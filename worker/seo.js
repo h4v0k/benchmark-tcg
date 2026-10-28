@@ -321,7 +321,10 @@ export function rewriteHead(res, h) {
   // index.html's size/alt tags describe og-image.png (1200×630). A card-art share image is portrait, so those
   // tags would lie about it: drop the sizes and describe the page instead.
   if (h.image !== DEFAULT.image) {
-    rw.on('meta[property="og:image:width"]', { element: e => e.remove() })
+    // X's summary_large_image card centre-crops a portrait card into a 2:1 strip (the text box, not the art).
+    // The small "summary" card shows a square thumbnail beside the text, which lands on the art instead.
+    rw.on('meta[name="twitter:card"]', { element: e => e.setAttribute('content', 'summary') })
+      .on('meta[property="og:image:width"]', { element: e => e.remove() })
       .on('meta[property="og:image:height"]', { element: e => e.remove() })
       .on('meta[property="og:image:alt"]', { element: e => e.setAttribute('content', h.title) });
   }
