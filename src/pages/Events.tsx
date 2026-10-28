@@ -135,7 +135,7 @@ export function EventsPage() {
               <li key={m.archetype}>
                 <div className="meta-row">
                   <Link className="meta-name mu-deck-link" to={`/archetype/${encodeURIComponent(m.archetype)}${days !== '60' ? `?days=${days}` : ''}`}><b>{m.archetype}</b></Link>
-                  <span className="meta-stats">{m.share != null ? `${Number(m.share).toFixed(1)}% · ` : ''}{m.lists.toLocaleString()} list{m.lists === 1 ? '' : 's'} · {m.top32} in top 32 · {m.top8} top 8{m.wins ? ` · ${m.wins} win${m.wins > 1 ? 's' : ''}` : ''}</span>
+                  <span className="meta-stats">{m.share != null ? `${Number(m.share).toFixed(1)}% · ` : ''}{m.lists != null ? `${m.lists.toLocaleString()} list${m.lists === 1 ? '' : 's'} · ` : ''}{m.top32} in top 32 · {m.top8} top 8{m.wins ? ` · ${m.wins} win${m.wins > 1 ? 's' : ''}` : ''}</span>
                 </div>
                 <div className="meta-bar" aria-hidden="true"><span style={{ width: `${Math.max(3, ((Number(m.share) || 0) / maxShare) * 100)}%` }} /></div>
                 {m.best_tournament && m.best_place ? <Link className="small" to={`/events/${m.best_tournament}/${m.best_place}`}>Best finish: {ord(m.best_place)} place list →</Link> : null}

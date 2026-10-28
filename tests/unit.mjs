@@ -303,7 +303,7 @@ t('worker page headers match public/_headers', () => {
     assert.match(deck.body, /3 <a href="\/cards\/sv06-130">Dragapult ex<\/a>/);
     assert.doesNotMatch(deck.body, /<script>/, 'user text is escaped');
     assert.match(deck.body, /&lt;script&gt;/);
-    assert.equal(deck.image, 'https://assets.tcgdex.net/en/sv/sv06/130/high.webp', 'share image is the main Pokémon');
+    assert.equal(deck.image, 'https://benchmarktcg.us/img/en/sv/sv06/130/high.webp', 'share image is the main Pokémon, served through our /img proxy');
   });
   t('worker sitemaps', () => {
     assert.match(idx, /<sitemapindex[\s\S]*sitemap-pages\.xml[\s\S]*sitemap-cards\.xml/);

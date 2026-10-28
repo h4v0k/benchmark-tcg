@@ -192,7 +192,7 @@ async function handleSupabase(route) {
   if (p === '/rest/v1/rpc/live_events') return json(route, [{ id: '0077', name: 'Regional Championship Nice', city: 'Nice', country: 'FR', kind: 'regional', date: '2026-10-17', live: true, players: 2336, round: 7, rounds: 14, updated_at: '2026-10-17T15:37:17Z', checked_at: '2026-10-17T15:38:04Z', finished_at: null,
     standings: [{ pos: 1, placement: 1, name: 'Alex S', country: 'US', wins: 7, losses: 0, ties: 0, points: 21, deck: '', deck_name: '', dropped: false, day2: false, topcut: false }] }]);
   if (p === '/rest/v1/rpc/live_event') return json(route, null);
-  if (p === '/rest/v1/rpc/tourney_meta') return json(route, [{ archetype: 'Dragapult', top32: 41, top8: 10, wins: 1, events: 4, best_tournament: 580, best_place: 2 }, { archetype: "N's Zoroark", top32: 8, top8: 1, wins: 0, events: 3, best_tournament: 580, best_place: 4 }]);
+  if (p === '/rest/v1/rpc/tourney_meta') return json(route, [{ archetype: 'Dragapult', lists: 120, share: 40.0, top32: 41, top8: 10, wins: 1, events: 4, best_tournament: 580, best_place: 2 }, { archetype: "N's Zoroark", lists: 30, share: 10.0, top32: 8, top8: 1, wins: 0, events: 3, best_tournament: 580, best_place: 4 }]);
   if (p === '/rest/v1/rpc/jp_preview_info') return json(route, JP_INFO);
   if (p === '/rest/v1/rpc/jp_preview_cards') return json(route, JP_CARDS);
   if (p === '/rest/v1/rpc/jp_meta') return json(route, body.p_preview_only ? JP_META.filter(m => m.preview_lists > 0) : JP_META);
