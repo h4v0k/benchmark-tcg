@@ -259,7 +259,7 @@ const HEAD = {
     return {
       body: page([], 'Pokémon TCG tournament results',
         `<p>The most successful decks at Regionals, Internationals and Worlds in the last 60 days.</p>
-        <ul>${meta.slice(0, 30).map(m => `<li>${link(`/archetype/${encodeURIComponent(m.archetype)}`, m.archetype)}: ${m.top32} top 32, ${m.top8} top 8${m.wins ? `, ${m.wins} win${m.wins === 1 ? '' : 's'}` : ''}</li>`).join('')}</ul>`),
+        <ul>${meta.slice(0, 30).map(m => `<li>${link(`/archetype/${encodeURIComponent(m.archetype)}`, m.archetype)}: ${m.share}% of lists, ${m.top32} top 32, ${m.top8} top 8${m.wins ? `, ${m.wins} win${m.wins === 1 ? '' : 's'}` : ''}</li>`).join('')}</ul>`),
     };
   },
   async home(r, q) {

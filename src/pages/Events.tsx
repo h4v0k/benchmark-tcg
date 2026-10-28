@@ -1,5 +1,5 @@
 // Tournament results: this season's majors — Regionals, Special Events, Internationals, Worlds, Asian league events
-// and Japan's majors (top 32 with lists, from Limitless). Events with cards not legal in the US are labeled.
+// and Japan's majors (every published list, from Limitless). Events with cards not legal in the US are labeled.
 import { useTitle } from '../components/seo';
 import { useMemo, useState } from 'react';
 import { Empty, ErrorBox, Icon, Segmented, Spinner, Tag, useAsync } from '../components/ui';
@@ -117,12 +117,12 @@ export function EventsPage() {
   const filters = FILTERS.filter(f => f.value === 'all' || (ev.data || []).some(t => (f.kinds as readonly string[]).includes(t.kind)));
   const active = filters.find(f => f.value === kind) || FILTERS[0];
   const list = (ev.data || []).filter(t => active.value === 'all' || (active.kinds as readonly string[]).includes(t.kind));
-  const maxTop32 = Math.max(1, ...(meta.data || []).map(m => m.top32));
+  const maxShare = Math.max(0.1, ...(meta.data || []).map(m => Number(m.share) || 0));
   return (
     <div className="wrap page">
       <div className="page-head"><h1>Tournaments</h1><RegionSwitch value="world" /></div>
       <SyncNote info={jp.data} compact />
-      <p className="muted lede">This season’s majors, with top 32 lists: Regionals, Special Events, Internationals and Worlds, plus Japan’s and Asia’s majors (labeled when they use cards that aren’t legal in the US). Open any list to test it, check prices, or copy it to your decks. To see what each deck beats and loses to, open <Link to="/matchups">Matchups</Link>.</p>
+      <p className="muted lede">This season’s majors, with every list Limitless publishes: Regionals, Special Events, Internationals and Worlds, plus Japan’s and Asia’s majors (labeled when they use cards that aren’t legal in the US). Open any list to test it, check prices, or copy it to your decks. To see what each deck beats and loses to, open <Link to="/matchups">Matchups</Link>.</p>
       <LiveSection />
 
       <section className="panel meta-panel">
@@ -135,9 +135,9 @@ export function EventsPage() {
               <li key={m.archetype}>
                 <div className="meta-row">
                   <Link className="meta-name mu-deck-link" to={`/archetype/${encodeURIComponent(m.archetype)}${days !== '60' ? `?days=${days}` : ''}`}><b>{m.archetype}</b></Link>
-                  <span className="meta-stats">{m.top32} in top 32 · {m.top8} top 8{m.wins ? ` · ${m.wins} win${m.wins > 1 ? 's' : ''}` : ''}</span>
+                  <span className="meta-stats">{m.share != null ? `${Number(m.share).toFixed(1)}% · ` : ''}{m.lists.toLocaleString()} list{m.lists === 1 ? '' : 's'} · {m.top32} in top 32 · {m.top8} top 8{m.wins ? ` · ${m.wins} win${m.wins > 1 ? 's' : ''}` : ''}</span>
                 </div>
-                <div className="meta-bar" aria-hidden="true"><span style={{ width: `${Math.max(3, (m.top32 / maxTop32) * 100)}%` }} /></div>
+                <div className="meta-bar" aria-hidden="true"><span style={{ width: `${Math.max(3, ((Number(m.share) || 0) / maxShare) * 100)}%` }} /></div>
                 {m.best_tournament && m.best_place ? <Link className="small" to={`/events/${m.best_tournament}/${m.best_place}`}>Best finish: {ord(m.best_place)} place list →</Link> : null}
               </li>
             ))}

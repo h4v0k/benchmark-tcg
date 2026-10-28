@@ -1,5 +1,5 @@
 // Winning lists for one deck: the strongest finish shown in full, then other strong lists.
-// Lists come from major official events (top 32) and online events on Limitless (top 16 of events with 32+ players).
+// Lists come from major official events (every published list) and online events on Limitless (top 16 of events with 32+ players).
 // Ranking weighs field size and event tier (see migration 019), so deep runs at big majors rank above small online wins.
 import { useMemo, useState } from 'react';
 import { Empty, ErrorBox, Icon, Spinner, Tag, useAsync } from '../components/ui';

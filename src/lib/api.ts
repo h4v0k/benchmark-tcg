@@ -283,7 +283,7 @@ export type Tournament = { id: number; name: string; date: string; country: stri
 export type SeasonEvent = { id: string; src: 'us' | 'jp'; name: string; date: string; country: string; players: number | null; kind: TourneyKind | 'japan'; status: string; lists: number; label: 'japan' | 'non_us' | null };
 export const seasonEvents = () => sb.rpc<SeasonEvent[]>('season_events');
 export type TourneyDeck = { tournament_id: number; place: number; player: string; country: string; archetype: string; list_id: number | null; card_count: number | null; price: number | null; cards?: DeckEntry[] | null; missing?: string[] };
-export type MetaRow = { archetype: string; top32: number; top8: number; wins: number; events: number; best_tournament: number | null; best_place: number | null };
+export type MetaRow = { archetype: string; lists: number; share: number | null; top32: number; top8: number; wins: number; events: number; best_tournament: number | null; best_place: number | null };
 const T_COLS = 'id,name,date,country,players,kind,status,non_us';
 
 /* Live (and just-finished) official events, from Limitless Labs; refreshed hourly while they run. */
@@ -333,7 +333,7 @@ export async function archetypeFinishes(archetype: string, days: number): Promis
   const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
   const { rows } = await sb.select<ArchetypeFinish>('tournament_decks', {
     select: 'tournament_id,place,player,country,archetype,list_id,card_count,price,tournaments!inner(id,name,date,kind,players)',
-    archetype: `eq.${archetype}`, 'tournaments.date': `gte.${since}`, order: 'place.asc', limit: 300,
+    archetype: `eq.${archetype}`, 'tournaments.date': `gte.${since}`, place: 'lte.32', order: 'place.asc', limit: 300,
   });
   return rows.sort((a, b) => a.place - b.place || b.tournaments.date.localeCompare(a.tournaments.date));
 }
