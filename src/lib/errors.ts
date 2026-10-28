@@ -11,14 +11,21 @@ const release = (() => {
 })();
 
 // Noise we can't act on: browser extensions, cancelled loads, ResizeObserver chatter.
-const IGNORE = /ResizeObserver loop|Script error\.?$|chrome-extension:|moz-extension:|safari-(web-)?extension:|AbortError|The user aborted|Load failed|NetworkError|Failed to fetch/i;
+// Also browser-injected scripts: Brave and wallet apps on iOS inject code that pokes window.ethereum/solana
+// and throws when the wallet is off. Those run as "global code" at the page URL, never from our /assets/ bundle.
+const IGNORE = /ResizeObserver loop|Script error\.?$|chrome-extension:|moz-extension:|safari-(web-)?extension:|AbortError|The user aborted|Load failed|NetworkError|Failed to fetch|window\.(ethereum|solana|phantom|braveSolana)|__firefox__|__gCrWeb|webkit\.messageHandlers/i;
+// A stack whose frames all point at the page itself (not a .js file) came from injected code, not our build.
+const injected = (stack: string) => {
+  const frames = stack.split('\n').filter(l => /@|at /.test(l));
+  return frames.length > 0 && frames.every(l => !/\.m?js(\?|:|$)/.test(l));
+};
 
 export function reportError(err: unknown, where = '') {
   try {
     const e = err instanceof Error ? err : new Error(typeof err === 'string' ? err : JSON.stringify(err));
     const message = `${where ? where + ': ' : ''}${e.name && e.name !== 'Error' ? e.name + ': ' : ''}${e.message || String(err)}`.slice(0, 300);
     const stack = String(e.stack || '');
-    if (IGNORE.test(message) || IGNORE.test(stack.split('\n').slice(0, 3).join('\n'))) return;
+    if (IGNORE.test(message) || IGNORE.test(stack.split('\n').slice(0, 3).join('\n')) || injected(stack)) return;
     if (seen.has(message) || sent >= 5) return;
     seen.add(message); sent++;
     rpc('log_client_error', {
