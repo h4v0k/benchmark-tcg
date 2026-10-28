@@ -105,7 +105,17 @@ function page(trail, h1, inner) {
 function crumbs(trail) {
   return { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [['Benchmark', '/'], ...trail].map(([name, p], i) => ({ '@type': 'ListItem', position: i + 1, name, item: SITE + (p === '/' ? '/' : p) })) };
 }
-export const coverUrl = base => !base ? '' : base.startsWith('https://tcgplayer-cdn.tcgplayer.com/product/') ? `${base}_in_1000x1000.jpg` : base.startsWith('https://') ? `${base}/high.webp` : '';
+// Share images are served from our own domain through the /img/* proxy (worker/index.js), not straight from
+// TCGdex/TCGplayer: link-preview crawlers (X, Discord, Slack) fetch og:image themselves and third-party CDNs can
+// refuse or stall them, which shows up as a blank preview card.
+const TCGDEX = 'https://assets.tcgdex.net/';
+const TCGP = 'https://tcgplayer-cdn.tcgplayer.com/product/';
+export const coverUrl = base => {
+  if (!base) return '';
+  if (base.startsWith(TCGP) && /^\d{1,9}$/.test(base.slice(TCGP.length))) return `${SITE}/img/tcgp/${base.slice(TCGP.length)}_in_1000x1000.jpg`;
+  if (base.startsWith(TCGDEX) && /^[a-z]{2}(?:-[a-z]{2})?\/[a-z0-9.-]+\/[a-z0-9.-]+\/[A-Za-z0-9.-]+$/.test(base.slice(TCGDEX.length))) return `${SITE}/img/${base.slice(TCGDEX.length)}/high.webp`;
+  return '';
+};
 
 // Head builders: return { title, description, image }, null (generic tags; e.g. lookup failed or a deck that may be
 // private), or NOT_FOUND (the lookup worked and there's no such thing: the page gets a 404 status). One REST call each.
@@ -308,6 +318,13 @@ export function rewriteHead(res, h) {
     .on('link[rel="canonical"]', { element: e => e.setAttribute('href', h.url) })
     .on('meta[property="og:image"]', { element: e => e.setAttribute('content', h.image) })
     .on('meta[name="twitter:image"]', { element: e => e.setAttribute('content', h.image) });
+  // index.html's size/alt tags describe og-image.png (1200×630). A card-art share image is portrait, so those
+  // tags would lie about it: drop the sizes and describe the page instead.
+  if (h.image !== DEFAULT.image) {
+    rw.on('meta[property="og:image:width"]', { element: e => e.remove() })
+      .on('meta[property="og:image:height"]', { element: e => e.remove() })
+      .on('meta[property="og:image:alt"]', { element: e => e.setAttribute('content', h.title) });
+  }
   if (h.body) rw.on('div#root', { element: e => e.setInnerContent(h.body, { html: true }) });
   // JSON-LD is data, not script: CSP doesn't apply. Escape "<" so a name can't close the tag.
   if (h.jsonld) rw.on('head', { element: e => e.append(`<script type="application/ld+json">${JSON.stringify(h.jsonld).replace(/</g, '\\u003c')}</script>`, { html: true }) });
