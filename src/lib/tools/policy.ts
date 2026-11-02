@@ -10,6 +10,8 @@ export const SOURCES = {
   leagueCp: 'https://championships.pokemon.com/en-us/about/league-challenges-and-league-cup?pillar=tcg',
   regionalCp: 'https://championships.pokemon.com/en-us/about/pokemon-regional-and-special-championships?pillar=tcg',
   internationalCp: 'https://championships.pokemon.com/en-us/about/international-championships?pillar=tcg',
+  rulingsFeb2026: 'https://professorprogram.pokemon.com/news/11473085', // "up to" choices, tiebreaker games
+  glossary: 'https://www.pokemon.com/us/play-pokemon/about/pokemon-tcg-glossary', // ACE SPEC deck limit
 };
 
 export const POLICY = {
@@ -54,6 +56,18 @@ export const POLICY = {
   /** Once-per-turn and once-per-game things players lose track of (in-game tracker). */
   perTurn: ['Supporter played', 'Energy attached', 'Retreated', 'Stadium played'],
   perGame: ['VSTAR Power used', 'GX attack used (Expanded)'],
+
+  /** What happens when both players win at once (the rulebook replaced Sudden Death in Feb 2026). */
+  simultaneousWin: 'Both players won at the same time: play a tiebreaker game with the full 6 Prize cards each.',
+
+  /** Rulings players often miss, shown in the game tracker. Each links to the official page it was read on. */
+  rulings: [
+    { title: '“Up to” in an attack', text: 'You can choose any number from 0 to the maximum.', source: SOURCES.rulingsFeb2026 },
+    { title: '“Up to” in a Trainer or Ability', text: 'You must choose at least 1, if you can.', source: SOURCES.rulingsFeb2026 },
+    { title: 'Searching for any card', text: 'An effect that searches your deck or discard pile for any card, without naming a kind, must take at least 1.', source: SOURCES.rulingsFeb2026 },
+    { title: 'Tied games', text: 'If both players win at the same time, play a tiebreaker game with 6 Prize cards each. Sudden Death is gone.', source: SOURCES.rulingsFeb2026 },
+    { title: 'ACE SPEC', text: 'Only 1 ACE SPEC card per deck.', source: SOURCES.glossary },
+  ],
 };
 
 export type CpEventType = 'challenge' | 'cup' | 'regional' | 'special' | 'international';
