@@ -280,6 +280,15 @@ export function TrackerTool() {
       <div className="tracker-sides">
         {g.sides.map((s, i) => <SidePanel key={i} title={i === 0 ? 'You' : 'Opponent'} side={s} active={g.who === i} set={f => upd(i as 0 | 1, f)} />)}
       </div>
+      {(() => {
+        const out = g.sides.map(s => s.prizes.every(Boolean));
+        if (out[0] && out[1]) return <div className="notice warn" role="status"><Icon name="warn" size={15} /><span>{POLICY.simultaneousWin}</span></div>;
+        if (out[0] || out[1]) return <div className="notice info" role="status"><Icon name="star" size={15} /><span>{out[0] ? 'You took' : 'Your opponent took'} the last Prize card.</span></div>;
+        return null;
+      })()}
+      <details className="panel"><summary>Rulings players often miss</summary>
+        <ul className="small">{POLICY.rulings.map(r => <li key={r.title}><b>{r.title}:</b> {r.text} <a href={r.source} target="_blank" rel="noopener noreferrer">Source</a></li>)}</ul>
+      </details>
     </div>
   );
 }

@@ -12,6 +12,7 @@ const T = await bundle('src/lib/tcgplayer.ts');
 const RS = await bundle('src/lib/regsheet.ts');
 const CQ = await bundle('src/lib/cardquery.ts');
 const PP = await bundle('src/lib/pokeproxy.ts');
+const PO = await bundle('src/lib/tools/policy.ts');
 let n = 0; const t = (name, fn) => { fn(); n++; };
 
 t('PTCGL export', () => {
@@ -405,5 +406,15 @@ t('worker page headers match public/_headers', () => {
     assert.equal(CP.divisionFor(1990), 'Masters');
   });
 }
+t('policy: rulings link official pages; tied games use a tiebreaker', () => {
+  const { POLICY } = PO;
+  assert.ok(POLICY.rulings.length >= 5);
+  for (const r of POLICY.rulings) assert.match(r.source, /^https:\/\/([a-z]+\.)?pokemon\.com\//);
+  assert.ok(POLICY.rulings.some(r => /attack/.test(r.title) && /from 0/.test(r.text)));
+  assert.ok(POLICY.rulings.some(r => /Trainer or Ability/.test(r.title) && /at least 1/.test(r.text)));
+  assert.match(POLICY.simultaneousWin, /tiebreaker/);
+  assert.doesNotMatch(POLICY.simultaneousWin, /Sudden Death/);
+});
+
 console.log(`unit: ${n} groups ok`);
 await import('./rules-parse.test.mjs');
