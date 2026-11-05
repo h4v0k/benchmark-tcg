@@ -14,6 +14,7 @@ export const ROUTE_LIST = [
   [/^\/users$/, 'users'],
   [/^\/users\/([^/]+)$/, 'profile'],
   [/^\/my\/decks$/, 'private'],
+  [/^\/folders\/([^/]+)$/, 'folder'],
   [/^\/collection$/, 'private'],
   [/^\/feed$/, 'feed'],
   [/^\/cards$/, 'cards'],
@@ -131,6 +132,19 @@ const HEAD = {
       title: `${clean(d.name)} · ${cap(clean(d.format)) || 'Pokémon TCG'} deck`,
       description: trunc(`${parts ? parts + ' deck' : 'Pokémon TCG deck'}, ${d.card_count ?? 60} cards${owner ? ` by ${owner}` : ''}. View the list, price and matchups on Benchmark.`, 200),
       image: coverUrl(d.cover) || undefined,
+    };
+  },
+  async folder(r, q) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(r.args[0])) return NOT_FOUND;
+    const [f] = await q(`folders?id=eq.${encodeURIComponent(r.args[0])}&is_public=eq.true&select=name,owner_profile:profiles!folders_owner_fkey(username)&limit=1`);
+    if (!f) return null; // missing and private folders look the same: generic tags, 200
+    const decks = await q(`decks?folder_id=eq.${encodeURIComponent(r.args[0])}&select=name,cover&order=updated_at.desc&limit=12`).catch(() => []);
+    const owner = f.owner_profile?.username;
+    const names = decks.map(d => clean(d.name)).filter(Boolean);
+    return {
+      title: `${clean(f.name)} · Deck folder${owner ? ` by ${owner}` : ''}`,
+      description: trunc(`${decks.length >= 12 ? '12+' : decks.length} Pokémon TCG deck${decks.length === 1 ? '' : 's'}${owner ? ` by ${owner}` : ''}${names.length ? ': ' + names.join(', ') : ''}.`, 200),
+      image: coverUrl(decks.find(d => d.cover)?.cover) || undefined,
     };
   },
   async card(r, q) {

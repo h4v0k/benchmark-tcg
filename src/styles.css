@@ -442,6 +442,12 @@ td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: mid
 .folder-list > button.on, .folder-row.on > button:first-child { background: var(--panel2); color: var(--text); }
 .folder-list .count { margin-left: auto; }
 .folder-row { display: flex; align-items: center; }
+.folder-row .public-dot { display: inline-flex; color: var(--accent, var(--text)); margin-left: 2px; }
+.folder-share { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; margin-bottom: 14px; border: 1px solid var(--line, var(--panel2)); border-radius: 10px; background: var(--panel, transparent); }
+.folder-share .grow { display: flex; flex-direction: column; gap: 2px; flex: 1 1 220px; min-width: 0; }
+.folder-share .btn { min-height: 44px; }
+.folder-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 6px; }
+.folder-owner { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
 .folder-row .icon-btn { width: 26px; height: 26px; opacity: 0; }
 .folder-row:hover .icon-btn { opacity: 1; }
 .new-folder { color: var(--accent) !important; }

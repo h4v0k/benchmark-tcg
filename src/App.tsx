@@ -15,6 +15,7 @@ import { CardsPage, CardPage } from './pages/Cards';
 // Pages most first-time visitors never open are split into their own chunks.
 const DeckPage = lazy(() => import('./pages/Deck').then(m => ({ default: m.DeckPage })));
 const ProfilePage = lazy(() => import('./pages/Profile').then(m => ({ default: m.ProfilePage })));
+const FolderPage = lazy(() => import('./pages/Folder').then(m => ({ default: m.FolderPage })));
 const MyDecks = lazy(() => import('./pages/MyDecks').then(m => ({ default: m.MyDecks })));
 const CollectionPage = lazy(() => import('./pages/Collection').then(m => ({ default: m.CollectionPage })));
 const Feed = lazy(() => import('./pages/Feed').then(m => ({ default: m.Feed })));
@@ -80,6 +81,7 @@ const ROUTES: [string, (p: Record<string, string>) => ReactElement][] = [
   ['/users', () => <UsersPage />],
   ['/users/:name', p => <ProfilePage username={p.name} />],
   ['/my/decks', () => <MyDecks />],
+  ['/folders/:id', p => <FolderPage id={p.id} />],
   ['/collection', () => <CollectionPage />],
   ['/feed', () => <Feed />],
   ['/cards', () => <CardsPage />],

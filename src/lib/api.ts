@@ -176,10 +176,11 @@ export type DeckQuery = { format?: Format | ''; sort?: 'likes' | 'views' | 'upda
 // Every sort ends in id so equal values still have one fixed order and pages never skip or repeat a deck.
 const SORT: Record<string, string> = { likes: 'like_count.desc,updated_at.desc,id.asc', views: 'view_count.desc,updated_at.desc,id.asc', updated: 'updated_at.desc,id.asc', new: 'created_at.desc,id.asc', price: 'price.desc,id.asc' };
 
-export async function listDecks(o: DeckQuery & { mine?: boolean } = {}) {
-  // Folders are private, so folder_id is only selected for your own decks.
+export async function listDecks(o: DeckQuery & { mine?: boolean; sharedFolder?: boolean } = {}) {
+  // folder_id is only selected for your own decks. A shared (public) folder lists every deck in it, private ones
+  // included: the database lets anyone read decks in a public folder, and nowhere else lists them.
   const q: sb.Query = { select: o.mine ? DECK_LIST_COLS + ',folder_id' : DECK_LIST_COLS, order: SORT[o.sort || 'updated'] };
-  if (!o.mine) q.is_public = 'eq.true';
+  if (!o.mine && !(o.sharedFolder && o.folder)) q.is_public = 'eq.true';
   if (o.owner) q.owner = `eq.${o.owner}`;
   if (o.owners) q.owner = `in.(${o.owners.join(',') || '00000000-0000-0000-0000-000000000000'})`;
   if (o.format) q.format = `eq.${o.format}`;
@@ -250,6 +251,14 @@ export async function folders(): Promise<Folder[]> {
 }
 export async function createFolder(name: string): Promise<Folder> { const [f] = await sb.insert<Folder>('folders', { name }, { select: '*' }); return f; }
 export const renameFolder = (id: string, name: string) => sb.update('folders', { id: `eq.${id}` }, { name });
+export const setFolderPublic = (id: string, isPublic: boolean) => sb.update('folders', { id: `eq.${id}` }, { is_public: isPublic });
+/** A folder you own, or anyone's public folder (with its owner's name). */
+export async function getFolder(id: string): Promise<Folder | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const { rows } = await sb.select<Folder>('folders', { select: '*,owner_profile:profiles!folders_owner_fkey(username,avatar_card)', id: `eq.${id}` });
+  return rows[0] || null;
+}
+export const folderUrl = (id: string) => `${location.origin}/folders/${id}`;
 export const deleteFolder = (id: string) => sb.remove('folders', { id: `eq.${id}` });
 
 /* ---------------- admin ---------------- */

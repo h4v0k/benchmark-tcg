@@ -50,7 +50,7 @@ export type DeckRow = {
   owner_profile?: { username: string; avatar_card?: string } | null;
 };
 
-export type Folder = { id: string; owner: string; name: string; created_at: string };
+export type Folder = { id: string; owner: string; name: string; created_at: string; is_public: boolean; owner_profile?: { username: string; avatar_card?: string } | null };
 
 export type Rotation = { id: number; new_min_mark: string; season: string; effective_date: string | null; online_date: string | null; source: string };
 export type Ban = { format: 'standard' | 'expanded'; card_name: string; printings: { set: string; num: string }[]; card_ids: string[]; effective_date: string | null; source: string };
