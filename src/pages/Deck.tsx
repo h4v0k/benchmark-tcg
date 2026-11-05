@@ -94,6 +94,7 @@ export function DeckPage({ id }: { id: string }) {
   const total = sum(mainLines, l => l.qty);
   const checks = useMemo(() => row ? validateDeck(lines, row.format, rules) : [], [lines, row?.format, rules]);
   const legal = !checks.some(c => c.level === 'bad');
+  const liveOnly = legal && checks.some(c => c.live);
 
   /* ---------- saving ---------- */
   const pending = useRef<api.DeckWrite>({});
@@ -250,7 +251,7 @@ export function DeckPage({ id }: { id: string }) {
           <div className="deck-hero-text">
             <div className="deck-badges">
               <span className={`fmt-badge ${row.format}`}>{FORMAT_LABEL[row.format]}</span>
-              {row.format !== 'unlimited' && <span className={`fmt-badge ${legal ? 'legal' : 'illegal'}`}>{legal ? 'Legal' : 'Not legal'}</span>}
+              {row.format !== 'unlimited' && <span className={`fmt-badge ${liveOnly ? 'live' : legal ? 'legal' : 'illegal'}`} title={liveOnly ? checks.find(c => c.live)?.detail : undefined}>{liveOnly ? 'TCG Live legal' : legal ? 'Legal' : 'Not legal'}</span>}
               {!row.is_public && <span className="fmt-badge private">Private</span>}
               {row.featured && <span className="fmt-badge featured"><Icon name="star" size={11} />Featured</span>}
               {row.archetype && <span className="fmt-badge">{row.archetype}</span>}

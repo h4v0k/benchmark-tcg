@@ -3,16 +3,41 @@
 import type { Format, Rules } from './types';
 import { FORMAT_LABEL, fmtDate, isBasicEnergy, linePrice, sum, type Line } from './cards';
 
-export type Check = { level: 'ok' | 'bad' | 'warn' | 'info'; msg: string; detail?: string; cards?: string[] };
+export type Check = { level: 'ok' | 'bad' | 'warn' | 'info'; msg: string; detail?: string; cards?: string[]; live?: boolean };
+export type CardProblem = { level: 'bad' | 'warn'; label: string; why: string; live?: boolean };
 
-export function cardProblem(l: Line, format: Format): { level: 'bad' | 'warn'; label: string; why: string } | null {
+// Sets already playable on Pokémon TCG Live but not yet legal for paper Standard events (paper legality is the
+// 2nd Friday after the US release). Deck lines from these sets that aren't in the card database yet are stored by
+// their Japanese set code and number ("M6-58"). Delta Reign = Japan's Storm Emeralda (M6): TCG Live Nov 5, paper Nov 20.
+// Once a set is in the card database, cardProblem works this out from the set's own dates instead.
+const LIVE_PREVIEW_SETS: Record<string, { name: string; paper: string }> = {
+  M6: { name: 'Delta Reign', paper: '2026-11-20' },
+  MEM: { name: 'Delta Reign', paper: '2026-11-20' },
+};
+// TCG Live gets a new set about a day before the paper release.
+const LIVE_LEAD_DAYS = 1;
+const short = (d: string) => fmtDate(d, { month: 'short', day: 'numeric' });
+const liveProblem = (setName: string, paper: string): CardProblem =>
+  ({ level: 'warn', live: true, label: 'TCG Live legal', why: `${setName} is playable on Pokémon TCG Live now. It isn’t legal at paper Standard events until ${fmtDate(paper)}.` });
+const today = () => new Date().toISOString().slice(0, 10);
+
+export function cardProblem(l: Line, format: Format): CardProblem | null {
   const c = l.card;
-  if (!c) return { level: 'warn', label: 'Unknown', why: 'This card isn’t in the card database yet.' };
+  if (!c) {
+    const pre = LIVE_PREVIEW_SETS[String(l.cid).split('-')[0]];
+    if (pre && format === 'standard' && pre.paper > today()) return liveProblem(pre.name, pre.paper);
+    if (pre && format === 'standard') return null; // paper-legal now; the real printing just isn't in the database yet
+    return { level: 'warn', label: 'Unknown', why: 'This card isn’t in the card database yet.' };
+  }
   if (format === 'unlimited') return null;
   if (c.banned_in?.includes(format)) return { level: 'bad', label: 'Banned', why: `Banned in ${FORMAT_LABEL[format]}.` };
   const legal = format === 'standard' ? c.legal_standard : c.legal_expanded;
   if (!legal) {
-    if (format === 'standard' && c.standard_from) return { level: 'bad', label: `Legal ${fmtDate(c.standard_from, { month: 'short', day: 'numeric' })}`, why: `This set becomes Standard legal on ${fmtDate(c.standard_from)}.` };
+    // Released (so on TCG Live) but not yet paper legal.
+    const rel = c.set?.release_date;
+    if (format === 'standard' && c.standard_from && rel && c.standard_from > today()
+        && new Date(Date.parse(rel) - LIVE_LEAD_DAYS * 864e5).toISOString().slice(0, 10) <= today()) return liveProblem(c.set?.name || 'This set', c.standard_from);
+    if (format === 'standard' && c.standard_from) return { level: 'bad', label: `Legal ${short(c.standard_from)}`, why: `This set becomes Standard legal on ${fmtDate(c.standard_from)}.` };
     if (c.set?.is_classic) return { level: 'bad', label: 'Not legal', why: 'This printing is never tournament legal.' };
     return { level: 'bad', label: 'Not legal', why: format === 'standard' ? `Regulation mark ${c.reg_mark || '(none)'} isn’t in the current Standard format.` : 'Not in the Expanded format (Black & White onward).' };
   }
@@ -52,7 +77,13 @@ export function validateDeck(lines: Line[], format: Format, rules?: Rules | null
     const bad = probs.filter(x => x.p!.level === 'bad' && x.p!.label !== 'Unknown');
     const rotating = probs.filter(x => x.p!.label === 'Rotating');
     const unknown = probs.filter(x => x.p!.label === 'Unknown');
+    const live = probs.filter(x => x.p!.live);
     if (bad.length) out.push({ level: 'bad', msg: `${bad.length} card${bad.length > 1 ? 's' : ''} not ${FORMAT_LABEL[format]} legal`, detail: bad.map(x => `${x.l.name}: ${x.p!.why}`).join(' '), cards: bad.map(x => x.l.name) });
+    else if (live.length) {
+      const paper = live.map(x => x.p!.why.match(/until (.+)\.$/)?.[1]).find(Boolean);
+      const n = sum(live.map(x => x.l), l => l.qty);
+      out.push({ level: 'warn', live: true, msg: `TCG Live legal · paper legal ${paper || 'soon'}`, detail: `${n} card${n > 1 ? 's' : ''} from a new set can be played on Pokémon TCG Live now but not at paper Standard events until ${paper || 'the set is tournament legal'}: ${[...new Set(live.map(x => x.l.name))].join(', ')}.`, cards: live.map(x => x.l.name) });
+    }
     else out.push({ level: 'ok', msg: `All cards ${FORMAT_LABEL[format]} legal` });
     if (rotating.length) {
       const when = rules?.next_rotation?.effective_date;
@@ -66,3 +97,5 @@ export function validateDeck(lines: Line[], format: Format, rules?: Rules | null
 }
 
 export const isLegalDeck = (checks: Check[]) => !checks.some(c => c.level === 'bad');
+/** Legal on Pokémon TCG Live but not yet for paper events (no hard problems, some new-set cards). */
+export const isLiveOnly = (checks: Check[]) => isLegalDeck(checks) && checks.some(c => c.live);

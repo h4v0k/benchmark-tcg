@@ -85,6 +85,12 @@ t('deck rules', () => {
   assert.ok(L.validateDeck(deck, 'unlimited', null).every(c => !/legal/i.test(c.msg)));
   assert.equal(L.cardProblem(line(1, card({ id: 'n', name: 'New', std: false, from: '2026-11-20' })), 'standard').label.startsWith('Legal'), true);
   assert.equal(L.cardProblem(line(1, card({ id: 'z', name: 'Banned', banned: ['expanded'] })), 'expanded').label, 'Banned');
+  // A set out on TCG Live (released) but not paper legal yet reads 'TCG Live legal', and the deck is legal on Live only.
+  const iso = (d) => new Date(Date.now() + d * 864e5).toISOString().slice(0, 10);
+  const fresh = { ...card({ id: 'dr', name: 'Fresh', std: false, from: iso(14) }), set: { is_classic: false, name: 'New Set', release_date: iso(0) } };
+  assert.equal(L.cardProblem(line(1, fresh), 'standard').label, 'TCG Live legal');
+  const future = { ...card({ id: 'fu', name: 'Future', std: false, from: iso(30) }), set: { is_classic: false, name: 'Later Set', release_date: iso(16) } };
+  assert.equal(L.cardProblem(line(1, future), 'standard').label.startsWith('Legal'), true);
 });
 t('TCGplayer links', () => {
   const a = card({ id: 'a', name: 'Iono', pid: 497557 });

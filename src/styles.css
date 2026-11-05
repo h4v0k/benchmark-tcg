@@ -149,7 +149,7 @@ select { cursor: pointer; width: auto; }
 .tag.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .fmt-badge { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; background: rgba(0,0,0,.55); color: #fff; backdrop-filter: blur(4px); }
 .fmt-badge.standard { background: #2a62c9; } .fmt-badge.expanded { background: #7a4bc4; } .fmt-badge.unlimited { background: #5b6472; }
-.fmt-badge.legal { background: #1f8f59; } .fmt-badge.illegal { background: #c23f3f; }
+.fmt-badge.legal { background: #1f8f59; } .fmt-badge.live { background: #9a6200; } .fmt-badge.illegal { background: #c23f3f; }
 .fmt-badge.private { background: #3b4352; } .fmt-badge.featured { background: #b8860b; }
 
 /* ---------- avatars ---------- */

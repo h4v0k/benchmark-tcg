@@ -11,11 +11,12 @@ const ICON: Record<Check['level'], string> = { ok: 'check', bad: 'x', warn: 'war
 export function LegalityPanel({ lines, format, rules, onHighlight }: { lines: Line[]; format: Format; rules?: Rules | null; onHighlight: (names: string[]) => void }) {
   const checks = useMemo(() => validateDeck(lines, format, rules), [lines, format, rules]);
   const legal = !checks.some(c => c.level === 'bad');
+  const liveOnly = legal && checks.some(c => c.live);
   return (
     <section className="panel">
       <div className="panel-head">
         <h3>Legality</h3>
-        <Tag tone={legal ? 'ok' : 'bad'}>{legal ? `${FORMAT_LABEL[format]} legal` : 'Not legal'}</Tag>
+        <Tag tone={liveOnly ? 'warn' : legal ? 'ok' : 'bad'}>{liveOnly ? 'TCG Live legal' : legal ? `${FORMAT_LABEL[format]} legal` : 'Not legal'}</Tag>
       </div>
       <ul className="checks">
         {checks.map((c, i) => (
